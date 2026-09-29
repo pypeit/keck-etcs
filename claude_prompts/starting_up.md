@@ -17,6 +17,8 @@ in and shared with the community.
 4. Read this file.  Execute the 1st task under "Basic start up"
 5. Read this file.  Execute the 1st task under "Context"
 
+6. Read this file.  I have answered your Q&A; please read that and react accordingly.  Do not ask any more questions for now.  I am going to launch the effort in a different prompt doc. 
+
 ## Claude
 
 ### CLAUDE.md file
@@ -253,6 +255,7 @@ prompts 1–4.
      remove it?
    - Your other repos call this file `start_up.md`, not `starting_up.md`.
      Rename it?
+>A. I have run the install.  The prompt doc is named ok.
 
 ## Logging
 
@@ -354,3 +357,56 @@ What I learned:
 
 Open questions are collected in the Q&A section. As instructed, I edited no
 code for this task. No git commands were run other than read-only ones.
+
+### 2026-09-29 (Acted on Q&A answers)
+
+Read the answers to the Q&A and recorded the decisions in a new
+`## Project decisions` section of `CLAUDE.md`, so that later prompt docs
+inherit them:
+- First targets are MOSFIRE J, LRIS-B 600/4000 and LRIS-R 600/7500.
+- Throughputs are built from scratch from our own standard-star reductions;
+  the archived sensfuncs are not used.
+- Raw data come from KOA, in a separate prompt doc.
+- Optical sky comes from our own frames, NIR sky from the Gemini Maunakea
+  models.
+- A Python library now, shaped for a later WMKO-hosted web front end.
+- Existing Keck ETCs are a sanity check only.
+- Verified PypeIt defects are fixed in PypeIt.
+
+This supersedes the build order in the Report (DEIMOS first). I left the Report
+as written, as a record.
+
+Q&A #7: checked the items against the PypeIt source.
+- **`keck_nirspec_high_old` dark current is a confirmed bug.**
+  `keck_nirspec.py:595` sets `darkcurr = 0.8` and comments it as "e-/s/pixel".
+  But `DetectorContainer` (`images/detector_container.py:66`) defines
+  `darkcurr` in e-/pixel/hour, so the value is 3600x too low. It should be
+  2880, which the commented-out block at `keck_nirspec.py:1507` already gives.
+  This needs a one-line PypeIt fix; I did not edit PypeIt, since that repo
+  and its branches are yours.
+- **The MOSFIRE `saturation = 1e9` is not a bug.** It is a deliberate hack
+  ("ADU, this is hacked for now", `keck_mosfire.py:66`) so that the reduction
+  does not mask bright flats. PypeIt should keep it. The MOSFIRE ETC needs the
+  true full-well / linearity limit, and that belongs in this repo's instrument
+  config.
+- **The NIRES `saturation = 1e6` is an explicit guess.** It is not needed for
+  the current targets.
+
+Things to carry into the KOA / build prompt doc:
+- **LRIS-R detector era.** PypeIt has 600/7500 arc templates and dev-suite
+  files for `keck_lris_red` and `keck_lris_red_orig`, but **not** for
+  `keck_lris_red_mark4`, the current detector. An ETC for present-day LRIS-R
+  600/7500 needs mark4 standards from KOA, and probably a mark4 600/7500
+  wavelength template in PypeIt.
+- **LRIS-B 600/4000.** It is well covered in the dev suite (`long`, `multi`,
+  `slitless` and `orig` setups). The dichroic (d560 vs d680) affects
+  throughput, so it has to be an ETC parameter.
+- **MOSFIRE J.** The dev suite has `keck_mosfire_j_multi` and
+  `keck_mosfire_j2_long`, and only J2_long has a standard (LDS749B). J-band
+  standards (ideally A0V telluric stars as well as spectrophotometric ones)
+  will have to come from KOA.
+
+Housekeeping: you ran `pip install -e .`, and the prompt doc keeps its name.
+The `python:*` allow entry in `.claude/settings.json` is unchanged, since that
+question was not answered. As instructed, I asked no new questions. No git
+commands were run.
