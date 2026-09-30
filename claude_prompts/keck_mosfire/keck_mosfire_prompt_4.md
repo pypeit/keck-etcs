@@ -40,8 +40,9 @@ part 3's regression fixtures against the real throughput (see prompt 1).
   and the per-standard curve (part 2, S6, with the six provenance columns);
   `keck_etcs/etc.py`, `bin/keck_etc`, the schemas and fixtures (part 3); the
   LSF measurement table (part 2, S13).
-- PypeIt (`develop` at `nautilus/pypeit_pin.txt`; run
-  `scripts/check_pypeit_pin.py` first): `pypeit_flux_calib FLUX_FILE` with a
+- PypeIt (the laptop checkout on `orig-hires-fixes`, MOSFIRE-equivalent to
+  the pin `nautilus/pypeit_pin.txt`; run `scripts/check_pypeit_pin.py`
+  first): `pypeit_flux_calib FLUX_FILE` with a
   `flux read ... flux end` block pairing spec1d files with the sensfunc;
   spec1d fields `OPT_WAVE`, `OPT_FLAM`, `OPT_FLAM_IVAR`, `OPT_COUNTS_SKY`,
   `OPT_COUNTS_SIG_DET`, `FWHM`, `FWHMFIT`, `S2N`; `pypeit_coadd_1dspec` for

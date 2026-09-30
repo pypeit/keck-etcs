@@ -19,13 +19,17 @@ part 5 (S16) for the final version.
   fields the WMKO note must list), 5.5 (versioning), 7 (definition of done
   items 4-6), 8 (open items).
 - Plan: `docs/keck_mosfire_implementation.md` (v0.3), steps S17, S18.
-- PypeIt checkout: `/Users/xavier/Projects/PypeIt/PypeIt`, on **`develop`**
-  at `nautilus/pypeit_pin.txt` (verify with `scripts/check_pypeit_pin.py`).
-  The `ronoise` branch is created by the user from `develop`, not from
-  `orig-hires-fixes`. File `pypeit/spectrographs/keck_mosfire.py`,
-  `get_detector_par(self, det, hdu=None)`, which sets `ronoise =
-  np.atleast_1d(5.8)` with the comment "for 16 non-destructive reads" (read
-  on `orig-hires-fixes`; confirm on `develop`). Header cards: `SAMPMODE` (1
+- PypeIt checkout on this laptop: `/Users/xavier/Projects/PypeIt/PypeIt`,
+  on `orig-hires-fixes`, MOSFIRE-equivalent to the pin
+  `nautilus/pypeit_pin.txt` (verify with `scripts/check_pypeit_pin.py`); it
+  stays there and **no PypeIt development happens on this laptop** (user,
+  2026-09-30). The `ronoise` branch is created by the user from `develop`
+  on the workstation (or wherever PypeIt is developed); the session prepares
+  the change as reviewable files in this repo. File
+  `pypeit/spectrographs/keck_mosfire.py`, `get_detector_par(self, det,
+  hdu=None)`, which sets `ronoise = np.atleast_1d(5.8)` with the comment
+  "for 16 non-destructive reads" (identical at the pin: the local diff from
+  it is `keck_hires.py` only). Header cards: `SAMPMODE` (1
   Single, 2 CDS, 3 MCDS, 4 UTR) and `NUMREADS`. Keck table: CDS 21, MCDS-4
   10.8, -8 7.7, -16 5.8, -32 4.2, -64 3.5, -128 3.0 e-. Our 2022-04-09 dome
   flats are CDS (`SAMPMODE = 2`, `NUMREADS = 1`), the science and standard
@@ -66,10 +70,16 @@ part 5 (S16) for the final version.
    of two lamp-off flats (m220409_0022-0026, `NUMREADS = 1`), divides by
    sqrt(2), converts to electrons with gain 2.15, and reports the robust
    standard deviation in a low-signal region; compare with 21 e- (CDS).
-   Then run `scripts/check_pypeit_pin.py` and ask the user to create a
-   branch in the PypeIt checkout **from `develop`** (suggest
-   `mosfire_ronoise`); do not run `checkout`/`switch`/`branch` yourself.
-   Edit `keck_mosfire.py` so that `get_detector_par` reads `SAMPMODE` and
+   Then run `scripts/check_pypeit_pin.py` (to confirm the local
+   `keck_mosfire.py` you read is the pin's) and ask the user to create a
+   branch **from `develop`** (suggest `mosfire_ronoise`) on the workstation
+   or wherever they develop PypeIt, not on this laptop; do not run
+   `checkout`/`switch`/`branch` yourself. Prepare the change here as
+   `nautilus/patches/pypeit_mosfire_ronoise.patch` (`git diff` format
+   against the pin, made from a scratch copy of the two files, never by
+   editing the laptop checkout) plus the new test file, for the user to
+   apply on that branch. The change: `keck_mosfire.py` so that
+   `get_detector_par` reads `SAMPMODE` and
    `NUMREADS` from `hdu` when given and looks up the RN from the Keck table
    (interpolating in log2 N for non-tabulated values; CDS = 21; keep 5.8 as
    the default when `hdu` is None), with the table and its source URL in a
@@ -79,9 +89,12 @@ part 5 (S16) for the final version.
    dev-suite expectations that change. Provide the commit message and a
    short PR description for the user, and state in the log whether the image
    pin should move to this branch now (needs `--allow-branch` and a tag
-   bump) or wait for the merge to `develop` (recommended). Risk: dev-suite
-   reference outputs may shift slightly for CDS calibration frames. Log your
-   work in this doc (the PypeIt repo has no prompt doc).
+   bump) or wait for the merge to `develop` (recommended); either way a pin
+   that changes `keck_mosfire.py` will make the laptop's
+   `check_pypeit_pin.py` fail by design until the user updates that checkout
+   or the reference reduction is redone on the workstation (design D35).
+   Risk: dev-suite reference outputs may shift slightly for CDS calibration
+   frames. Log your work in this doc (the PypeIt repo has no prompt doc).
 
 2. **S18: documentation, README, CHANGES, Nautilus operator guide and the
    WMKO API note.** Update `docs/keck_mosfire_design.md` to "as built":

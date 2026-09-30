@@ -1,6 +1,6 @@
 # Keck/MOSFIRE J: implementation plan
 
-*Version 0.3, 2026-09-30. Companion to `docs/keck_mosfire_design.md` (v0.3);
+*Version 0.3.1, 2026-09-30. Companion to `docs/keck_mosfire_design.md` (v0.3.1);
 section numbers below refer to that document. Each step is meant to be one
 working session and to become one numbered prompt under "### Implementation"
 in `claude_prompts/keck_mosfire_prompts.md`.*
@@ -17,14 +17,25 @@ download Job) and **S4, S5, S6, S13, S14, S15** are re-scoped in place.
 `s3://keck-etcs` exists and is **private**, so every access, local or in-pod,
 uses the user's credentials, the public-read policy deliverable is dropped,
 and products are distributed through git (S1b, S4b, S14b, S15, S18); PypeIt
-is pinned to a commit on **`develop`**, so a new user-action step **S0**
-switches the local checkout and a check script confirms local and image run
-the same commit before the 1 percent gate of S4b means anything (S0, S4,
-S4a, S17); and the backup set is defined concretely with
+is pinned to a commit on **`develop`**, so a new step **S0** checks that the
+local PypeIt is equivalent to the pin before the 1 percent gate of S4b means
+anything (S0, S4, S4a, S17); and the backup set is defined concretely with
 `scripts/nautilus/backup_products.py` run after each S15 batch and at each
 release (S15, S16). Step numbers are unchanged; S0 is new and precedes S1.
 Steps that still run locally are marked *(local)*; steps that run on
 Nautilus are marked *(Nautilus)*.
+
+*Change note, v0.3.1 (2026-09-30, follow-up):* the laptop's PypeIt checkout
+stays on `orig-hires-fixes` (user decision; no PypeIt development on this
+laptop). Read-only check: the pin `f3a1f1d27` is the merge-base with HEAD
+`017bece06`, HEAD is one commit ahead, and the only file that differs is
+`pypeit/spectrographs/keck_hires.py`. S0 therefore no longer asks the user
+to switch branches or reinstall; `scripts/check_pypeit_pin.py` tests
+MOSFIRE-equivalence (pin is an ancestor; diff touches only allow-listed
+paths), the reference records `pypeit_git_sha`, `pypeit_pin` and
+`pin_check`, and `gates.py --reference` compares pins and check results, not
+SHAs (S0, S4, S4a, S4b, S17, risks). Credentials and the registry project,
+deploy token and `docker login` are done (user, 2026-09-30).
 
 Rules that apply to every step: Python via `conda run -n pypeit14` locally;
 git is the user's (including `checkout`/`switch` in the PypeIt repo);
@@ -44,7 +55,7 @@ Phase 0  S0 user prerequisites (PypeIt checkout on develop at the pin; credentia
          S1 data root (local) ──┬── S3 sky grid FITS (local) ─────────────────────────────────┤
          S1b bucket access check, s3_sync.py, push 2022-04-09 raw (needs S0 credentials) ─┐   │
          S2 telluric grid (local; records the sha256 the image checks) ───────────────────┤   │
-Phase 1  S4 reference reduction 2022-04-09 (local, on the pinned develop commit; needs S0, S1, S2)
+Phase 1  S4 reference reduction 2022-04-09 (local, PypeIt MOSFIRE-equivalent to the pin; needs S0, S1, S2)
          S4a container image (needs S0 pin, S2 sha256; S6/S8 for a complete image)
          S4b job templates + dry run on 2022-04-09 (Nautilus; needs S1b, S4, S4a) ── 1% gate against S4
          S5 LDS749B sensfunc (local reference + in-pod; needs S2, S4/S4b)
@@ -67,45 +78,55 @@ digest and pin.
 
 ## Phase 0: foundations
 
-### S0. User prerequisites and the pin check *(user actions + one local check script)*
-- **Goal:** local PypeIt and the future image run the same `develop` commit;
-  the credentials and registry the later steps need exist. Everything that
-  changes git state or an environment is done by the user; the session
-  writes the check and reports.
-- **User actions (the user does these; the session proposes the exact
-  commands):** (1) in `/Users/xavier/Projects/PypeIt/PypeIt`, switch from
-  `orig-hires-fixes` to `develop` and set it to the pinned commit (`git
-  switch develop && git pull --ff-only`, then confirm `git rev-parse HEAD`
-  equals `nautilus/pypeit_pin.txt`; if `develop` has moved on, either pin to
-  its new HEAD by editing the file or check out the pinned SHA); (2) if
-  `conda run -n pypeit14 python -c "import pypeit; print(pypeit.__version__)"`
-  still reports `g017bece06`, re-run `pip install -e ".[dev]"` in `pypeit14`
-  so setuptools-scm regenerates `pypeit/pkg/version.py` (an editable install
-  does not refresh it on checkout); (3) confirm the Nautilus S3 keys exist
-  locally as an AWS profile (`~/.aws/credentials`; the same keys as the
-  `nautilus_s3:` rclone remote) and can list the bucket (`rclone lsd
-  nautilus_s3:keck-etcs`); (4) create the GitLab project `profx/keck-etcs`
-  (public) with a `write_registry` deploy token and `docker login` on the
-  Linux workstation (needed by S4a, can wait until then).
+### S0. Prerequisites and the pin check *(one local check script; the user actions are done)*
+- **Goal:** know that the local PypeIt (`pypeit14`, editable install of the
+  laptop checkout on `orig-hires-fixes`, which stays there: user decision
+  2026-09-30, no PypeIt development on this laptop) is MOSFIRE-equivalent to
+  the `develop` commit the image will pin, and record the prerequisites that
+  the user has already provided.
+- **Already done by the user (2026-09-30):** the Nautilus S3 keys exist
+  locally as an AWS profile and read/write `s3://keck-etcs` (confirmed);
+  the GitLab project `profx/keck-etcs` exists with a deploy token (username
+  `gitlab+deploy-token-1383`; the token itself is kept by the user) and
+  `docker login` is done on the Linux workstation. Nothing here asks the user to switch
+  branches or reinstall anything.
+- **Facts checked read-only (2026-09-30):** `git merge-base HEAD
+  origin/develop` = `f3a1f1d27` = the pin; HEAD `017bece06` is one commit
+  ahead, none behind; `git diff --stat origin/develop...HEAD` touches only
+  `pypeit/spectrographs/keck_hires.py` (+131/-33). The MOSFIRE code path is
+  therefore identical to the pin.
 - **Outputs:** `nautilus/pypeit_pin.txt` (one line, the full SHA;
   `f3a1f1d274b15ee1358f167819d77f1948fce1bd` = `origin/develop` on
-  2026-09-30 unless the user pins newer); `scripts/check_pypeit_pin.py`
-  (prints `pypeit.__version__`, `pypeit.__file__`, `git -C <checkout>
-  rev-parse HEAD` and `--abbrev-ref HEAD`, the pin, and PASS/FAIL on: HEAD
-  equals the pin, the version string ends with the pin's short SHA, the
-  branch is `develop`; exit non-zero on FAIL; `--image TAG` later compares
-  against a running image's `KECK_ETCS_GIT_SHAS`); a README line on the
-  pin.
-- **Verify:** `check_pypeit_pin.py` passes; `git -C PypeIt status --short` is
-  clean; `rclone lsd nautilus_s3:keck-etcs` succeeds and an anonymous
-  request (`curl -sI https://s3-west.nrp-nautilus.io/keck-etcs/`) returns
-  403, confirming the bucket is private.
+  2026-09-30 unless deliberately moved); `nautilus/pypeit_pin_allowlist.txt`
+  (glob patterns of paths irrelevant to MOSFIRE J reductions:
+  `pypeit/spectrographs/*.py` except `keck_mosfire.py`, `spectrograph.py`,
+  `util.py`, `__init__.py`; `doc/**`; `**/*.rst`; `pypeit/tests/**`;
+  `*/tests/**`); `scripts/check_pypeit_pin.py`, which prints
+  `pypeit.__version__`, `pypeit.__file__`, the checkout's HEAD SHA and
+  branch, the pin, and the list of files from `git diff --name-only <pin>
+  HEAD` plus `git status --porcelain` (uncommitted changes), then PASS/FAIL
+  on: (1) `git merge-base --is-ancestor <pin> HEAD`; (2) every listed file
+  matches the allow-list. On FAIL it names the offending files and exits
+  non-zero. It also writes the result as JSON (`pypeit_git_sha`,
+  `pypeit_pin`, `pin_check: {pass, files}`) for `reduce_standard.py` to copy
+  into `run_manifest.json`. `--image TAG` (S4a) runs the image and requires
+  its `KECK_ETCS_GIT_SHAS.pypeit` to equal the pin exactly. A README line on
+  the pin and the check.
+- **Verify:** `check_pypeit_pin.py` passes today with files =
+  `[pypeit/spectrographs/keck_hires.py]`; it fails when run with a fake
+  allow-list that omits `keck_hires.py` (negative test); `rclone lsd
+  nautilus_s3:keck-etcs` succeeds and an anonymous request (`curl -sI
+  https://s3-west.nrp-nautilus.io/keck-etcs/`) returns 403, confirming the
+  bucket is private.
 - **Depends on:** nothing. **Risk:** `develop` moves daily; the pin file,
-  not the branch tip, is the reference, and every later log records it.
-  The version string after reinstall is expected to be
-  `2.0.2.dev1216+gf3a1f1d27` for the 2026-09-30 pin (setuptools-scm from
-  `git describe` 2.0.1-1216); if the scheme differs, record what it is and
-  make the check compare the short SHA only.
+  not the branch tip, is the reference, and every later log records it. If
+  the pin is later moved to a commit that changes MOSFIRE-relevant code, the
+  local check fails by design; the user then either brings the laptop
+  checkout up to date (merge or rebase `orig-hires-fixes` onto `develop`,
+  their git) and re-runs the check, or the reference reduction (S4) is
+  redone on the workstation on the pin. The local version string will keep
+  reporting `2.0.2.dev1217+g017bece06`; that is expected and is why the
+  check compares SHAs and diffs, not version strings.
 
 ### S1. Data root and external caches *(local)*
 - **Goal:** create the out-of-repo data root, the local mirror of the S3
@@ -186,13 +207,16 @@ digest and pin.
 
 ## Phase 1: first sensfunc
 
-### S4. Reference reduction of the 2022-04-09 night *(local, on the pinned develop commit; D35)*
+### S4. Reference reduction of the 2022-04-09 night *(local, PypeIt MOSFIRE-equivalent to the pin; D35)*
 - **Goal:** spec1d files for LDS749B and J0841+3814 from a local `pypeit14`
-  run **on the same PypeIt commit the image will pin**, which becomes the
-  gate for the Nautilus dry run (S4b) and the fallback input for S5/S13
-  while the image is being built.
+  run on PypeIt code that the S0 check has shown to be **MOSFIRE-equivalent
+  to the commit the image will pin**, which becomes the gate for the
+  Nautilus dry run (S4b) and the fallback input for S5/S13 while the image
+  is being built.
 - **Inputs:** S0 done (`scripts/check_pypeit_pin.py` passes; the run refuses
-  to start otherwise and says why); `mosfire/20220409/raw/`; the dev-suite
+  to start otherwise and says why, and copies the check's JSON into
+  `run_manifest.json` as `pypeit_pin` and `pin_check` next to the actual
+  `pypeit_git_sha`); `mosfire/20220409/raw/`; the dev-suite
   `keck_mosfire_j2_long.pypeit` (template; `PATH_TO_RAW_DATA` replaced).
 - **Outputs:** `mosfire/20220409/redux/` with `Calibrations/`, `Science/spec1d_*`
   and `spec2d_*`, QA; `scripts/mosfire/reduce_standard.py` v0 (given a night
@@ -212,10 +236,11 @@ digest and pin.
   reported; the LDS749B `S2N` (`med_s2n`) logged; the wavelength solution
   RMS below PypeIt's threshold; `reduce_standard.py --help` documents the S3
   hooks.
-- **Depends on:** S0, S1, S2. **Risk:** PypeIt `develop` may have changed
-  `pypeit_setup` options or frame typing since the 1.8 template (and since
-  `orig-hires-fixes`); the run takes tens of minutes; `snr_thresh = 80` may
-  need lowering for the standard.
+- **Depends on:** S0, S1, S2. **Risk:** PypeIt 2.0 may have changed
+  `pypeit_setup` options or frame typing since the 1.8 template (the local
+  checkout and the pin share every MOSFIRE-relevant file, so what is read
+  locally holds at the pin); the run takes tens of minutes; `snr_thresh =
+  80` may need lowering for the standard.
 
 ### S4a. Container image *(built on the Linux workstation; D31)*
 - **Goal:** the public image `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:<tag>`
@@ -249,7 +274,9 @@ digest and pin.
 - **Verify:** the build guards pass; `docker run --rm <image> python -c
   "import pypeit; assert pypeit.__version__.endswith('g' + open('/opt/src/keck-etcs/nautilus/pypeit_pin.txt').read()[:9])"`
   (or the equivalent with the short SHA inlined); `scripts/check_pypeit_pin.py
-  --image <tag>` reports the same PypeIt SHA as the local checkout; the image
+  --image <tag>` reports the image's PypeIt SHA equal to the pin (the local
+  checkout's SHA differs and is reported alongside, with the allow-listed
+  diff); the image
   size is reported (expect 2-3 GB; no torch); `docker run --rm --entrypoint
   bash <image> -lc 'ls $XDG_CACHE_HOME/pypeit'` shows the cache; after the
   push, `docker manifest inspect` succeeds and the digest is recorded in
@@ -282,9 +309,11 @@ digest and pin.
   and `activeDeadlineSeconds` as design 4.8.4; `emptyDir` at `/scratch`);
   `nautilus/validate_job.yaml` (the one-night dry run: `backoffLimit: 0`,
   `SPEC2D=1`, `--reference`); `nautilus/gates.py` (design 4.8.7; exits
-  non-zero with named failures; with `--reference`, also asserts the pod's
-  `pypeit_git_sha` equals the reference's, so the 1 percent gate is never
-  run across different PypeIt commits); `nautilus/night_failures.py`;
+  non-zero with named failures; with `--reference`, first requires the
+  reference's recorded `pypeit_pin` to equal the pod's PypeIt SHA and its
+  `pin_check.pass` to be true, else FAIL, so the 1 percent gate is never run
+  across MOSFIRE-different PypeIt code; the reference's own `pypeit_git_sha`
+  is only reported); `nautilus/night_failures.py`;
   `nautilus/status_table.py`; `nautilus/manifests/nights_dryrun.csv`;
   `nautilus/README.md` operator section (build, push, ConfigMap, apply,
   follow, inspect, sync back, re-run a failed night). Run the dry run; then
@@ -407,7 +436,8 @@ digest and pin.
   mosfire/20220409 --spec2d` (the dry run pushed spec2d because `SPEC2D=1`;
   spec2d is not in the backup set, so pull it while the night is on S3),
   then `pypeit_flux_calib` and `pypeit_coadd_1dspec` run locally in
-  `pypeit14` on the pinned develop commit. **Verify** as v0.1 (median
+  `pypeit14` (MOSFIRE-equivalent to the pin per the S0 check). **Verify** as
+  v0.1 (median
   ETC/measured ratio within 20 percent over 1.117-1.260 um; 10 percent
   between OH lines; N5 and D14 checks). **Depends on:** S4b (or S4 as
   fallback), S9, S10. **Risk:** as v0.1; also, if local and in-pod spec1d
@@ -532,16 +562,23 @@ digest and pin.
 ## Phase 5: wrap-up
 
 ### S17. PypeIt `ronoise` branch *(local; off `develop`)*
-- As v0.1 (edit `keck_mosfire.py`'s `get_detector_par`; unit test; commit
-  message for the user), with the branch created by the user **from
-  `develop` at or after the pin**, not from `orig-hires-fixes`. **Note:**
-  once the branch exists, the image (S4a) may pin its commit instead of the
-  `develop` pin; that is an edit of `nautilus/pypeit_pin.txt` plus a tag
-  bump recorded in `nautilus/README.md` and `CHANGES.md`, and any night
-  reduced with it carries the new `pypeit_git_sha`. Because
-  `build_image.sh` requires the pin to be on `develop`'s history, pinning a
-  feature-branch commit needs an explicit `--allow-branch` flag and a log
-  line saying so. **Depends on:** S8.
+- As v0.1 (the `get_detector_par` change in `keck_mosfire.py`; unit test;
+  commit message for the user), with the branch created by the user **from
+  `develop` at or after the pin**, not from `orig-hires-fixes`, and **not on
+  this laptop**: per the user (2026-09-30) PypeIt development happens on the
+  workstation or wherever PypeIt is developed, so the session prepares the
+  change as reviewable files in this repo (`nautilus/patches/pypeit_mosfire_ronoise.patch`
+  in `git diff` format against the pin, plus the test file) and the user
+  applies them on the branch there. **Note:** once the branch exists, the
+  image (S4a) may pin its commit instead of the `develop` pin; that is an
+  edit of `nautilus/pypeit_pin.txt` plus a tag bump recorded in
+  `nautilus/README.md` and `CHANGES.md`, and any night reduced with it
+  carries the new `pypeit_git_sha`. Because `build_image.sh` requires the
+  pin to be on `develop`'s history, pinning a feature-branch commit needs an
+  explicit `--allow-branch` flag and a log line saying so. A pin that
+  changes `keck_mosfire.py` makes the local S0 check fail by design; the
+  user then updates the laptop checkout or the reference is redone on the
+  workstation before any further gate (D35). **Depends on:** S8.
 
 ### S18. Documentation, README, CHANGES, WMKO API note *(local)*
 - As v0.1, plus: `nautilus/README.md` finished as the operator guide (image
@@ -565,12 +602,17 @@ digest and pin.
   be noisy and the J2 red edge hard to judge; S5 has fallbacks and S15 brings
   brighter stars.
 - **PypeIt `develop` drift.** The pin file, not the branch tip, is the
-  reference; local (`pypeit14`) and image must be on the pin for the S4b
-  gate to mean anything (S0 check, `gates.py --reference` SHA assertion).
-  API names (`pypeit.core.standard`, `pypeit.pkg.cache`,
-  `pypeit.dataPaths.telgrid`) were read on `orig-hires-fixes` and may differ
-  on `develop`; read the source at the pin before coding (S2, S4, S6). An
-  editable install does not refresh `pypeit.__version__` on checkout (S0).
+  reference. The image is exactly on the pin; the laptop checkout stays on
+  `orig-hires-fixes` and must be MOSFIRE-equivalent to the pin (S0 check:
+  pin is an ancestor, diff touches only allow-listed paths; `gates.py
+  --reference` requires the reference's recorded pin and a passed check).
+  Today the only difference is `keck_hires.py`, so API names read locally
+  (`pypeit.core.standard`, `pypeit.pkg.cache`, `pypeit.dataPaths.telgrid`)
+  hold at the pin. If a future pin touches MOSFIRE code, the check fails
+  until the user updates the laptop checkout or the reference is redone on
+  the workstation; that failure is the intended signal. The local version
+  string (`dev1217+g017bece06`) legitimately differs from the image's
+  (`dev1216+gf3a1f1d27`); nothing compares version strings.
 - **Local versus in-pod agreement.** Same PypeIt commit, but the base Python
   (3.12 vs 3.14) and BLAS differ; the S4b gate measures the effect before
   any batch. If it matters, switch the base image, do not loosen the gate.

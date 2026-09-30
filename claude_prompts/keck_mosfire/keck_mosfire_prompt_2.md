@@ -39,12 +39,18 @@ sessions.
   synced in-pod products land in the same places via
   `scripts/nautilus/s3_sync.py pull mosfire/20220409`. Nothing there is
   committed.
-- PypeIt pin: `nautilus/pypeit_pin.txt` (a commit on `develop`; part 1
-  wrote it and `scripts/check_pypeit_pin.py` verifies the local checkout and
-  `pypeit14` are on it). Every reduction in this doc, local or in-pod, must
-  run on that commit, or the 1 percent gate of S4b is meaningless. Moving
+- PypeIt pin: `nautilus/pypeit_pin.txt` (a commit on `develop`,
+  `f3a1f1d27` on 2026-09-30; part 1 wrote it). The image runs exactly that
+  commit. The laptop checkout stays on `orig-hires-fixes` (HEAD `017bece06`,
+  one commit ahead of the pin, differing only in
+  `pypeit/spectrographs/keck_hires.py`); `scripts/check_pypeit_pin.py`
+  verifies that the pin is an ancestor of HEAD and that the diff touches only
+  allow-listed, MOSFIRE-irrelevant paths (design D35). The local reference
+  records its actual `pypeit_git_sha`, the `pypeit_pin` and the `pin_check`
+  result, and the S4b gate compares pins and check results, not SHAs. Moving
   the pin is a deliberate edit plus an image tag bump, recorded in
-  `nautilus/README.md`.
+  `nautilus/README.md`; a pin that changes MOSFIRE code makes the local
+  check fail until the user updates the laptop checkout.
 - Nautilus: namespace `pypeit`; credentials secret name settled in part 1
   (`KECK_ETCS_S3_SECRET`, default `prp-s3-credentials`), mounted for reads
   and writes because the bucket is private; registry
@@ -87,8 +93,9 @@ sessions.
   zeropoint, eff_aperture)` with Keck `eff_aperture = 72.3674` m^2 (decision
   N1). Standard lookup: `pypeit.core.standard.get_standard_spectrum(ra=,
   dec=)`; LDS749B resolves to CALSPEC `lds749b_stisnic_008.fits.gz`
-  (`scripts/check_mosfire_standards.py`). These names were read on
-  `orig-hires-fixes`; confirm them on `develop` before coding.
+  (`scripts/check_mosfire_standards.py`). These names were read on the
+  local checkout, which differs from the pin only in `keck_hires.py`, so
+  they hold at the pin too.
 - spec1d fields for QA: `S2N` (`med_s2n`), `FWHM`, `FWHMFIT`, `OPT_COUNTS`,
   `OPT_COUNTS_IVAR`, `OPT_COUNTS_SKY`.
 - Existing scripts: `scripts/inspect_mosfire_j2_headers.py`,
@@ -104,10 +111,13 @@ sessions.
 
 ## Prompts
 
-1. **S4: reference reduction of the 2022-04-09 night (local, on the pin).**
-   First run `conda run -n pypeit14 python scripts/check_pypeit_pin.py`; if
-   it fails, stop and tell the user what to switch or reinstall (their git,
-   their env). Then write `scripts/mosfire/reduce_standard.py` (v0): given a
+1. **S4: reference reduction of the 2022-04-09 night (local, PypeIt
+   MOSFIRE-equivalent to the pin).** First run `conda run -n pypeit14
+   python scripts/check_pypeit_pin.py`; if it fails, stop, list the
+   offending files, and tell the user (it means the laptop checkout has
+   drifted from the pin in MOSFIRE-relevant code; they update the checkout
+   or the reference is redone on the workstation). Then write
+   `scripts/mosfire/reduce_standard.py` (v0): given a
    night directory under the data root, run `pypeit_setup`, patch the
    generated pypeit file (retype standards longer than 20 s as `standard`,
    set nod pairs' `comb_id`/`bkg_id` from `dithpos`, apply the parameter
@@ -120,7 +130,8 @@ sessions.
    directory; `--s3-pull` / `--s3-push PREFIX` hooks that call
    `scripts/nautilus/s3_sync.py` and are no-ops when absent; and a
    `run_manifest.json` written at the end with the design 4.8.5 fields
-   (`image = local`, `pypeit_git_sha` from the checkout, `pypeit_version`,
+   (`image = local`, `pypeit_git_sha` from the checkout, `pypeit_pin` and
+   `pin_check` copied from the check's JSON, `pypeit_version`,
    `keck_etcs_git_sha`, night, sha256 of inputs and products, the pypeit
    file text, timings). Keep the pypeit file it produces under
    `scripts/mosfire/pypeit_files/keck_mosfire_20220409_J2.pypeit`. Run it on
@@ -244,7 +255,9 @@ sessions.
    (`git_shas()` preferring `KECK_ETCS_GIT_SHAS`, falling back to `git
    rev-parse` locally, else `unknown`; `image_info()` from `KECK_ETCS_IMAGE`
    and `KECK_ETCS_IMAGE_DIGEST`). Extend `scripts/check_pypeit_pin.py
-   --image TAG` to run the image and compare its PypeIt SHA with the pin.
+   --image TAG` to run the image and require its PypeIt SHA to equal the pin
+   exactly (the local checkout's SHA is different by design and is only
+   reported).
    Add the tag/digest/pin table to `nautilus/README.md`. Build and tag
    `0.1.0` (the dry-run image; `0.2.0` follows after S6 and S8). Verify: the
    guards pass; `check_pypeit_pin.py --image <tag>` passes; image size
@@ -278,10 +291,12 @@ sessions.
    s3://keck-etcs/mosfire/20220409/reference/`), `nautilus/gates.py`
    (design 4.8.7: spec1d for both LDS749B traces and the four J0841 frames;
    wavelength RMS below threshold; zero point finite over 1.117-1.260 um;
-   median throughput 0.15-0.45; with `--reference`: the reference's
-   `pypeit_git_sha` equals the pod's, else FAIL before any comparison;
-   zero-point agreement to 1 percent over 1.117-1.260 um and `S2N` to 5
-   percent; exits non-zero with named failures), `nautilus/night_failures.py`
+   median throughput 0.15-0.45; with `--reference`: the reference's recorded
+   `pypeit_pin` equals the pod's PypeIt SHA and its `pin_check.pass` is true,
+   else FAIL before any comparison (the reference's own `pypeit_git_sha` is
+   expected to differ and is only reported); then zero-point agreement to 1
+   percent over 1.117-1.260 um and `S2N` to 5 percent; exits non-zero with
+   named failures), `nautilus/night_failures.py`
    (status table to sweep manifest), `nautilus/status_table.py` (per-night
    status from `run_manifest.json` objects; store-only),
    `nautilus/manifests/nights_dryrun.csv` (one row; columns `night,

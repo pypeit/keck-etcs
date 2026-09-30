@@ -1,6 +1,6 @@
 # Keck/MOSFIRE J-band: sensitivity analysis and exposure-time calculator design
 
-*Version 0.3, 2026-09-30. Decisions come from the Q&A in
+*Version 0.3.1, 2026-09-30. Decisions come from the Q&A in
 `claude_prompts/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed; round
 (d) on Nautilus, Q27-Q39, answered 2026-09-30). Readers: the PypeIt/keck-etcs
 developers, future implementation sessions, and WMKO staff who will host the
@@ -20,10 +20,24 @@ changes from the recommended defaults folded in: the bucket `keck-etcs`
 exists and is **private** (D32: every read and write, local or in-pod, needs
 the user's credentials; products are distributed through git, not S3 URLs);
 PypeIt is pinned to a commit on **`develop`**, not `orig-hires-fixes` (D31,
-D35: the local reference reduction must run on the same develop commit);
-and the backup set is defined as the high-level products only (new D39).
-Sections 4.2, 4.3, 4.8 and 8 updated accordingly; the residual items in
-section 8 are verifications, not decisions.
+D35: the local reference reduction must run on PypeIt code equivalent to
+the pin for MOSFIRE); and the backup set is defined as the high-level
+products only (new D39). Sections 4.2, 4.3, 4.8 and 8 updated accordingly;
+the residual items in section 8 are verifications, not decisions.
+
+*Change note, v0.3.1 (2026-09-30, follow-up):* the user will not switch the
+laptop's PypeIt checkout to `develop`; it stays on `orig-hires-fixes` in
+`pypeit14`, and no PypeIt development happens on this laptop. Checked
+read-only: `git merge-base HEAD origin/develop` is the pin `f3a1f1d27`, HEAD
+is exactly one commit ahead and none behind, and `git diff --stat
+origin/develop...HEAD` touches only `pypeit/spectrographs/keck_hires.py`
+(+131/-33). So the local MOSFIRE code path is identical to the pin. D35 and
+the S0 check are therefore relaxed from "local checkout *is* the pin" to
+"local checkout *contains* the pin and differs from it only in files
+irrelevant to MOSFIRE J reductions"; the reference reduction records both
+SHAs and the check result, and the S4b gate compares pins, not SHAs. The
+registry project, deploy token, `docker login` and the S3 credentials are
+confirmed done by the user (section 8). D31, D32, D39 unchanged.
 
 ## 1. Purpose and scope
 
@@ -85,7 +99,7 @@ masks, imaging, and the other Keck instruments (which will reuse
 | D32 | Storage: the **private** bucket `s3://keck-etcs` on Nautilus S3 (Ceph RGW; created by the user 2026-09-30; only the user has read/write) is the canonical store of raw and reduced data, laid out as in 4.2. Every access, local (`scripts/nautilus/s3_sync.py`) or in-pod (a mounted credentials secret in namespace `pypeit`), uses the user's credentials; nothing is public. Pods work on `emptyDir` scratch; no PVC. `$KECK_ETCS_DATA` is the local mirror. Products reach WMKO and collaborators through the committed ECSV/FITS files in git, not through S3 URLs. | Q27, Q28, Q35. A private bucket needs no policy work and cannot be overwritten by others; the committed products were always the primary record (D21, D28). |
 | D33 | One night per pod as an Indexed Job over a night manifest (`completions = n_nights`, `parallelism` 4 to start); each pod idempotent (a night whose `run_manifest.json` exists on S3 is skipped unless `REPLACE=1`). Section 4.8.4. | Q34. PypeIt nights share no writer, so fan-out is safe; PAB's single pod protected a single SQLite writer. |
 | D34 | Each night job harvests its own `sens_*.fits` (`keck_etcs.calib.harvest`) and pushes the per-standard row and curve to `mosfire/<night>/harvest/`; the local `scripts/mosfire/harvest_sens.py --merge` builds `standards.ecsv`. Harvesting a synced sens file locally gives the same row. | Q36. |
-| D35 | The 2022-04-09 night is reduced once locally in `pypeit14` **on the same develop commit as the image pin** (the user switches the PypeIt checkout to `develop`; plan step S0), and that reduction gates the Nautilus dry run: the in-pod LDS749B zero point must agree to 1 percent over 1.117-1.260 um. Every other night is reduced on Nautilus only. | Q37, Q38. The gate is meaningless if local and image run different PypeIt code. |
+| D35 | The 2022-04-09 night is reduced once locally in `pypeit14`, whose PypeIt checkout stays on `orig-hires-fixes` (user, 2026-09-30) and must be **MOSFIRE-equivalent to the image pin**: `scripts/check_pypeit_pin.py` (plan step S0) passes only if (1) the pin is an ancestor of the local HEAD and (2) the diff from the pin to HEAD, plus any uncommitted changes, touches only an allow-list of paths irrelevant to MOSFIRE J reductions (other spectrographs' `pypeit/spectrographs/*.py`, excluding `keck_mosfire.py`, `spectrograph.py`, `util.py` and `__init__.py`; `doc/`; `*.rst`; tests). It reports both SHAs and the file list; anything else fails with the offending files named. The reference reduction records `pypeit_git_sha` (its actual commit, `017bece06` today), `pypeit_pin` (`f3a1f1d27`) and the check result. That reduction gates the Nautilus dry run: `gates.py --reference` first requires the reference's recorded pin to equal the image pin with a passed check, then the in-pod LDS749B zero point must agree to 1 percent over 1.117-1.260 um. Every other night is reduced on Nautilus only. If the pin later moves to a commit that changes MOSFIRE code, the local check fails by design until the user brings the laptop checkout up to date or the reference is redone elsewhere. | Q37, Q38, follow-up 2026-09-30. On that date the local diff from the pin is `keck_hires.py` only (+131/-33), so the MOSFIRE code path is identical; requiring equal SHAs would force a branch switch the user does not want. |
 | D36 | Reduction provenance on every product: `image`, `image_digest`, `pypeit_git_sha`, `keck_etcs_git_sha`, `job_name`, `s3_prefix`, in the per-standard table (4.4), the per-night `run_manifest.json`, the curve and era `meta` (5.4) and `CHANGES.md` (5.5). A locally harvested row carries `image = local`. | Q38. |
 | D37 | KOA raw-frame downloads run as a Nautilus Job writing to `mosfire/<night>/raw/` on S3 with a manifest; the KOA metadata search stays local; fallback is a local download and `s3_sync.py push` if pods cannot reach KOA anonymously (checked first in plan step S14b). The 2022-04-09 dev-suite frames are pushed from the workstation. | Q33. |
 | D38 | Stays local, in `pypeit14`, on synced products: `keck_etcs.core`, `etc.compute`, the schemas, tests, the Gemini grid build, combine, trend, the J0841 validation, the XTcalc comparison, the KOA metadata search, the PypeIt `ronoise` branch (off `develop`) and the documentation. Pods never call `compute()`; the core keeps its no-I/O rule. | Q39. |
@@ -359,8 +373,9 @@ scripts) and `PypeIt-development-suite/nautilus/` (`gen_kube_devsuite`,
 nothing else; PypeIt comes from GitHub). The PypeIt pin is the single file
 `nautilus/pypeit_pin.txt` holding one full commit SHA on `develop`
 (`f3a1f1d274b15ee1358f167819d77f1948fce1bd` = `origin/develop` on
-2026-09-30, `git describe` 2.0.1-1216, expected version string
-`2.0.2.dev1216+gf3a1f1d27`; confirmed in plan step S0). Re-pinning is a
+2026-09-30, `git describe` 2.0.1-1216, expected in-image version string
+`2.0.2.dev1216+gf3a1f1d27`; plan step S0 checks that the local checkout
+contains it and is MOSFIRE-equivalent to it, D35). Re-pinning is a
 deliberate edit of that file plus an image tag bump recorded in
 `nautilus/README.md` and `CHANGES.md`; `build_image.sh` refuses to build if
 the pin is not an ancestor of `origin/develop`. Layers: (1) third-party
@@ -422,7 +437,10 @@ writes alike.
 
 **4.8.5 Provenance (D36).** The pod's PROVENANCE block prints and
 `run_manifest.json` records: `image` (tag), `image_digest`, `pypeit_version`,
-`pypeit_git_sha`, `keck_etcs_version`, `keck_etcs_git_sha`, `job_name`,
+`pypeit_git_sha`, `pypeit_pin`, `pin_check` (the S0 check result: pass or
+fail plus the list of files differing from the pin; inside a pod the SHA
+equals the pin and the list is empty), `keck_etcs_version`,
+`keck_etcs_git_sha`, `job_name`,
 `pod`, `node`, `started`, `finished`, `night`, `s3_prefix`, the sha256 of
 every raw frame and of every pushed product, the pypeit file text, and the
 gate results. `keck_etcs.calib.harvest` copies these into the per-standard
@@ -447,8 +465,11 @@ reduces 2022-04-09 in one pod and `nautilus/gates.py` checks: spec1d files
 for both LDS749B traces and all four J0841 frames; wavelength RMS below
 PypeIt's threshold; sensfunc zero point finite over 1.117-1.260 um; implied
 median throughput 0.15-0.45; and, given the local reference products from
-step S4 (`--reference` pointing at a synced-back copy), zero-point agreement
-to 1 percent and `S2N` agreement to 5 percent. The same gates run inside every
+step S4 (`--reference` pointing at a synced-back copy), first that the
+reference's recorded `pypeit_pin` equals the image's PypeIt SHA and its
+`pin_check` passed (else FAIL before any comparison; D35), then zero-point
+agreement to 1 percent and `S2N` agreement to 5 percent. The same gates run
+inside every
 production pod (without `--reference`). The pilot after the dry run is a
 3-5 night batch (the first wide-slit standards) before the full manifest.
 
@@ -854,21 +875,26 @@ Nautilus items (v0.3): the decisions of v0.2 were answered in Q27-Q39 and
 are settled as D31-D39. What remains are verifications and one-time actions
 by the user, each tied to the plan step that checks it:
 
-- **Local PypeIt checkout on `develop` (S0, user action):** switch
-  `/Users/xavier/Projects/PypeIt/PypeIt` from `orig-hires-fixes` to
-  `develop` at the pinned commit (`nautilus/pypeit_pin.txt`), and if
-  `pypeit.__version__` in `pypeit14` still reports `g017bece06` afterwards,
-  re-run `pip install -e .` there so `pypeit/pkg/version.py` is regenerated.
-  `scripts/check_pypeit_pin.py` verifies the SHA and version string match.
-- **Credentials secret in namespace `pypeit` (S1b, user verification):**
-  whether `prp-s3-credentials` there holds keys that can list
-  `s3://keck-etcs` (test: the inspect pod lists the bucket with the mounted
-  secret), or a new `keck-etcs-s3-credentials` secret must be created from
-  the user's `~/.aws/credentials`. Local `s3_sync.py` uses the same keys via
-  `AWS_PROFILE`.
-- **Registry project and deploy token (S4a, user action):** create the
-  GitLab project `profx/keck-etcs` (public) and a `write_registry` deploy
-  token; `docker login` on the workstation.
+- **Local PypeIt checkout (S0, check only; no user action):** the laptop
+  checkout `/Users/xavier/Projects/PypeIt/PypeIt` stays on
+  `orig-hires-fixes` (user decision 2026-09-30; no PypeIt development on
+  this laptop). `scripts/check_pypeit_pin.py` verifies MOSFIRE-equivalence
+  to the pin (D35): pin is an ancestor of HEAD, and the diff plus uncommitted
+  changes touch only allow-listed paths. Today: HEAD `017bece06`, pin
+  `f3a1f1d27` = merge-base, diff = `keck_hires.py` only, so it passes. If a
+  future pin changes MOSFIRE code the check fails; the user then either
+  updates the laptop checkout (merge or rebase `orig-hires-fixes` onto
+  `develop`, or pull) or the reference reduction is redone on the
+  workstation, and the check is re-run before any gate.
+- **Credentials (S1b): confirmed by the user, 2026-09-30.** The user's keys
+  read and write `s3://keck-etcs`; local `s3_sync.py` uses them via
+  `AWS_PROFILE`. S1b's inspect pod remains the in-pod smoke test of the
+  mounted secret (`prp-s3-credentials` in `pypeit`, else a new
+  `keck-etcs-s3-credentials`).
+- **Registry (S4a): done by the user, 2026-09-30.** GitLab project
+  `profx/keck-etcs` exists with a deploy token (username
+  `gitlab+deploy-token-1383`; the token itself stays with the user),
+  `docker login` done on the workstation.
 - **KOA from the cluster (S14b check):** that pods reach
   `koa.ipac.caltech.edu` and `pykoa` downloads public data without a login;
   otherwise the D37 fallback (local download, `s3_sync.py push`).

@@ -1046,3 +1046,74 @@ The user reported that registry steps 1-4 succeeded: the project
 the token username is in the repo; the token stays with the user. S0 item 4 is
 done. Still open: how the S4 local reference handles the laptop staying on
 `orig-hires-fixes` (see the previous entry).
+
+### 2026-09-30 (Pin check relaxed to MOSFIRE-equivalence)
+
+Resolves the open item of the two previous entries: the laptop's PypeIt
+checkout stays on `orig-hires-fixes` in `pypeit14` and no PypeIt
+development happens on this laptop (user decision). Facts checked
+read-only: `git merge-base HEAD origin/develop` is the image pin
+`f3a1f1d27`; HEAD `017bece06` is one commit ahead and none behind; `git
+diff --stat origin/develop...HEAD` touches only
+`pypeit/spectrographs/keck_hires.py` (+131/-33). The local MOSFIRE code
+path is therefore identical to the pin, so requiring equal SHAs would force
+a branch switch for no gain.
+
+Changes (design and plan bumped to v0.3.1 with a dated change note; no
+other file edited except the part docs listed and this log; no git
+commands other than read-only inspection):
+
+- `docs/keck_mosfire_design.md`: D35 rewritten. The requirement is now
+  "the local checkout contains the pin and differs from it only in paths
+  irrelevant to MOSFIRE J reductions": `scripts/check_pypeit_pin.py` passes
+  if (1) `git merge-base --is-ancestor <pin> HEAD` and (2) `git diff
+  --name-only <pin> HEAD` plus uncommitted changes match an allow-list
+  (`pypeit/spectrographs/*.py` except `keck_mosfire.py`, `spectrograph.py`,
+  `util.py`, `__init__.py`; `doc/`; `*.rst`; tests), reporting both SHAs
+  and the file list and naming offenders on failure. 4.8.2 says S0 checks
+  containment, not identity. 4.8.5 adds `pypeit_pin` and `pin_check` to the
+  provenance fields. 4.8.7's gate first requires the reference's recorded
+  pin to equal the image's PypeIt SHA with a passed check, then the 1
+  percent comparison. Section 8: the "switch to develop / reinstall" item is
+  replaced by a check-only item that says what happens when a future pin
+  changes MOSFIRE code (the check fails by design; the user updates the
+  laptop checkout or the reference is redone on the workstation);
+  credentials marked confirmed by the user; registry marked done (project
+  `profx/keck-etcs`, deploy-token username `gitlab+deploy-token-1383`,
+  `docker login` on the workstation).
+- `docs/keck_mosfire_implementation.md`: S0 no longer asks the user to
+  switch or reinstall; it records the done prerequisites and the checked
+  facts, adds `nautilus/pypeit_pin_allowlist.txt`, specifies the check's
+  two tests, its JSON result and a negative test, and notes the local
+  version string will keep reporting `dev1217+g017bece06`. S4 copies
+  `pypeit_pin`/`pin_check` into `run_manifest.json`; S4a's `--image` check
+  requires the image SHA to equal the pin and only reports the local SHA;
+  S4b's `gates.py --reference` compares pins and check results, not SHAs;
+  S11 wording; S17 states the branch is made off `develop` on the
+  workstation, with the change prepared here as
+  `nautilus/patches/pypeit_mosfire_ronoise.patch` plus the test file; the
+  drift risk rewritten around containment and the allow-list.
+- `keck_mosfire_prompt_1.md` (Context and prompt 4: no switch/reinstall,
+  prerequisites done, the allow-list file, the two-part check, the negative
+  test), `keck_mosfire_prompt_2.md` (Context pin bullet; API-name note
+  simplified since only `keck_hires.py` differs; S4 failure guidance;
+  `run_manifest.json` fields; S4a `--image`; S4b gate on pins),
+  `keck_mosfire_prompt_4.md` (Context), `keck_mosfire_prompt_5.md`
+  (API-name note simplified), `keck_mosfire_prompt_6.md` (Context; S17
+  done off `develop` on the workstation via a patch file; consequence of a
+  pin that changes `keck_mosfire.py`). `keck_mosfire_prompt_3.md` and
+  `koa_search_prompts.md` needed no change.
+
+Judgment calls: the allow-list lives in a file (`nautilus/pypeit_pin_allowlist.txt`)
+so a future exception is a reviewed edit, not a code change; the S17 change
+is delivered as a patch file plus test file in this repo, since the session
+cannot edit the workstation checkout and must not edit the laptop one.
+
+What I learned: the pin equals the merge-base, so `orig-hires-fixes` is a
+clean one-commit branch off today's `develop`, and the two version strings
+(`dev1217` local, `dev1216` image) differ by exactly that commit. In-pod
+provenance is unaffected: pods run the pin exactly, so for them
+`pypeit_git_sha == pypeit_pin` and the diff list is empty. The Logs had
+grown two entries ("Registry instructions", "Registry set up") after the
+Prompt #6 entry; this entry was first inserted before them by anchoring on
+the Prompt #6 text and was moved here so the log stays chronological.

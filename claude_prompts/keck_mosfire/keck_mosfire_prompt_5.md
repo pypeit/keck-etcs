@@ -63,8 +63,9 @@ Part 6 step S18 needs S16.
   `keck_etcs/calib/standards.py` and pass it to PypeIt's sensfunc as a
   user-supplied standard (check how `pypeit_sensfunc` / `SensFunc` accepts a
   custom standard spectrum on `develop` at the pin: `pypeit/core/standard.py`
-  `get_standard_spectrum(spectral_type=..., V_mag=...)` returned a Vega
-  model scaled by V only when read on `orig-hires-fixes`, so a J-scaled
+  `get_standard_spectrum(spectral_type=..., V_mag=...)` returns a Vega
+  model scaled by V only (read on the local checkout, which differs from the
+  pin only in `keck_hires.py`, so this holds at the pin), so a J-scaled
   model needs either a V-equivalent magnitude or a direct hook). PypeIt
   masks Paschen lines automatically.
 - Eras (design D6): 2012-04-04 to 2016-09-15; 2017-02-13 to 2025-02-11;

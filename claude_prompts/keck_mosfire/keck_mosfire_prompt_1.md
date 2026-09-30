@@ -48,13 +48,18 @@ S3.
   {1.0, 1.6, 3.0, 5.0} and airmass AA/10 in {1.0, 1.5, 2.0}. Read them with
   `scipy.io.readsav`. The gemini.edu site returns HTTP 403, so the tarball is
   our only copy.
-- PypeIt checkout: `/Users/xavier/Projects/PypeIt/PypeIt`, to be on
-  **`develop`** at the commit in `nautilus/pypeit_pin.txt` (user's git; the
-  pin on 2026-09-30 is `f3a1f1d274b15ee1358f167819d77f1948fce1bd`,
-  `origin/develop`, expected version `2.0.2.dev1216+gf3a1f1d27`). The
-  `pypeit14` env is an editable install, so `pypeit.__version__` may still
-  report the old `g017bece06` until `pip install -e ".[dev]"` is re-run there
-  (user action). The telluric grid MOSFIRE needs is
+- PypeIt checkout: `/Users/xavier/Projects/PypeIt/PypeIt`, on
+  `orig-hires-fixes` (HEAD `017bece06`, `pypeit14` editable install,
+  version `2.0.2.dev1217+g017bece06`), and it **stays there**: the user
+  (2026-09-30) will not switch it to `develop` and does no PypeIt
+  development on this laptop. The image pin is a `develop` commit in
+  `nautilus/pypeit_pin.txt` (on 2026-09-30
+  `f3a1f1d274b15ee1358f167819d77f1948fce1bd` = `origin/develop`, the
+  merge-base with HEAD; HEAD is one commit ahead and the whole diff is
+  `pypeit/spectrographs/keck_hires.py`, +131/-33). Design D35: the local
+  checkout must *contain* the pin and differ from it only in paths
+  irrelevant to MOSFIRE J reductions; `scripts/check_pypeit_pin.py` tests
+  exactly that. The telluric grid MOSFIRE needs is
   `TellPCA_3000_26000_R10000.fits` (6 MB), fetched by
   `pypeit.dataPaths.telgrid.get_file_path(...)` (host `s3_cloud`) from
   PypeIt's S3 host, which is Nautilus S3: `pypeit/data/s3_url.txt` reads
@@ -142,23 +147,31 @@ S3.
    under 5 MB; `git status` shows only the FITS, the two scripts and the index.
    Log your work, including the N5 result.
 
-4. **S0 check and S1b: PypeIt pin, bucket access, sync helper, first push.**
-   The user has done, or will do on request, the S0 actions of the plan:
-   switched `/Users/xavier/Projects/PypeIt/PypeIt` to `develop` at the pinned
-   commit (re-running `pip install -e ".[dev]"` in `pypeit14` if
-   `pypeit.__version__` still shows `g017bece06`), and has the Nautilus S3
-   keys as an AWS profile locally (`rclone lsd nautilus_s3:keck-etcs` works).
-   Do not run any git `checkout`/`switch` yourself; if the checkout is not
-   on the pin, stop and say exactly which commands the user should run.
-   Then: (a) write `nautilus/pypeit_pin.txt` (one line, the full SHA of the
-   commit the checkout is on, which must be on `origin/develop`'s history:
-   check with `git -C <checkout> merge-base --is-ancestor <sha>
-   origin/develop`, read-only) and `scripts/check_pypeit_pin.py` (prints
-   `pypeit.__version__`, `pypeit.__file__`, the checkout's HEAD and branch,
-   the pin, and PASS/FAIL on HEAD == pin, version string ends with the pin's
-   short SHA, branch is `develop`; non-zero exit on FAIL; a `--image TAG`
-   option, for part 2, that compares against a running image's
-   `KECK_ETCS_GIT_SHAS`); (b) write `scripts/nautilus/s3_sync.py` (boto3;
+4. **S0 check and S1b: PypeIt pin check, bucket access, sync helper, first
+   push.** The user has already provided the S0 prerequisites (2026-09-30):
+   the Nautilus S3 keys as a local AWS profile that reads and writes
+   `s3://keck-etcs` (confirmed), the GitLab project `profx/keck-etcs` with
+   a deploy token (username `gitlab+deploy-token-1383`; the token itself
+   stays with the user) and `docker login` on the workstation. The PypeIt checkout stays on `orig-hires-fixes`; do not ask
+   for a branch switch or a reinstall and do not run any git
+   `checkout`/`switch` yourself. Then: (a) write `nautilus/pypeit_pin.txt`
+   (one line: the full SHA of `git -C <checkout> merge-base HEAD
+   origin/develop`, read-only, which today is
+   `f3a1f1d274b15ee1358f167819d77f1948fce1bd`),
+   `nautilus/pypeit_pin_allowlist.txt` (glob patterns of paths irrelevant to
+   MOSFIRE J reductions: `pypeit/spectrographs/*.py` except
+   `keck_mosfire.py`, `spectrograph.py`, `util.py`, `__init__.py`; `doc/**`;
+   `**/*.rst`; test directories) and `scripts/check_pypeit_pin.py`, which
+   prints `pypeit.__version__`, `pypeit.__file__`, the checkout's HEAD SHA
+   and branch, the pin, and the file list from `git diff --name-only <pin>
+   HEAD` plus uncommitted changes (`git status --porcelain`), then PASS/FAIL
+   on (1) `git merge-base --is-ancestor <pin> HEAD` and (2) every listed
+   file matching the allow-list, naming offending files on FAIL with a
+   non-zero exit; it also writes a JSON result (`pypeit_git_sha`,
+   `pypeit_pin`, `pin_check: {pass, files}`) for the reduction driver to
+   copy into `run_manifest.json`, and takes a `--image TAG` option (part 2)
+   that runs the image and requires its `KECK_ETCS_GIT_SHAS.pypeit` to equal
+   the pin exactly; (b) write `scripts/nautilus/s3_sync.py` (boto3;
    `push`, `pull`, `ls` subcommands over `s3://keck-etcs/<prefix>` and the
    matching `$KECK_ETCS_DATA` path; endpoint from `ENDPOINT_URL` with the
    default above; credentials only from `AWS_PROFILE`/`AWS_*`; idempotent by
@@ -177,7 +190,9 @@ S3.
    (koaid, file, frame type, target, slit, `SAMPMODE`, `NUMREADS`, exptime,
    airmass, sha256) to `mosfire/20220409/raw/`; (e) ask the user to apply
    the inspect pod and paste its log, or apply it yourself if the user has
-   said so. Verify: `check_pypeit_pin.py` passes; `s3_sync.py ls
+   said so. Verify: `check_pypeit_pin.py` passes with the diff list equal to
+   `[pypeit/spectrographs/keck_hires.py]` (and fails, as a negative test,
+   when pointed at an allow-list that omits `keck_hires.py`); `s3_sync.py ls
    mosfire/20220409/raw` lists 16 objects with the local sizes and a second
    `push` uploads nothing; `curl -sI
    https://s3-west.nrp-nautilus.io/keck-etcs/mosfire/20220409/raw/manifest.ecsv`
