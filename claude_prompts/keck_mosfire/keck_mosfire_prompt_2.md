@@ -461,3 +461,127 @@ the driver, at 22:53 UTC, during the run.
 
 **Not done here.** No `--sens` (that is S5) and no S3 push of the
 reference products (S4b syncs them).
+
+### 2026-09-30 (Prompt #2 / S5: LDS749B J2 sensfunc — median throughput 0.18, red edge 1.250 um)
+
+Linux workstation, `pypeit14b`, PypeIt at the pin. Prompt 6 (in-pod) has not
+run, so there is no in-pod sensfunc to compare with yet.
+
+**`keck_etcs/data/pypeit_par/keck_mosfire_J.sens`** (design 4.3):
+`algorithm = IR`, `polyorder = 6`, `extrap_blu = extrap_red = 0`,
+`[[IR]] telgridfile = TellPCA_3000_26000_R10000.fits`, `maxiter = 2`. It
+is written before prompt 5, so the image build will include it. Only
+`polyorder` differs from PypeIt's MOSFIRE default (13).
+
+**Scripts.**
+- **`scripts/mosfire/build_sensfunc.py DATE --standard NAME`:**
+  - Runs `pypeit_sensfunc` on each standard frame's spec1d, giving
+    `sens_LDS749B_20220409_{0218,0219}.fits`.
+  - Coadds the frames in counts with `pypeit_coadd_1dspec`
+    (`flux_value = False`; PypeIt's default coadds FLAM) into
+    `spec1d_coadd_LDS749B_20220409.fits`, then runs `pypeit_sensfunc` on the
+    coadd, giving the night's product
+    **`mosfire/20220409/sens/sens_LDS749B_20220409.fits`**, plus PypeIt's
+    QA, fluxed-standard and throughput PDFs.
+  - Each call is logged beside its output. The run takes 49 s.
+  - `pypeit_sensfunc` with several files *splices* them (for different
+    wavelength ranges) and does not combine them, hence the coadd.
+  - The coadd copies the first frame's header (a PypeIt "hack"), so
+    `EXPTIME` is one frame's 119.29 s. That is the right normalisation for a
+    weighted mean of equal-length frames; the script refuses unequal
+    exposure times. `AIRMASS` is 0218's 1.578 against a mean of 1.568.
+- **`scripts/mosfire/inspect_sensfunc.py SENS [SENS2] [--plot] [--json]`:**
+  - Prints the telluric fit, a PWV estimate, the zero point and throughput
+    at 1.20, 1.25 and 1.30 um, and the median throughput over
+    1.117-1.260 um.
+  - Runs the three checks: zero point finite, median throughput within
+    0.15-0.45, and the 1.125-1.140 um telluric residual below 5%.
+  - Prints a 5 nm red-edge table; with two files, zero-point ratio
+    statistics.
+  - `--plot` writes `<stem>_vs_calspec.png`: the fluxed standard against
+    CALSPEC, with a ratio panel on the same x axis.
+- **`scripts/mosfire/compare_standard_frames.py DATE`:** a diagnostic for
+  the frame-to-frame difference below.
+
+**Telluric fit: PWV and airmass are not fitted parameters.**
+- `TellPCA_*` is a PCA grid (`teltype = pca`, 5 components). The fit
+  solves for 5 PCA coefficients, the resolution, a shift and a stretch at the
+  *header* airmass.
+- Coadd: `SUCCESS`, niter 3, chi2 1130, R 2637, shift +1.36 pix, stretch
+  1.0004. Per frame: R 2586 and 1857, both successful. No fallback (fixed
+  PWV, lower `polyorder`, BOX extraction) was needed.
+- PWV is estimated by matching PypeIt's fitted transmission over
+  1.117-1.260 um to our Gemini ATRAN grid, interpolated per N4 to the header
+  airmass and smoothed to the fitted R.
+  - Result: **1.8 mm for the coadd** (rms 0.019), 1.3 mm for 0218 and
+    2.5 mm for 0219.
+  - The per-frame spread shows PWV is weakly constrained in J2, where only
+    the 1.12-1.16 um water band carries weight. Treat it as "about 1-2.5 mm".
+  - Airmass: the header value of 1.578, not fitted.
+
+**Zero points and throughput** (Keck 72.3674 m^2, `zeropoint_to_throughput`):
+
+| file | ZP 1.20 um | ZP 1.25 um | T 1.20 | T 1.25 | median T 1.117-1.260 | tell. resid 1.13 um |
+|---|---|---|---|---|---|---|
+| coadd (product) | 19.649 | 18.607 | 0.219 | 0.087 | **0.181** | -1.7% |
+| 0218 | 19.563 | 18.538 | 0.202 | 0.082 | 0.168 | -1.8% |
+| 0219 | 19.705 | 18.664 | 0.231 | 0.092 | 0.189 | -3.6% |
+
+- **1.30 um:** outside the fitted range, because PypeIt trims J2 at
+  1.260 um. The J2 filter (1.181/0.129 um, design section 3) does not reach
+  1.30. D5's 1.30 um metric applies to J and J3 only.
+- **Curve shape (coadd, 10 nm medians):**
+  - rises from 0.085 at 1.12 um to a peak of 0.255 at 1.22-1.24 um;
+  - then falls to 0.064 at 1.25 um and 0.015 at 1.26 um.
+- **The fall is the J2 filter's red edge**, whose half-power point is at
+  1.2455 um. It is real, not a fit artefact: the fluxed standard follows
+  CALSPEC within ±6% to 1.250 um. The low blue end is the filter's blue
+  half-power point (1.1165 um).
+- **Consequence:** the 1.117-1.260 um median is dominated by the filter
+  shape until S8 divides the filter out (D5).
+- **Comparison with XTcalc:** its broad-J end-to-end curve (`J_tp_tot`)
+  gives 0.34-0.36 at 1.22-1.24 um, against our 0.255 peak, a ratio of about
+  0.73. This is a sanity check only, not a target.
+
+**Checks (coadd and both frames).**
+- Zero point finite over 1.117-1.260 um: PASS; fitted range
+  11171-12599 A.
+- Median throughput within 0.15-0.45: PASS (0.181).
+- Telluric residual near 1.13 um below 5%: PASS (-1.7%).
+- Local against in-pod agreement to 1%: not applicable yet (prompt 6).
+  `inspect_sensfunc.py A B` is ready for it.
+
+**Frame-to-frame difference (open item).**
+- **The difference:** the per-frame zero points differ by **12%**. The
+  0218/0219 throughput ratio has median 0.880 and std 0.026 over the band,
+  and ΔZP = -0.14 mag.
+- **It is in the data:** `compare_standard_frames.py` gives extracted-count
+  ratios of 0.883 (optimal) and 0.895 (boxcar) over 1.17-1.24 um. The
+  exposure times are equal, and ΔX = 0.019 is worth about 0.2% in J.
+- **Candidate causes:** transparency, guiding or seeing losses, or the
+  illumination correction at the two nod positions (spat 979 against 1052,
+  ±6.5"). Two frames cannot separate them.
+- **The coadd is consistent:** its ratio is 1.082 against 0218 and 0.950
+  against 0219, i.e. between them, as a mean should be.
+- **What to expect:** single-standard zero points carry roughly ±6%
+  frame-level scatter. S6/S10 should record the per-frame spread; with more
+  nights (S15), check whether A and B positions differ systematically.
+
+**Red-edge judgement (the open item of D8).** 1.260 um is **not** the clean
+red edge; **1.250 um is**. The coadd's 5 nm median residuals (fluxed/CALSPEC
+- 1) are:
+- -4.4, -1.5, -3.1, +2.8, +5.9 and +0.9% from 1.220 to 1.250 um;
+- then **-8.5%** (1.250-1.255) and **+13.7%** (1.255-1.260), with per-pixel
+  spikes of +30% at the trim edge.
+- Beyond 1.2455 um the counts fall steeply on the filter edge (T < 0.07),
+  and the polynomial zero point rolls off against the trim.
+- **Recommendation:** use 1.117-1.250 um for the band metrics (design D5
+  and D8, `mosfire_band_footprints.py` CLEAN) and keep PypeIt's 1.260 um trim
+  for the fit itself. The blue end is clean from about 1.119 um: the first
+  few pixels after 1.117 um drop by about 20%.
+
+**Outputs.** In `$KECK_ETCS_DATA/mosfire/20220409/sens/`: the three
+sensfuncs, the coadd spec1d, the `.coadd1d` file, the logs, PypeIt's PDFs,
+`sens_LDS749B_20220409_vs_calspec.png` and
+`sens_LDS749B_20220409_inspect.json`. `git status` shows the `.sens` file
+and the three new scripts.

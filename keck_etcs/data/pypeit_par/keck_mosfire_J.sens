@@ -1,0 +1,11 @@
+# pypeit_sensfunc parameters for Keck/MOSFIRE J-band standards (design 4.3).
+# Ships inside the Nautilus image; used by scripts/mosfire/reduce_standard.py --sens.
+# Differs from the PypeIt MOSFIRE default only in polyorder (13 -> 6, design D8).
+[sensfunc]
+  algorithm = IR
+  polyorder = 6
+  extrap_blu = 0.0
+  extrap_red = 0.0
+  [[IR]]
+    telgridfile = TellPCA_3000_26000_R10000.fits
+    maxiter = 2
