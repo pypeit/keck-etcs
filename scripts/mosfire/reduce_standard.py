@@ -130,7 +130,8 @@ def keck_etcs_git():
                          text=True)
     if res.returncode != 0:
         return os.environ.get('KECK_ETCS_GIT_SHA', 'unknown'), None
-    dirty = subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain', '--untracked-files=no'],
+    # Untracked files count: the driver itself may not be committed yet
+    dirty = subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain'],
                            capture_output=True, text=True).stdout.strip() != ''
     return res.stdout.strip(), dirty
 
@@ -345,8 +346,15 @@ def main(args):
         'timings_s': timings,
     }
 
+    starts = {}
+
     def stage(name):
-        timings[name] = round(time.time() - t0, 1)
+        # timings[name] is the stage duration (s), filled in as the next stage starts
+        now = time.time()
+        if starts:
+            last = list(starts)[-1]
+            timings[last] = round(now - starts[last], 1)
+        starts[name] = now
         print(f'=== {name} {utcnow()} ===', flush=True)
         with open(log, 'a') as f:
             f.write(f'\n=== {name} {utcnow()} ===\n')
@@ -457,7 +465,7 @@ def main(args):
         print(f'ERROR [{status}]: {exc}', file=sys.stderr)
         return EXIT[status]
     except Exception as exc:  # noqa: BLE001 - classify by the stage that raised
-        last = list(timings)[-1] if timings else 'start'
+        last = list(starts)[-1] if starts else 'start'
         status = {'pypeit_setup': 'setup failed', 'patch': 'setup failed',
                   'run_pypeit': 'reduce failed', 'qa': 'reduce failed',
                   'sensfunc': 'sens failed'}.get(last, 'setup failed')
@@ -476,6 +484,9 @@ def main(args):
         manifest['qa_png'] = sorted(str(p.relative_to(night)) for p in (redux / 'QA').rglob('*.png')) \
             if (redux / 'QA').exists() else []
         manifest['finished'] = utcnow()
+        if starts:
+            last = list(starts)[-1]
+            timings[last] = round(time.time() - starts[last], 1)
         timings['total'] = round(time.time() - t0, 1)
         (night / 'run_manifest.json').write_text(json.dumps(manifest, indent=2, default=str) + '\n')
         print(f'Wrote {night / "run_manifest.json"} (status {status}, {timings["total"]:.0f} s)')

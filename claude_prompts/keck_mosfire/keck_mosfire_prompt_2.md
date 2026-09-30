@@ -329,3 +329,135 @@ format:
 <Detailed description of the work and what you learned>
 
 ## Logs
+
+### 2026-09-30 (Prompt #1 / S4: reference reduction of 2022-04-09 — success, 11 min)
+
+Linux workstation, `pypeit14b`. PypeIt `develop` at the pin: version
+`2.0.2.dev1216+gf3a1f1d27`, which ends in the pin's short SHA.
+
+**Pin check.** `check_pypeit_pin.py` passes. HEAD = pin =
+`f3a1f1d274b15ee1358f167819d77f1948fce1bd`; no differing files.
+
+**`scripts/mosfire/reduce_standard.py` v0.**
+- **Stages:**
+  - pin check: the JSON goes to `<night>/pypeit_pin_check.json` and into the
+    manifest; stops with exit 15 unless `--skip-pin-check`;
+  - optional `--s3-pull` (or `--link-raw-from DIR`);
+  - `pypeit_setup -c all` into `redux/setup_files/`;
+  - patch;
+  - `run_pypeit -o`;
+  - QA;
+  - optional `--sens`, running `pypeit_sensfunc` per standard spec1d into
+    `sens/`;
+  - `run_manifest.json`, always written, failures included;
+  - optional `--s3-push PREFIX`.
+- **Options:** `--scratch DIR` makes DIR the data root. `--setup-only`,
+  `--filter`, `--par` and `--save-pypeit`.
+- **Exit codes:** 0 success, 10 no calibs, 11 setup failed, 12 reduce
+  failed, 13 no trace, 14 sens failed, 15 pin check failed, 16 pull failed,
+  17 push failed. They are listed in `--help`, which also documents the S3
+  hooks.
+- **Error handling:** unexpected exceptions are classified by the stage
+  that raised them, and the traceback goes to the manifest.
+- **Manifest fields (design 4.8.5):**
+  - status and error; `image` (from `KECK_ETCS_IMAGE`, default `local`) and
+    `image_digest`;
+  - `pypeit_version`, `pypeit_git_sha`, `pypeit_pin` and `pin_check` (copied
+    from the check's JSON);
+  - `keck_etcs_version`, `keck_etcs_git_sha` and `keck_etcs_git_dirty`;
+  - `job_name`, `pod` and `node` (from `JOB_NAME`, `POD_NAME` and
+    `NODE_NAME`), `host`, `python`, `started` and `finished`;
+  - `night`, `s3_prefix`, the filter, the parameter block and the patch
+    notes;
+  - the sha256 of the 16 raw frames and of the 17 products (spec1d, spec2d
+    and Calibrations), the pypeit file name and text, and the frame table
+    (type, target, slit, nod, calib, comb/bkg);
+  - `wave_qa`, `objects`, `sensfuncs`, the QA PNG list and
+    `gates: null`, pending S4b.
+
+**What `develop` does differently from the 1.8 template (risks confirmed).**
+1. **Frame typing is wrong for this night.** PypeIt's MOSFIRE `idname` keys
+   on `FLATSPEC`, which is **1 in all 16 headers**, science and standard
+   included. `pypeit_setup` therefore types every frame as
+   `pixelflat,illumflat,trace`: the lamp-off flats, the 4 science frames and
+   the 2 standards. The driver retypes from other cards:
+   - `FLAMP1`/`FLAMP2 == on` gives a lamp-on flat;
+   - lamps off with `TARGNAME` containing FLAT, or `AXESTAT` not in
+     {tracking, slewing}, gives `lampoffflats`;
+   - an on-sky frame matched by `pypeit.core.standard.get_archive_standard(ra, dec, check=True)`
+     gives `standard`, whatever the exposure time;
+   - any other on-sky frame gives `arc,science,tilt`.
+   - `AXESTAT` alone does not work: nodded frames read `slewing`, since the
+     card is recorded while the telescope moves between nods.
+   - Whether this is a PypeIt defect (FLATSPEC semantics) needs frames from
+     other nights (KOA). If other nights confirm it, the fix belongs on a
+     PypeIt branch off `develop`, per CLAUDE.md. I have not changed PypeIt.
+2. **Two setups.** `develop` splits the night into setup A (`slitwid` 1.0:
+   flats plus science) and B (5.0: the standard). The driver merges them into
+   one file, as the template does. Both long slits have the same spatial
+   extent, so the standard (calib 1) uses the 46x1 flats (calib `all`) and
+   the OH arcs from the science frames. The setup block keeps A's values.
+   `PypeItFile.setup` is a flat dict (`{'Setup A': None, 'dispname': ...}`).
+3. **Nod pairing: one spec1d per frame, not combined.** The template
+   combines all A frames and all B frames (comb 0/1, 2/3). The driver pairs
+   frames in time order within each target and slit, both ways: 0036↔0037,
+   0038↔0039, 0218↔0219. The result is 4 J0841 and 2 LDS749B spec1d files,
+   one per 150 s or 120 s frame, which is what per-frame S/N validation
+   needs. The first attempt (nearest-in-time) used 0037 twice.
+4. **Parameters.** The template's block is unchanged: `tweak_slits = False`,
+   `fit_min_spec_length = 0.3`, `find_trim_edge = 10,10`,
+   `snr_thresh = 80`. `snr_thresh = 80` did not need lowering: the
+   standard, at S/N 11-12, is still found.
+
+**Committed pypeit file.** Saved to
+`scripts/mosfire/pypeit_files/keck_mosfire_20220409_J2.pypeit`, with the
+raw path replaced by `PATH_TO_RAW_DATA`. It vets with
+`PypeItFile.from_file(vet=True)`.
+
+**Run.** 22:46:48-22:57:44 UTC. Total 657 s, of which `run_pypeit` took
+650 s, so "tens of minutes" was pessimistic on this machine. Exit 0,
+`status = success`.
+
+**Results.**
+- **Wavelength solution** (one slit, spat_id 1022): RMS **0.092 pix**,
+  against PypeIt's MOSFIRE threshold `rms_thresh_frac_fwhm = 0.11` x the arc
+  FWHM (3.95 pix), i.e. 0.434 pix. PASS. The arxiv cross-correlation gives
+  cc = 0.94 and 0.83. The tilt RMS is 0.071 pix (RMS/FWHM = 0.018).
+- **Objects:** one extracted object per spec1d. PypeIt also finds the
+  negative traces, which it masks, with `neg_*` QA pages. The two nod
+  positions of each target appear as the positive objects of the paired
+  frames:
+
+  | frame | target | spat (pix) | FWHM (pix) | FWHM (") | S/N |
+  |---|---|---|---|---|---|
+  | 0036 (A) | J0841+3814 | 770.9 | 4.97 | 0.89 | 28.9 |
+  | 0037 (B) | J0841+3814 | 795.3 | 4.43 | 0.80 | 27.0 |
+  | 0038 (A) | J0841+3814 | 771.1 | 5.57 | 1.00 | 25.3 |
+  | 0039 (B) | J0841+3814 | 793.1 | 5.61 | 1.01 | 24.9 |
+  | 0218 (A) | LDS749B | 978.8 | 6.32 | 1.14 | 11.2 |
+  | 0219 (B) | LDS749B | 1052.1 | 6.00 | 1.08 | 12.2 |
+
+  - The platescale is 0.1798"/pix. The nod separations, 24 pix = 4.3" for
+    the ±2" pattern and 73 pix = 13.2" for ±6.5", match the headers.
+  - The header `TARGNAME` is `LDS749`, so PypeIt names the files
+    `...-LDS749_...`. The standard lookup by coordinates finds LDS749B.
+- **QA:** 30 PNGs in `redux/QA/PNGs/` (arc 1-D fit, FWHM, tilts, spatial
+  illumination, per-object profile and trace for pos and neg), plus HTML
+  pages.
+
+**Provenance caveat for this run.** The manifest records `keck_etcs_git_sha
+= 586cad3`, `dirty = False`. The user committed `e2f0c75`, which includes
+the driver, at 22:53 UTC, during the run.
+- So the code that ran was the uncommitted driver, identical to the one in
+  `e2f0c75`, and the dirty flag was wrong: it ignored untracked files.
+- `timings_s` in this manifest holds stage *start* offsets, not durations
+  (`run_pypeit: 5.6`, `qa: 655.8`).
+- Both are fixed in the driver since the run: the dirty flag now counts
+  untracked files, and `timings_s` holds per-stage durations (verified with
+  a `--setup-only` run in scratch). I left this run's manifest as written
+  rather than edit a product by hand. The S4b gates do not use either field.
+  If an exact manifest is wanted, re-run S4 (11 min) after committing the
+  fix.
+
+**Not done here.** No `--sens` (that is S5) and no S3 push of the
+reference products (S4b syncs them).
