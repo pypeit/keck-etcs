@@ -575,3 +575,38 @@ the inspect pod and paste its log. The outcome will be added here.
 - A scan of every tracked or untracked non-FITS file, plus the JSON and the
   manifest in the data root, against the 8 key values in
   `~/.aws/credentials` found none.
+
+```
+(pypeit14b) profx> kubectl -n pypeit logs -f keck-etcs-inspect
+=== PROVENANCE 2026-09-30T20:37:11+00:00 ===
+secret=prp-s3-credentials endpoint=http://rook-ceph-rgw-nautiluss3.rook bucket=keck-etcs profile=default
+Python 3.12.12
+profiles in mounted credentials: ['default', 'mskelm']
+=== INSTALL 2026-09-30T20:37:11+00:00 ===
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 25.0.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip
+=== LIST 2026-09-30T20:37:23+00:00 ===
+ACCESS_RESULT OK secret prp-s3-credentials
+objects in s3://keck-etcs/: 17
+under mosfire/20220409/raw/: 17
+      16853760  mosfire/20220409/raw/m220409_0017.fits
+      16853760  mosfire/20220409/raw/m220409_0018.fits
+      16853760  mosfire/20220409/raw/m220409_0019.fits
+      16853760  mosfire/20220409/raw/m220409_0020.fits
+      16853760  mosfire/20220409/raw/m220409_0021.fits
+      16853760  mosfire/20220409/raw/m220409_0022.fits
+      16853760  mosfire/20220409/raw/m220409_0023.fits
+      16853760  mosfire/20220409/raw/m220409_0024.fits
+      16853760  mosfire/20220409/raw/m220409_0025.fits
+      16853760  mosfire/20220409/raw/m220409_0026.fits
+      16853760  mosfire/20220409/raw/m220409_0036.fits
+      16853760  mosfire/20220409/raw/m220409_0037.fits
+      16853760  mosfire/20220409/raw/m220409_0038.fits
+      16853760  mosfire/20220409/raw/m220409_0039.fits
+      16853760  mosfire/20220409/raw/m220409_0218.fits
+      16853760  mosfire/20220409/raw/m220409_0219.fits
+          4523  mosfire/20220409/raw/manifest.ecsv
+=== INSPECT_DONE 2026-09-30T20:37:24+00:00 ===
+```
