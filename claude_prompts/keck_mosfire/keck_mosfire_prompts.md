@@ -52,6 +52,10 @@ Use Fable if you can.  Log your work.
 `profx/pab` in July (PAB `claude_prompts/nautilus_prompts.md`, Container
 section). Your part is steps 1-4. Step 5 happens in S4a.*
 
+**Status (2026-09-30):** steps 1-4 done by the user, who reported success.
+Deploy-token username `gitlab+deploy-token-1383`; the token itself stays with
+the user. Registry path as below, project Public. Step 5 is next, in S4a.
+
 **Target:** `gitlab-registry.nrp-nautilus.io/profx/keck-etcs`, a **public**
 image, so pods in namespace `pypeit` pull it without an `imagePullSecret`.
 
@@ -1033,3 +1037,12 @@ the v0.3 plan: S0 and S4 require the local reference reduction to run on the
 image's `develop` pin, and the S4b gate asserts equal PypeIt SHAs. This is
 raised with the user for a decision; the design and plan docs are not yet
 changed. No git commands were run.
+
+### 2026-09-30 (Registry set up)
+
+The user reported that registry steps 1-4 succeeded: the project
+`profx/keck-etcs` was created and a deploy token made, with username
+`gitlab+deploy-token-1383`. Recorded as a status line in `## Registry`. Only
+the token username is in the repo; the token stays with the user. S0 item 4 is
+done. Still open: how the S4 local reference handles the laptop staying on
+`orig-hires-fixes` (see the previous entry).
