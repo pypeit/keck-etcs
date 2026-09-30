@@ -33,7 +33,8 @@ After those are written, I will ask you to generate prompts to guide the impleme
 the Implementation section below
 Use Fable if you can.  Log your work.
 
-### Implementation
+4. The Implementation plan looks very good.  Please generate one or more prompt docs to perform it.  Call them `keck_mosfire/keck_mosfire_prompt_1.md`, etc.  
+Use Fable if you can.  Log your work.
 
 
 ## Q&A
@@ -538,3 +539,55 @@ resolution, shift, stretch) and `TELL_PARAM`; spec1d objects carry `S2N`
 `OPT_COUNTS_SIG_DET`, `BOX_NPIX`; `get_model_standard('A0', V_mag)` returns
 `VegaStandard` scaled by V (hence N3). `docs/` was empty before this prompt.
 No git commands were run.
+
+### 2026-09-29 (Prompt #4: implementation prompt docs)
+
+The prompt doc had moved to `claude_prompts/keck_mosfire/` (git shows the
+rename staged); logging continues here. Split the 18 steps of
+`docs/keck_mosfire_implementation.md` along its phase boundaries into six
+numbered prompt docs in `claude_prompts/keck_mosfire/`, plus the KOA search
+as its own top-level doc, per the project decision that the KOA search has
+its own prompt doc and because LRIS will need the same doc later:
+
+- `keck_mosfire_prompt_1.md`, Phase 0 foundations: S1 data root and XTcalc
+  cache; S2 telluric grid; S3 Gemini grid FITS, including the decision-N5
+  check (Gemini wavelengths vacuum or air, via OH-line positions against
+  PypeIt's vacuum `OH_MOSFIRE_J` list).
+- `keck_mosfire_prompt_2.md`, Phase 1 first sensfunc: S4 reduce 2022-04-09;
+  S5 LDS749B sensfunc; S6 harvest; S13 LSF from OH lines.
+- `keck_mosfire_prompt_3.md`, Phase 2 ETC core: S7 core modules and
+  schemas; S8 MOSFIRE instrument module and data files; S9 `compute()`, CLI,
+  regression fixtures (with a provisional XTcalc throughput if S10 has not
+  run).
+- `keck_mosfire_prompt_4.md`, Phase 3 validation: S10 throughput v0 and
+  fixture regeneration; S11 J0841 validation, with the second N5 check
+  against the measured J2 sky and the D14 sky-level check; S12 XTcalc
+  comparison.
+- `keck_mosfire_prompt_5.md`, Phase 4 time series: S15 split into S15a (A0V
+  Vega+2MASS J support, batch driver, first batch) and S15b (remaining
+  batches and harvest); S16 trend analysis and first calibration release.
+- `keck_mosfire_prompt_6.md`, Phase 5 wrap-up: S17 PypeIt `ronoise` branch,
+  preceded by an empirical CDS read-noise check from the lamp-off flats;
+  S18 docs, README, CHANGES, WMKO API note.
+- `claude_prompts/koa_search_prompts.md`: S14 as three MOSFIRE prompts
+  (census and candidate table with the `SAMPMODE` histogram; first download
+  batch; validation science frames) and an empty LRIS section for later.
+
+Run order: 1 -> 2 -> 4 -> 5 -> 6, with 3 in parallel with 2 (after 1's S3),
+the KOA doc in parallel from the start (needed before 5), and 6's S17 any
+time after 3's S8. Every doc follows the house format (Goals, Context,
+Prompts, Q&A, Logging, Logs), points at the design and plan sections by
+number, lists the data root and the relevant scripts, restates the CLAUDE.md
+rules where they bite (git by the user, `pypeit14`, scripts on disk, PypeIt
+fixes on a PypeIt branch), carries the plan's risks into the prompts, and
+ends each prompt with its verification check and "Log your work." Decisions
+N1-N8 are written in as accepted, with verification sub-tasks where they
+rest on assumptions (N5 in S3 and S11; the filter-curve air/vacuum question
+in S8; the PypeIt custom-standard hook for N3 in S15a). No implementation
+step was executed and no git commands were run other than `git status`.
+
+What I learned: `claude_prompts/` now holds `starting_up.md`, the new
+`koa_search_prompts.md` and the `keck_mosfire/` folder with the main prompt
+doc and six part docs; the main doc's Context still points at the dev-suite
+raw data and the Keck ETC page, so the part docs carry their own fuller
+Context sections.
