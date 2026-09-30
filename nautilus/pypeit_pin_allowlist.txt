@@ -1,0 +1,23 @@
+# Paths in the PypeIt checkout that may differ from the pin (nautilus/pypeit_pin.txt)
+# without changing a MOSFIRE J reduction (design D35). Read by
+# scripts/check_pypeit_pin.py. Paths are relative to the checkout root.
+#
+# Syntax: one glob per line; '*' matches within a path component, '**'
+# matches any number of components (including none); a leading '!' excludes
+# a path that an earlier line allowed. The last matching line wins.
+
+# Other spectrographs' definitions...
+pypeit/spectrographs/*.py
+# ...but not MOSFIRE's, the base class, the loader or the package init
+!pypeit/spectrographs/keck_mosfire.py
+!pypeit/spectrographs/spectrograph.py
+!pypeit/spectrographs/util.py
+!pypeit/spectrographs/__init__.py
+
+# Documentation
+doc/**
+**/*.rst
+
+# Tests
+pypeit/tests/**
+**/tests/**

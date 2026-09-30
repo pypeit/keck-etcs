@@ -1,0 +1,12 @@
+# Registry of the data products shipped in keck_etcs/data/ (design 5.4).
+# Keys are paths relative to keck_etcs/data/. Entries are written by the
+# build scripts named in each entry; do not edit them by hand.
+files:
+  sky/gemini_mk_sky_grid.fits:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-09-30T20:11:54'
+    sha256: 5383f6f7d621e4ca18a6d245f7596ab666bee301afa4d3c0f2f7598fb4e5714a
+    script: scripts/mosfire/build_gemini_sky_grid.py
+    waveref: vacuum
+    provenance: Gemini Observatory IR sky background and ATRAN transmission, as redistributed in Keck
+      XTcalc v2.3; 12 (airmass, PWV) grids, flux-conserving rebin to 0.05 nm over 950-2450 nm
