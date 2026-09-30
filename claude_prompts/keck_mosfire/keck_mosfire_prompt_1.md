@@ -293,3 +293,55 @@ only.
    laptop. Here the pin check should pass with an empty diff.
 3. The design and plan paths `/Users/xavier/Projects/PypeIt/...` map to
    `/home/xavier/Projects/PypeIt/...` here.
+
+### 2026-09-30 (Prompt #2 / S2: PypeIt telluric grid fetched, sha256 recorded)
+
+Linux workstation, `pypeit14b`, PypeIt `develop` at `f3a1f1d27`.
+
+**API (read from source; nothing has moved on `develop`).**
+- `pypeit.dataPaths.telgrid` is a `PypeItDataPath` for `telluric/atm_grids`
+  with host `s3_cloud` (`pypeit/pkg/pypeitdata.py`, `PypeItDataPaths`).
+- `telgrid.get_file_path(name, force_update=False)` checks the package tree,
+  then calls `pypeit.pkg.cache.fetch_remote_file`. That calls
+  `astropy.utils.data.download_file(..., pkgname='pypeit')` and prints an
+  "install scripts" warning for every `s3_cloud` file.
+- `cache._build_remote_url` keys the cache by a permanent, fake URL,
+  `https://s3.cloud.com/pypeit/telluric/atm_grids/<file>`. The real source
+  is `https://<s3_url.txt>/pypeit/...`. `_get_s3_hostname()` first tries the
+  `release` branch's `s3_url.txt` on GitHub, then the packaged copy
+  (`s3-west.nrp-nautilus.io`).
+- So the cache survives a change of S3 host, and "is it cached?" is
+  `astropy.utils.data.is_url_in_cache(<fake url>, pkgname='pypeit')`.
+
+**Cache location.** The cache on this machine is `~/.pypeit/cache/download/url/<hash>/contents`,
+not the `~/.cache/pypeit` the Context names.
+
+**`scripts/fetch_telluric_grid.py`.**
+- Reports the data path, cache key, download source and status (in package
+  tree / already cached / downloading), then fetches via `get_file_path`.
+- Prints the cached path, size, sha256 and HDU shapes (opened with
+  astropy), and the `search_cache` hits.
+- Writes the sha256 to `nautilus/telluric_grid.sha256` (a new directory).
+- `--force-update` re-downloads the file.
+
+**Results.**
+- Run 1 downloaded the file (it was not cached before) to
+  `~/.pypeit/cache/download/url/da53ec58845fabd86f0bce9cd869c521/contents`.
+- Size 6252480 bytes (6.25 MB). HDUs: PRIMARY [11, 54932], [54932],
+  [2, 11], [12000, 10].
+- sha256 `10d56a6cf5774a352507a69c5cae9a11f158866e47e962ed682bb6e39e2901df`.
+- Run 2 reported "already cached, not downloading", with the same path and
+  sha256.
+- `curl` of the public URL gives the identical sha256; `HTTP/2 200`,
+  content-length 6252480, last-modified 2023-12-13, etag
+  `a26baecd5f8fe258ef4248a68fa2318b`.
+
+**`search_cache('TellPCA')` returns two paths.** The cache already held
+`TellPCA_3000_26000_R25000.fits` (14163840 bytes) from earlier work.
+`search_cache('TellPCA_3000_26000_R10000.fits')` returns exactly one path,
+which is the meaningful check. The script uses the full name and lists the
+other TellPCA grids separately. The R25000 file was left in place, since it
+is not ours to delete.
+
+**`git status`.** Shows `nautilus/` (only `telluric_grid.sha256`) and
+`scripts/fetch_telluric_grid.py`, plus the uncommitted S1 changes.
