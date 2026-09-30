@@ -345,3 +345,233 @@ is not ours to delete.
 
 **`git status`.** Shows `nautilus/` (only `telluric_grid.sha256`) and
 `scripts/fetch_telluric_grid.py`, plus the uncommitted S1 changes.
+
+### 2026-09-30 (Prompt #3 / S3: Gemini sky+transmission grid FITS; N5 confirmed: vacuum)
+
+Linux workstation, `pypeit14b`.
+
+**N5 result: the Gemini grids are in VACUUM.**
+`scripts/mosfire/check_gemini_wavelength_convention.py` finds the 10
+strongest OH peaks in `mk_skybg_zm_16_10_ph.sav` over 1100-1350 nm. It
+centroids them (7 native pixels, continuum-subtracted) and matches each to
+the nearest line of PypeIt's `OH_MOSFIRE_J_lines.dat`.
+- **Native 0.02 nm sampling:** median offset (Gemini - PypeIt vacuum)
+  **+0.009 A**, against +3.405 A from the same list converted to air (the
+  air-vacuum shift is 3.353 A).
+  - Nine lines agree to 0.01-0.16 A.
+  - One peak (1268.58 nm) matched a neighbouring PypeIt line at +2.6 A,
+    because the PypeIt list does not have that line separately. The median is
+    robust to it; the scatter with it is 0.76 A.
+- **Cross-check, sky smoothed to R=3318** (the resolution at which PypeIt's
+  list was built): median +0.010 A, scatter 0.031 A.
+- **Consequences:**
+  - The header records `WAVEREF = 'vacuum'` and `WAVEOFF = 0.0088` (A).
+  - The build does not convert wavelengths; its air-to-vacuum branch is
+    coded but inactive.
+  - Design decision N5 is unchanged.
+- **Two pitfalls fixed along the way:**
+  - `pypeit.core.wave.vactoair` always returns Angstrom, whatever the input
+    unit, so the script uses `.to(u.nm)`.
+  - The match tolerance must exceed the air shift. It is 6 A, so an air grid
+    would show up as a -3.3 A offset instead of being dropped as unmatched,
+    which would bias the test toward vacuum.
+
+**`scripts/mosfire/build_gemini_sky_grid.py`.**
+- **Inputs:** reads the 24 `.sav` files. Sky `lam` is in nm, transmission
+  `tran_lam` in micron (multiplied by 1e3).
+- **Native grid:** the files store wavelengths as float32. The script
+  rebuilds the exact float64 grid `900 + 0.02 i` (235000 points) and checks
+  it against the stored values. They deviate by up to 1.2e-3 nm above
+  4096 nm (float32 rounding, about 2 ulp) and by <1e-4 nm below 2450 nm; the
+  tolerance is 10% of a pixel.
+- **Rebin:** flux-conserving. Native pixels are treated as piecewise
+  constant; the script builds the cumulative integral, interpolates it
+  (exactly) onto 30001 edges from 950 to 2450 nm at 0.05 nm, and takes
+  differences. `WAVE` holds the pixel centres, 950.025-2449.975 nm (float64).
+  `SKYBG` and `TRANS` are float32 (12, 30000).
+- **`GRID`:** rows in PWV-major order ({1.0, 1.6, 3.0, 5.0} mm x
+  {1.0, 1.5, 2.0} airmass), with columns `airmass`, `pwv_mm`, `skyfile` and
+  `transfile`.
+- **Primary header:** `SOURCE`, `SRCURL`, `SRCSHA` (sha256 of XTcalc.tar),
+  `REBIN = flux-conserving`, `WAVEREF`, `WAVEOFF`, `SCRIPT`, `CREATED` (UTC),
+  `KETCSVER = 0.0.dev0`, `CALIBVER`, `NGRID`, plus the FITS checksums.
+- **N5 on every build:** the build imports the check script's `check()` and
+  refuses to build if the result is inconclusive.
+- **Registry:** writes or updates `keck_etcs/data/index.yaml` under
+  `files: sky/gemini_mk_sky_grid.fits`, with `calib_version`, `created`,
+  `sha256`, `script`, `waveref` and `provenance`. `calib_version =
+  mosfire-J-2026.10-dev` was chosen to match the S10 tag in the plan. The
+  grid is not J-specific, but calibration tags are per band; this can be
+  revisited.
+
+**Verification** (all passes; the build exits 0).
+- **Integral of SKYBG over 1170-1330 nm:** rebinned against native
+  (trapezoid on the native samples) agrees to +1.2e-13 to +1.5e-13 for all
+  12 grids, far below 1e-3.
+- **J-band transmission at PWV 1.6 mm, airmass 1.0 (1170-1350 nm):**
+  - The native median is 0.9976, as `inspect_xtcalc_files.py` reports.
+  - The rebinned median is **0.9973**, not 0.9976. The median is not
+    preserved by averaging: unresolved absorption lines mixed into 0.05 nm
+    pixels lower the typical pixel, and a 3-pixel boxcar of the native data
+    gives the same 0.9972.
+  - The rebinned mean equals the native mean (0.969179 against 0.969189,
+    rel -9.6e-6, from float32 storage).
+  - So the check requires the native median to be 0.9976 and the mean to be
+    conserved to 1e-4, and it reports the rebinned median for information.
+    The prompt's "0.9976" holds for the native grid only.
+- **File size:** 3139200 bytes (2.99 MiB), under 5 MB.
+- **`git status`:** `keck_etcs/data/index.yaml`,
+  `keck_etcs/data/sky/gemini_mk_sky_grid.fits` and the two scripts. The
+  `.gitignore` exception for `keck_etcs/data/**/*.fits` works.
+
+**Notes.**
+- The file's sha256 changes on every rebuild, because `CREATED` and the
+  checksum cards change; the data are identical. The build updates the
+  `sha256` in `index.yaml` each time, so the pair stays consistent. The last
+  build's sha256 is
+  `5383f6f7d621e4ca18a6d245f7596ab666bee301afa4d3c0f2f7598fb4e5714a`.
+- `keck_etcs` is not installed in `pypeit14b`. The two new scripts put the
+  repo root on `sys.path` so they run from a checkout; `pip install -e .`
+  would make that unnecessary.
+
+### 2026-09-30 (Prompt #4 / S0 check + S1b: pin check, s3_sync, first push; pod test pending)
+
+Linux workstation, `pypeit14b` (the user installed `keck_etcs` there; I
+added `boto3` 1.43.106 with pip). Per the Q&A, the PypeIt checkout is on
+`develop`, not `orig-hires-fixes`.
+
+**(a) Pin.**
+- **Pin files:**
+  - `nautilus/pypeit_pin.txt` = `f3a1f1d274b15ee1358f167819d77f1948fce1bd`
+    (= `git merge-base HEAD origin/develop` = `origin/develop` = HEAD,
+    read-only git only).
+  - The version string is `2.0.2.dev1216+gf3a1f1d27`, from
+    `/mnt/tank/Astronomy/PypeIt/PypeIt/pypeit/__init__.py`.
+- **`nautilus/pypeit_pin_allowlist.txt`:**
+  - Gitignore-like: one glob per line, `**` for any depth including none,
+    `!` to exclude, and the last matching line wins.
+  - It allows `pypeit/spectrographs/*.py` except `keck_mosfire.py`,
+    `spectrograph.py`, `util.py` and `__init__.py`; `doc/**`; `**/*.rst`;
+    `pypeit/tests/**`; and `**/tests/**`.
+- **`scripts/check_pypeit_pin.py`:**
+  - Prints version, file, checkout, HEAD and branch, pin and allow-list;
+    lists `git diff --name-only <pin> HEAD` and `git status --porcelain`
+    (untracked files and both sides of a rename included).
+  - Then checks (1) `merge-base --is-ancestor` and (2) the allow-list,
+    naming offending files. Exit codes: 0 PASS, 1 FAIL, 2 git or usage error.
+  - Writes JSON (`pypeit_git_sha`, `pypeit_pin`, `pypeit_version`,
+    `pypeit_branch`, `checked`, `pin_check: {pass, files, ancestor,
+    offending, allowlist[, image]}`), by default to
+    `$KECK_ETCS_DATA/pypeit_pin_check.json`, `--json` to override.
+  - Options: `--checkout` (default: the checkout `pypeit` is imported from),
+    `--pin` (override, for tests), `--allowlist`.
+  - `--image TAG` runs `docker run --rm TAG python -c ...`, parses
+    `KECK_ETCS_GIT_SHAS` (JSON) and requires `.pypeit == pin`. It is written
+    but untested, since the image comes in part 2.
+
+**(a) Pin results.**
+- **Positive:** PASS with an empty diff list. This is the expected result
+  here: HEAD is the pin. `[keck_hires.py]` was the laptop's expectation.
+- **Negative, run:** `--pin HEAD~3` gives FAIL, exit 1, naming 21 offending
+  files (e.g. `pypeit/wavecalib.py`, `pypeit/spectrographs/spectrograph.py`,
+  `pyproject.toml`).
+- **Negative, matcher:** with an allow-list copy that adds
+  `!pypeit/spectrographs/keck_hires.py`, `keck_hires.py` goes from allowed
+  to not allowed. `keck_mosfire.py`, `spectrograph.py`, `util.py`,
+  `__init__.py`, `pypeit/core/wave.py`, nested `spectrographs/sub/x.py` and
+  `pypeit/data/...` are rejected under both lists. `keck_lris.py`,
+  `doc/...rst`, top-level `README.rst`/`CHANGES.rst` and
+  `pypeit/tests/...` are allowed.
+- The run-level form of the prompt's negative test (the `keck_hires.py`
+  diff) cannot occur on this machine, because the diff is empty.
+
+**(b) `scripts/nautilus/s3_sync.py`.**
+- **Commands:** `ls`, `push` and `pull` over
+  `s3://$KECK_ETCS_BUCKET/<prefix>` and `$KECK_ETCS_DATA/<prefix>`, via
+  `keck_etcs.paths`.
+- **Connection:** endpoint from `ENDPOINT_URL` (default
+  `https://s3-west.nrp-nautilus.io`; it is already set in this shell),
+  path-style, standard retries.
+- **Credentials:** from `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` if set,
+  else the profile `AWS_PROFILE` (default `default`).
+- **Transfers:** idempotent by key and size; `--dry-run`, `--jobs`
+  (default 8); `pull --include GLOB...`.
+  - `push` follows symlinks, so the raw directory's symlinks upload the real
+    frames.
+  - `pull` replaces a local symlink rather than writing through it.
+- **Access errors:** `AccessDenied`, `InvalidAccessKeyId`,
+  `SignatureDoesNotMatch`, HTTP 403, no credentials and an unknown profile
+  are all a hard error with exit 3 that names the credential source. There
+  is no anonymous or UNSIGNED fallback.
+- **Which profile:** the local profiles `default` and `ceph-s3-large-files`
+  hold the same key ID as the `nautilus_s3:` rclone remote (compared
+  in-process; no value printed). `default` is used.
+- **Tests:**
+  - `AWS_PROFILE=swot-user` gives `InvalidAccessKeyId`, exit 3.
+  - `AWS_PROFILE=no-such-profile` gives exit 3 (it first produced a
+    traceback; `ProfileNotFound` is now caught).
+
+**(d) First push.**
+- **Manifest:** `scripts/mosfire/make_raw_manifest.py 20220409 --pypeit
+  <dev-suite>/pypeit_files/keck_mosfire_j2_long.pypeit` wrote
+  `$KECK_ETCS_DATA/mosfire/20220409/raw/manifest.ecsv`. This is a third
+  script, not in the prompt's list, but CLAUDE.md requires one.
+  - Columns: `koaid, file, frametype, target, slit, sampmode, numreads,
+    exptime (TRUITIME), airmass, mjd, size, sha256`.
+  - Frame types come from the dev-suite pypeit file: 5 `pixelflat,illumflat,trace`,
+    5 `lampoffflats`, 4 `arc,science,tilt`, 2 `standard`.
+  - The dev-suite frames have no `KOAID` card, so the KOA IDs are derived as
+    `MF.<DATE-OBS>.<int UT s>` (e.g. `MF.20220409.24247` for
+    `m220409_0036`) and listed in `meta.koaid_derived`. Check them against
+    KOA when the KOA prompt runs.
+  - Header `TARGNAME` is `LDS749` for the standard; the pypeit file says
+    `LDS749B`.
+  - Flats: `SAMPMODE` 2 (CDS), `NUMREADS` 1. Science and standard: 3
+    (MCDS), 16.
+- **Push:** 17 objects (16 x 16853760 bytes plus manifest.ecsv, 4523 bytes;
+  269.7 MB) to `s3://keck-etcs/mosfire/20220409/raw/`.
+  - `ls` lists all 17 as "local same size".
+  - A second `push` uploads 0 and skips 17.
+  - A `pull --include manifest.ecsv 'm220409_021*.fits'` into a scratch
+    mirror downloaded 3 files: the pulled `m220409_0218.fits` sha256 equals
+    the manifest's, the manifest is byte-identical, and a second pull
+    downloads 0.
+- **Privacy:** anonymous `curl -sI .../raw/manifest.ecsv` gives HTTP/2 403.
+  So does a frame, and an anonymous bucket listing gives `AccessDenied`.
+
+**(c) `nautilus/inspect_pod.yaml` and `nautilus/README.md`.**
+- **Pod:** `keck-etcs-inspect` in namespace `pypeit`, `python:3.12-slim`,
+  `activeDeadlineSeconds: 600`.
+  - Mounts secret `prp-s3-credentials` at `/root/.aws/credentials`
+    (subPath `credentials`), with `HOME=/root` and the in-cluster endpoint.
+  - Prints the profile names in the mounted file (not values), runs
+    `pip install boto3`, lists the bucket and prints `ACCESS_RESULT OK|<code>`,
+    the object count and the raw keys, then `INSPECT_DONE`.
+  - The header comment gives the purpose and the three `kubectl` lines.
+    `KECK_ETCS_S3_SECRET` is applied by `sed` substitution, since YAML
+    cannot read the environment; the file applies as is with the default.
+- **Pod checks:** `kubectl apply --dry-run=server` passes. The pod's
+  `python -c` block, run locally, lists the 17 keys with profile `default`
+  and prints `ACCESS_RESULT InvalidAccessKeyId` with `swot-user`.
+- **Namespace secrets:** `kubectl -n pypeit get secrets` (names only) shows
+  `prp-s3-credentials` exists, created 5y77d ago. It may hold older keys,
+  hence the test.
+- **README v0:** namespace, bucket and its private status, secret names,
+  the design 4.2 layout, the sync helper, the pin files, the kubectl idioms
+  and the `keck-etcs-s3-credentials` recipe. The recipe notes that
+  `--from-file=$HOME/.aws/credentials` copies every local profile into the
+  Secret; a file with only `[default]` is tighter.
+
+**(e) Secret test: PENDING.** Following the prompt, I asked the user to apply
+the inspect pod and paste its log. The outcome will be added here.
+
+**`git status`.**
+- New from this prompt: `nautilus/{pypeit_pin.txt, pypeit_pin_allowlist.txt,
+  inspect_pod.yaml, README.md}`, `scripts/check_pypeit_pin.py`,
+  `scripts/nautilus/s3_sync.py` and `scripts/mosfire/make_raw_manifest.py`.
+  The prompt's list omits the allow-list, which it requires, and I added the
+  manifest script.
+- The S3 files from Prompt #3 are still uncommitted.
+- A scan of every tracked or untracked non-FITS file, plus the JSON and the
+  manifest in the data root, against the 8 key values in
+  `~/.aws/credentials` found none.
