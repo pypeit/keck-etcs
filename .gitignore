@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# keck-etcs: data products live under $KECK_ETCS_DATA (the local mirror of
+# s3://keck-etcs), never in git. Only committed products under
+# keck_etcs/data/ and test fixtures under keck_etcs/tests/data/ are allowed.
+*.fits
+*.fits.gz
+*.sav
+*.tar
+!keck_etcs/data/**/*.fits
+!keck_etcs/data/**/*.fits.gz
+!keck_etcs/tests/data/**/*.fits
+!keck_etcs/tests/data/**/*.fits.gz

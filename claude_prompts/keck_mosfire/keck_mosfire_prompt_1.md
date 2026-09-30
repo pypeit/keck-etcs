@@ -205,6 +205,12 @@ S3.
 
 ## Q&A
 
+- **2026-09-30, after Prompt #1 (Linux workstation).** Q: `pypeit14` is empty
+  here. Which env? A: use `pypeit14b`. Q: The PypeIt checkout is on `develop`
+  at the pin `f3a1f1d27`, not `orig-hires-fixes`. Is that right? A: yes, and it
+  stays on `develop`. So on this machine Prompt #4's pin check should pass
+  with an empty diff list.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -215,3 +221,75 @@ format:
 <Detailed description of the work and what you learned>
 
 ## Logs
+
+### 2026-09-30 (Prompt #1 / S1: data root, XTcalc cache, keck_etcs/paths.py)
+
+Work was done on the Linux workstation, not on the laptop the Context
+describes. That changes a few facts; see "Machine differences" below.
+
+**Data root.** Created `~/Projects/PypeIt/keck-etcs-data`
+(`/home/xavier/Projects/PypeIt/keck-etcs-data`; `~/Projects/PypeIt` is a
+symlink to `/mnt/tank/Astronomy/PypeIt`) with `external/xtcalc/` and
+`mosfire/20220409/raw/`. The raw directory holds 16 symlinks to the dev-suite
+frames `RAW_DATA/keck_mosfire/J2_long/m220409_{0017..0026,0036..0039,0218,0219}.fits`,
+16853760 bytes each.
+
+**XTcalc.** Downloaded `https://www2.keck.hawaii.edu/inst/mosfire/XTcalc.tar`
+(46697984 bytes, sha256
+`344b45b44c5ca76e93fbae20ee421b2707419ab6082aa5a5a213a7ac353ec4ae`), kept it
+beside the unpacked tree, and unpacked it to `external/xtcalc/XTcalc_dir/`
+(`bin`, `Mauna_Kea_sky` (24 files), `mosfire`, `MosfireSkySpec`,
+`MosfireSpecEff`, `MOSFIRE_XTcalc.pdf`, `run_XTcalc.sav`, `XTcalc`).
+
+**`keck_etcs/paths.py`.** Contains `DEFAULT_DATA_ROOT =
+'~/Projects/PypeIt/keck-etcs-data'`, `BUCKET` (from `KECK_ETCS_BUCKET`,
+default `keck-etcs`, read at import), `KINDS = (raw, redux, sens, harvest)`,
+`data_root()`, `night_dir(instrument, date, kind=None)`,
+`s3_prefix(instrument, date, kind=None)` and `xtcalc_dir()`.
+- `night_dir` and `s3_prefix` share one helper, which validates `YYYYMMDD`
+  and `kind`, so the local and S3 layouts cannot drift.
+- The default uses `~` rather than the hard-coded
+  `/Users/xavier/Projects/PypeIt/keck-etcs-data` of design D24. That gives
+  the same path on the Mac and the right one on Linux, where `/Users` does
+  not exist. D24 does not need to change.
+- `data_root()` expands `~` and makes the path absolute, but does not
+  resolve symlinks. A first version used `Path.resolve()`, which turned the
+  root into `/mnt/tank/...`.
+
+**`.gitignore` and README.** Appended `*.fits`, `*.fits.gz`, `*.sav` and
+`*.tar`, with `!keck_etcs/data/**/*.fits(.gz)` and
+`!keck_etcs/tests/data/**/*.fits(.gz)` exceptions. `git check-ignore` shows
+FITS files ignored in `scripts/` and allowed under both exception trees;
+`.sav` and `.tar` are ignored everywhere. Added a "Data root" section to
+`README.md`: `KECK_ETCS_DATA`, `KECK_ETCS_BUCKET`, the layout, the mirror
+relationship to `s3://keck-etcs`, and the fact that `external/` is local
+only.
+
+**Verification.**
+- `scripts/inspect_xtcalc_files.py $KECK_ETCS_DATA/external/xtcalc/XTcalc_dir`
+  gives J end-to-end (Jeff.sm.dat x KMRef^2 = 0.792) peak 0.319 and median
+  0.276, and lists all 24 Gemini `.sav` files (12 `mk_skybg_zm_WW_AA_ph`, 12
+  `mktrans_zm_WW_AA`). The J median transmission at PWV 1.6 mm, airmass 1.0
+  is 0.9976.
+- `paths.data_root(), paths.s3_prefix('mosfire','20220409','sens')` prints
+  `/home/xavier/Projects/PypeIt/keck-etcs-data mosfire/20220409/sens`, and
+  the same with `KECK_ETCS_DATA` unset.
+- `KECK_ETCS_BUCKET=foo` changes `paths.BUCKET`.
+- `git status` shows only `.gitignore`, `README.md` and `keck_etcs/paths.py`;
+  no data files.
+
+**Machine differences (Linux workstation vs. the Context).**
+1. Conda env `pypeit14` exists here but is empty: only pip, so no numpy.
+   `conda run -n pypeit14 python` fails on `import numpy`. The working env is
+   `pypeit14b` (the active one; numpy 2.5.0). The verifications above were
+   run with `/home/xavier/miniconda3/envs/pypeit14b/bin/python`. Either
+   rebuild `pypeit14` here or let the CLAUDE.md rule accept `pypeit14b` on
+   this machine.
+2. The PypeIt checkout here is `/mnt/tank/Astronomy/PypeIt/PypeIt`
+   (= `~/Projects/PypeIt/PypeIt`), on branch `develop` at `f3a1f1d27`. That
+   is exactly the planned pin, and the tree is clean. The installed version
+   is `2.0.2.dev1216+gf3a1f1d27`, not `orig-hires-fixes`/`017bece06`.
+   Prompt #4's expected diff list (`[keck_hires.py]`) holds only on the
+   laptop. Here the pin check should pass with an empty diff.
+3. The design and plan paths `/Users/xavier/Projects/PypeIt/...` map to
+   `/home/xavier/Projects/PypeIt/...` here.
