@@ -1,312 +1,608 @@
 # Keck/MOSFIRE J: implementation plan
 
-*Version 0.1, 2026-09-29. Companion to `docs/keck_mosfire_design.md`; section
-numbers below refer to that document. Each step is meant to be one working
-session and to become one numbered prompt under "### Implementation" in
-`claude_prompts/keck_mosfire_prompts.md`.*
+*Version 0.3, 2026-09-30. Companion to `docs/keck_mosfire_design.md` (v0.3);
+section numbers below refer to that document. Each step is meant to be one
+working session and to become one numbered prompt under "### Implementation"
+in `claude_prompts/keck_mosfire_prompts.md`.*
 
-Rules that apply to every step: Python via `conda run -n pypeit14`; git is the
-user's; calculations are scripts on disk; nothing under `KECK_ETCS_DATA` is
-committed; every new data file carries the provenance `meta` of design 5.4;
-each step ends with a Log entry in the prompt doc.
+*Change note, v0.2 (Prompt #5):* PypeIt reductions and KOA downloads run as
+Nautilus Jobs (design D30, section 4.8). Steps S1-S18 keep their numbers and
+meanings so that references from the part prompt docs stay valid; the new
+work is added as suffixed steps (**S1b** S3 layout and sync, **S4a**
+container image, **S4b** job templates and dry run, **S14b** in-cluster KOA
+download Job) and **S4, S5, S6, S13, S14, S15** are re-scoped in place.
+
+*Change note, v0.3 (Prompt #6):* the user's answers Q27-Q39 are folded in
+(design D31-D39). Three consequences run through the plan: the bucket
+`s3://keck-etcs` exists and is **private**, so every access, local or in-pod,
+uses the user's credentials, the public-read policy deliverable is dropped,
+and products are distributed through git (S1b, S4b, S14b, S15, S18); PypeIt
+is pinned to a commit on **`develop`**, so a new user-action step **S0**
+switches the local checkout and a check script confirms local and image run
+the same commit before the 1 percent gate of S4b means anything (S0, S4,
+S4a, S17); and the backup set is defined concretely with
+`scripts/nautilus/backup_products.py` run after each S15 batch and at each
+release (S15, S16). Step numbers are unchanged; S0 is new and precedes S1.
+Steps that still run locally are marked *(local)*; steps that run on
+Nautilus are marked *(Nautilus)*.
+
+Rules that apply to every step: Python via `conda run -n pypeit14` locally;
+git is the user's (including `checkout`/`switch` in the PypeIt repo);
+calculations are scripts on disk; nothing under `KECK_ETCS_DATA` is
+committed; every new data file carries the provenance `meta` of design 5.4
+including the reduction provenance of D36; no secret value is ever written
+into the repository or printed into a log (secret *names* and the AWS
+profile name are fine); outward-facing infrastructure (image push, jobs
+larger than the pilot, anything touching the bucket's access) is confirmed
+with the user before it is done; each step ends with a Log entry in the
+prompt doc.
 
 ## Dependency map
 
 ```
-Phase 0  S1 data root ──┬── S3 sky grid FITS ──────────────┐
-         S2 telluric grid ─┐                                 │
-Phase 1  S4 reduce 2022-04-09 (needs S1) ── S5 LDS749B sensfunc (needs S2, S4) ── S6 harvest ── S10 throughput v0
-         S13 LSF from OH lines (needs S4)                                                          │
-Phase 2  S7 core modules (needs S3 for sky) ── S9 compute()/CLI/regression (needs S7, S8, S10 or provisional)
-         S8 mosfire instrument module + data files (parallel with S7)                              │
-Phase 3  S11 J0841 validation (needs S4, S9, S10)   S12 XTcalc comparison (needs S9)               │
-Phase 4  S14 KOA search (own prompt doc; parallel from the start) ── S15 batch reductions (needs S6, S14) ── S16 trend + release
-Phase 5  S17 PypeIt ronoise branch (needs S8)      S18 docs/README/CHANGES/WMKO note (needs S9, S16)
+Phase 0  S0 user prerequisites (PypeIt checkout on develop at the pin; credentials; registry) ─┐
+         S1 data root (local) ──┬── S3 sky grid FITS (local) ─────────────────────────────────┤
+         S1b bucket access check, s3_sync.py, push 2022-04-09 raw (needs S0 credentials) ─┐   │
+         S2 telluric grid (local; records the sha256 the image checks) ───────────────────┤   │
+Phase 1  S4 reference reduction 2022-04-09 (local, on the pinned develop commit; needs S0, S1, S2)
+         S4a container image (needs S0 pin, S2 sha256; S6/S8 for a complete image)
+         S4b job templates + dry run on 2022-04-09 (Nautilus; needs S1b, S4, S4a) ── 1% gate against S4
+         S5 LDS749B sensfunc (local reference + in-pod; needs S2, S4/S4b)
+         S6 harvest module + local merge (needs S5, S8 filter curves; runs in-pod from image 0.2.0 on)
+         S13 LSF from OH lines (local, on synced WaveCalib; needs S4 or S4b)
+Phase 2  S7 core modules (local; needs S3) ── S9 compute()/CLI/regression (needs S7, S8, S10 or provisional)
+         S8 mosfire instrument module + data files (local; parallel with S7)
+Phase 3  S10 throughput v0 (local; needs S6)   S11 J0841 validation (local; needs S4b sync, S9, S10)   S12 XTcalc (needs S9)
+Phase 4  S14 KOA metadata search (local; own prompt doc) ── S14b KOA download Job (Nautilus; needs S1b, S4a, S14)
+         S15 batch reductions as Indexed Jobs + backup after each batch (Nautilus; needs S4b, S6, S14b)
+         S16 trend + release + release backup (local; needs S15)
+Phase 5  S17 PypeIt ronoise branch off develop (local; needs S8)   S18 docs/README/CHANGES/WMKO note/nautilus README (needs S9, S16)
 ```
 
-Parallel groups: {S1, S2, S14}; {S3, S4}; {S7, S8, S5}; {S11, S12, S13};
-{S17, S18 draft}.
+Parallel groups: {S0, S1, S2, S14}; {S1b, S3, S4}; {S4a, S7, S8}; {S4b, S5};
+{S11, S12, S13}; {S14b, S10}; {S17, S18 draft}. The image (S4a) is rebuilt
+and re-tagged whenever `keck_etcs.calib`, the `.sens` file or the PypeIt pin
+changes; S15 always runs on a tagged image recorded in the log with its
+digest and pin.
 
 ## Phase 0: foundations
 
-### S1. Data root and external caches
-- **Goal:** create the out-of-repo data root and put the XTcalc tarball there;
-  give the package one place to resolve paths.
+### S0. User prerequisites and the pin check *(user actions + one local check script)*
+- **Goal:** local PypeIt and the future image run the same `develop` commit;
+  the credentials and registry the later steps need exist. Everything that
+  changes git state or an environment is done by the user; the session
+  writes the check and reports.
+- **User actions (the user does these; the session proposes the exact
+  commands):** (1) in `/Users/xavier/Projects/PypeIt/PypeIt`, switch from
+  `orig-hires-fixes` to `develop` and set it to the pinned commit (`git
+  switch develop && git pull --ff-only`, then confirm `git rev-parse HEAD`
+  equals `nautilus/pypeit_pin.txt`; if `develop` has moved on, either pin to
+  its new HEAD by editing the file or check out the pinned SHA); (2) if
+  `conda run -n pypeit14 python -c "import pypeit; print(pypeit.__version__)"`
+  still reports `g017bece06`, re-run `pip install -e ".[dev]"` in `pypeit14`
+  so setuptools-scm regenerates `pypeit/pkg/version.py` (an editable install
+  does not refresh it on checkout); (3) confirm the Nautilus S3 keys exist
+  locally as an AWS profile (`~/.aws/credentials`; the same keys as the
+  `nautilus_s3:` rclone remote) and can list the bucket (`rclone lsd
+  nautilus_s3:keck-etcs`); (4) create the GitLab project `profx/keck-etcs`
+  (public) with a `write_registry` deploy token and `docker login` on the
+  Linux workstation (needed by S4a, can wait until then).
+- **Outputs:** `nautilus/pypeit_pin.txt` (one line, the full SHA;
+  `f3a1f1d274b15ee1358f167819d77f1948fce1bd` = `origin/develop` on
+  2026-09-30 unless the user pins newer); `scripts/check_pypeit_pin.py`
+  (prints `pypeit.__version__`, `pypeit.__file__`, `git -C <checkout>
+  rev-parse HEAD` and `--abbrev-ref HEAD`, the pin, and PASS/FAIL on: HEAD
+  equals the pin, the version string ends with the pin's short SHA, the
+  branch is `develop`; exit non-zero on FAIL; `--image TAG` later compares
+  against a running image's `KECK_ETCS_GIT_SHAS`); a README line on the
+  pin.
+- **Verify:** `check_pypeit_pin.py` passes; `git -C PypeIt status --short` is
+  clean; `rclone lsd nautilus_s3:keck-etcs` succeeds and an anonymous
+  request (`curl -sI https://s3-west.nrp-nautilus.io/keck-etcs/`) returns
+  403, confirming the bucket is private.
+- **Depends on:** nothing. **Risk:** `develop` moves daily; the pin file,
+  not the branch tip, is the reference, and every later log records it.
+  The version string after reinstall is expected to be
+  `2.0.2.dev1216+gf3a1f1d27` for the 2026-09-30 pin (setuptools-scm from
+  `git describe` 2.0.1-1216); if the scheme differs, record what it is and
+  make the check compare the short SHA only.
+
+### S1. Data root and external caches *(local)*
+- **Goal:** create the out-of-repo data root, the local mirror of the S3
+  bucket (design 4.2), and put the XTcalc tarball there; give the package one
+  place to resolve paths.
 - **Inputs:** `KECK_ETCS_DATA` (default `/Users/xavier/Projects/PypeIt/keck-etcs-data`);
   `https://www2.keck.hawaii.edu/inst/mosfire/XTcalc.tar` (46 MB).
 - **Outputs:** directory tree `external/xtcalc/XTcalc_dir/`,
   `mosfire/20220409/raw/` (symlink or copy of the 16 dev-suite frames);
-  `keck_etcs/paths.py` (`data_root()`, `night_dir(instrument, date)`);
-  `.gitignore` rules for `*.fits` outside `keck_etcs/data/`, `*.sav`, `*.tar`;
-  a `README` line documenting the env var.
+  `keck_etcs/paths.py` (`data_root()`, `night_dir(instrument, date, kind)`,
+  and `s3_prefix(instrument, date, kind)` returning the matching bucket key
+  so local and S3 layouts cannot drift; the bucket name `keck-etcs` as a
+  module constant overridable by `KECK_ETCS_BUCKET`); `.gitignore` rules for
+  `*.fits` outside `keck_etcs/data/` and `keck_etcs/tests/data/`, `*.sav`,
+  `*.tar`; a `README` line documenting the env var and the mirror
+  relationship.
 - **Verify:** `scripts/inspect_xtcalc_files.py $KECK_ETCS_DATA/external/xtcalc/XTcalc_dir`
-  reproduces the numbers in the Prompt #1 log; `python -c "from keck_etcs import paths; print(paths.data_root())"`.
+  reproduces the numbers in the Prompt #1 log; `python -c "from keck_etcs
+  import paths; print(paths.data_root(), paths.s3_prefix('mosfire',
+  '20220409', 'sens'))"` prints the root and `mosfire/20220409/sens`.
 - **Depends on:** nothing.
 
-### S2. Fetch the PypeIt telluric grid
-- **Goal:** have `TellPCA_3000_26000_R10000.fits` in the PypeIt cache.
-- **Inputs:** network access to PypeIt's S3 host.
-- **Outputs:** the file in `~/.cache/pypeit/`; `scripts/fetch_telluric_grid.py`
-  that calls `pypeit.dataPaths.tel_model.get_file_path(name)` and reports the
-  cache path and size.
-- **Verify:** `pypeit.pkg.cache.search_cache('TellPCA')` returns one path;
-  size about 6 MB; the file opens with astropy.
-- **Depends on:** nothing. **Risk:** the S3 host or the `dataPaths` API name
-  may differ in PypeIt 2.0; fall back to `pypeit_cache_github_data` or the
-  installing docs (`doc/installing.rst`, "Atmospheric Models").
+### S1b. Bucket access, the sync helper and the first push *(local + kubectl)*
+- **Goal:** confirmed read/write access to the private bucket from the
+  workstation and from a pod in namespace `pypeit`, the sync script, and
+  the 2022-04-09 raw frames on S3.
+- **Inputs:** the private bucket `s3://keck-etcs` (exists; D32); the user's
+  AWS profile (S0); `kubectl` context `nautilus`; PAB's `s3_push.py` as the
+  model.
+- **Outputs:** `scripts/nautilus/s3_sync.py` (boto3; `push`, `pull`, `ls`;
+  endpoint from `ENDPOINT_URL`, default `https://s3-west.nrp-nautilus.io`;
+  credentials from `AWS_PROFILE`/`AWS_*` only, never from the repo;
+  idempotent by key and size; `--dry-run`; `--jobs`; `AccessDenied` is a
+  hard error with a message naming the profile, no anonymous fallback);
+  `nautilus/inspect_pod.yaml` (`python:3.12-slim` pod in namespace `pypeit`
+  that mounts the credentials secret named by `KECK_ETCS_S3_SECRET`, default
+  `prp-s3-credentials`, and lists `s3://keck-etcs/` with boto3; this *is*
+  the credentials verification of design section 8); `nautilus/README.md`
+  v0 (namespace, bucket, its private status and what that implies, secret
+  *names*, the layout of design 4.2, the `kubectl` idioms of 4.8.1, and the
+  recipe for creating `keck-etcs-s3-credentials` from `~/.aws/credentials`
+  if `prp-s3-credentials` fails the test); the 16 raw frames plus
+  `raw/manifest.ecsv` at `s3://keck-etcs/mosfire/20220409/raw/`. No bucket
+  policy file: the bucket stays private (D32).
+- **Verify:** `s3_sync.py ls mosfire/20220409/raw` lists 16 objects whose
+  sizes equal the local files; a second `push` uploads nothing; the inspect
+  pod's log lists the same 16 keys (if it shows `AccessDenied`, the user
+  creates the new secret and the pod is re-run with `KECK_ETCS_S3_SECRET`
+  changed); `curl -sI https://s3-west.nrp-nautilus.io/keck-etcs/mosfire/20220409/raw/manifest.ecsv`
+  returns 403; `git status` shows only the scripts, YAML and README.
+- **Depends on:** S0 (credentials), S1 (layout). **Risk:**
+  `prp-s3-credentials` in `pypeit` may hold another user's keys (the dev
+  suite is shared); the test above settles it without printing any key.
 
-### S3. Gemini sky and transmission grid as committed FITS
-- **Goal:** design 5.4's `gemini_mk_sky_grid.fits`.
-- **Inputs:** the 24 `.sav` files under `external/xtcalc/XTcalc_dir/Mauna_Kea_sky/`.
-- **Outputs:** `scripts/mosfire/build_gemini_sky_grid.py` (flux-conserving
-  rebin to 0.05 nm over 950-2450 nm; HDUs `WAVE`, `SKYBG`, `TRANS`, `GRID`;
-  provenance header); `keck_etcs/data/sky/gemini_mk_sky_grid.fits` (~3 MB);
-  entry in `keck_etcs/data/index.yaml`.
-- **Verify:** for each grid, the integral of the rebinned sky over 1.17-1.33 um
-  matches the native integral to 1e-3; the transmission median in J matches
-  `inspect_xtcalc_files.py` (0.9976 at PWV 1.6, X 1.0); file size < 5 MB;
-  `git status` shows only the new FITS, script and index entry.
-- **Depends on:** S1. **Risk:** wavelength convention (assumed vacuum, N5) and
-  whether the `.sav` transmission wavelengths are in micron while the sky is in
-  nm (they are; the script must handle both).
+### S2. Fetch the PypeIt telluric grid *(local)*
+- **Goal:** have `TellPCA_3000_26000_R10000.fits` in the local PypeIt cache
+  and know its checksum for the image build.
+- **Inputs:** network access to PypeIt's S3 host, which is Nautilus S3
+  (`pypeit/data/s3_url.txt` = `s3-west.nrp-nautilus.io`; the public object
+  is `https://s3-west.nrp-nautilus.io/pypeit/telluric/atm_grids/TellPCA_3000_26000_R10000.fits`;
+  the `pypeit` bucket is public, unlike ours).
+- **Outputs:** the file in the astropy cache (`~/.cache/pypeit` here);
+  `scripts/fetch_telluric_grid.py` that calls
+  `pypeit.dataPaths.telgrid.get_file_path(name)` (note: `telgrid`, host
+  `s3_cloud`, not `tel_model`), reports the cache path, size and sha256, and
+  writes the sha256 to `nautilus/telluric_grid.sha256` for the S4a build
+  guard.
+- **Verify:** `pypeit.pkg.cache.search_cache('TellPCA')` returns one path;
+  size about 6 MB; the file opens with astropy; a second run reports it
+  cached; the sha256 equals that of the public URL fetched directly.
+- **Depends on:** nothing (runs on either PypeIt branch). **Risk:** low; the
+  API names were read from the source on 2026-09-30.
+
+### S3. Gemini sky and transmission grid as committed FITS *(local)*
+- Unchanged from v0.1: `scripts/mosfire/build_gemini_sky_grid.py`,
+  `keck_etcs/data/sky/gemini_mk_sky_grid.fits` (~3 MB), `index.yaml` entry,
+  the N5 vacuum/air check. **Verify** and **Depends on** (S1) as before.
 
 ## Phase 1: first sensfunc
 
-### S4. Reduce the 2022-04-09 night
-- **Goal:** spec1d files for LDS749B and J0841+3814.
-- **Inputs:** `mosfire/20220409/raw/`, the dev-suite
-  `keck_mosfire_j2_long.pypeit` (as a template; `PATH_TO_RAW_DATA` replaced).
+### S4. Reference reduction of the 2022-04-09 night *(local, on the pinned develop commit; D35)*
+- **Goal:** spec1d files for LDS749B and J0841+3814 from a local `pypeit14`
+  run **on the same PypeIt commit the image will pin**, which becomes the
+  gate for the Nautilus dry run (S4b) and the fallback input for S5/S13
+  while the image is being built.
+- **Inputs:** S0 done (`scripts/check_pypeit_pin.py` passes; the run refuses
+  to start otherwise and says why); `mosfire/20220409/raw/`; the dev-suite
+  `keck_mosfire_j2_long.pypeit` (template; `PATH_TO_RAW_DATA` replaced).
 - **Outputs:** `mosfire/20220409/redux/` with `Calibrations/`, `Science/spec1d_*`
-  and `spec2d_*`, QA; `scripts/mosfire/reduce_standard.py` v0 (generates a
-  pypeit file from a night directory, retypes standards longer than 20 s,
-  runs `run_pypeit`); the repo-owned pypeit file used, under
-  `keck_etcs/data/pypeit_par/` or `scripts/mosfire/pypeit_files/`.
-- **Verify:** objects found in both standard frames (positive and negative
-  traces) and in the four science frames; `FWHM` in pixels reported; the
-  LDS749B `S2N` (`med_s2n`) logged; the wavelength solution RMS below PypeIt's
-  threshold.
-- **Depends on:** S1. **Risk:** PypeIt 2.0 may have changed `pypeit_setup`
-  options or frame typing since the 1.8 template was written; the run takes
-  tens of minutes; `snr_thresh = 80` in the template may need lowering for the
-  standard.
+  and `spec2d_*`, QA; `scripts/mosfire/reduce_standard.py` v0 (given a night
+  directory: `pypeit_setup`, patch the pypeit file (retype standards longer
+  than 20 s, `comb_id`/`bkg_id` from `dithpos`, template parameter block),
+  `run_pypeit`, then `pypeit_sensfunc` if a `.sens` file is given; **designed
+  from the start to be the in-pod driver**: all paths from arguments or
+  `KECK_ETCS_DATA`, no interactive steps, exit codes for every failure class
+  of design 4.8.6, `--scratch DIR`, and `--s3-pull`/`--s3-push PREFIX` hooks
+  that call `scripts/nautilus/s3_sync.py` and are no-ops locally; it writes
+  `run_manifest.json` with the D36 fields, `image = local`,
+  `pypeit_git_sha` from the checkout); the pypeit file actually run, kept at
+  `scripts/mosfire/pypeit_files/keck_mosfire_20220409_J2.pypeit`.
+- **Verify:** `run_manifest.json` records `pypeit_version` ending in the
+  pin's short SHA; objects found in both standard frames (positive and
+  negative traces) and in the four science frames; `FWHM` in pixels
+  reported; the LDS749B `S2N` (`med_s2n`) logged; the wavelength solution
+  RMS below PypeIt's threshold; `reduce_standard.py --help` documents the S3
+  hooks.
+- **Depends on:** S0, S1, S2. **Risk:** PypeIt `develop` may have changed
+  `pypeit_setup` options or frame typing since the 1.8 template (and since
+  `orig-hires-fixes`); the run takes tens of minutes; `snr_thresh = 80` may
+  need lowering for the standard.
 
-### S5. LDS749B sensfunc (J2)
-- **Goal:** a telluric-corrected `IR` sensfunc for J2.
-- **Inputs:** `spec1d_*LDS749B*.fits` from S4; the telluric grid from S2.
+### S4a. Container image *(built on the Linux workstation; D31)*
+- **Goal:** the public image `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:<tag>`
+  with PypeIt at the develop pin, `keck_etcs`, and a populated PypeIt cache.
+- **Inputs:** `nautilus/pypeit_pin.txt` (S0); `nautilus/telluric_grid.sha256`
+  (S2); PAB's `Dockerfile` and `build_image.sh` as models; the user's GitLab
+  project and deploy token (S0 item 4) and a `docker login` on the
+  workstation.
+- **Outputs:** `nautilus/Dockerfile` (base `python:3.12`; layer 1
+  third-party deps from `requirements.txt` plus PypeIt's; layer 2 `ARG
+  PYPEIT_SHA` then `pip install git+https://github.com/pypeit/PypeIt.git@${PYPEIT_SHA}`
+  and `pip install /opt/src/keck-etcs`; layer 3 `ENV XDG_CACHE_HOME=/opt/cache`,
+  `pypeit_cache_github_data keck_mosfire`, `curl` of the TellPCA grid from
+  the public Nautilus URL with a sha256 check, `pypeit_install_telluric`;
+  `ARG/ENV/LABEL KECK_ETCS_GIT_SHAS` as JSON of the PypeIt and keck_etcs
+  SHAs; `MPLBACKEND=Agg`, `PYTHONUNBUFFERED=1`; guards as design 4.8.2; no
+  `ENTRYPOINT`); `nautilus/build_image.sh [--push]` (stages this repo into a
+  clean context excluding `.git`, caches and `docs/figures`; reads the pin
+  and the keck_etcs SHA; refuses to build if `git ls-remote` shows the pin is
+  not on `origin/develop`'s history, i.e. `git merge-base --is-ancestor`
+  against a fetched `origin/develop` in a temporary clone, never in the
+  user's checkout; builds; runs the smoke tests `run_pypeit --help`,
+  `pypeit_sensfunc --help`, `python -c "import keck_etcs, pypeit;
+  print(pypeit.__version__)"`, `python -c "from pypeit.pkg import cache;
+  print(cache.search_cache('TellPCA'))"`; pushes `:<tag>` and `:latest`;
+  verifies with `docker manifest inspect`); `keck_etcs/provenance.py`
+  (`git_shas()` preferring `KECK_ETCS_GIT_SHAS`, `image_info()` from
+  `KECK_ETCS_IMAGE`/`KECK_ETCS_IMAGE_DIGEST` env set by the manifest, used by
+  harvest and `reduce_standard.py`); `nautilus/README.md` gains the tag,
+  digest and pin table.
+- **Verify:** the build guards pass; `docker run --rm <image> python -c
+  "import pypeit; assert pypeit.__version__.endswith('g' + open('/opt/src/keck-etcs/nautilus/pypeit_pin.txt').read()[:9])"`
+  (or the equivalent with the short SHA inlined); `scripts/check_pypeit_pin.py
+  --image <tag>` reports the same PypeIt SHA as the local checkout; the image
+  size is reported (expect 2-3 GB; no torch); `docker run --rm --entrypoint
+  bash <image> -lc 'ls $XDG_CACHE_HOME/pypeit'` shows the cache; after the
+  push, `docker manifest inspect` succeeds and the digest is recorded in
+  `nautilus/README.md`.
+- **Depends on:** S0, S2; a *complete* image also needs S6 (harvest) and S8
+  (filter curves), so S4a is first built as `0.1.0` for the dry run and
+  rebuilt as `0.2.0` before S15. **Risk:** the NRP registry has hung on
+  manifest writes before (PAB, 2026-08), so `--push` must be retried rather
+  than worked around with a `PYTHONPATH` staging hack; Python 3.12 versus
+  the local 3.14 is revisited only if S4b shows a difference (Q31); when the
+  S17 `ronoise` branch lands on `develop`, the pin moves to that commit with
+  a tag bump.
+
+### S4b. Job templates and the 2022-04-09 dry run *(Nautilus; D33, D35)*
+- **Goal:** the manifests and helper scripts of design 4.8.4-4.8.7, exercised
+  on one night in namespace `pypeit`, and gated against the local reference
+  of S4.
+- **Inputs:** image `keck-etcs:0.1.0` (S4a); the raw frames on S3 (S1b); the
+  S4 reference products (pushed to `s3://keck-etcs/mosfire/20220409/reference/`
+  by `s3_sync.py` so the pod can compare); the credentials secret name
+  settled in S1b.
+- **Outputs:** `nautilus/night_job.yaml` (Indexed Job template in namespace
+  `pypeit`: manifest CSV via ConfigMap, `JOB_COMPLETION_INDEX` selects the
+  row, env `BUCKET=keck-etcs`, `ENDPOINT_URL`, `HOME=/root`,
+  `KECK_ETCS_IMAGE`, `OMP_NUM_THREADS`, `SPEC2D`, `REPLACE`; the credentials
+  secret (`KECK_ETCS_S3_SECRET`) mounted at `/root/.aws/credentials` for the
+  pull as well as the push; PROVENANCE block printing `KECK_ETCS_GIT_SHAS`,
+  `pypeit.__version__`, image tag and digest; `reduce_standard.py --scratch
+  /scratch --s3-pull --s3-push`; gates; harvest; push; `*_DONE`; resources
+  and `activeDeadlineSeconds` as design 4.8.4; `emptyDir` at `/scratch`);
+  `nautilus/validate_job.yaml` (the one-night dry run: `backoffLimit: 0`,
+  `SPEC2D=1`, `--reference`); `nautilus/gates.py` (design 4.8.7; exits
+  non-zero with named failures; with `--reference`, also asserts the pod's
+  `pypeit_git_sha` equals the reference's, so the 1 percent gate is never
+  run across different PypeIt commits); `nautilus/night_failures.py`;
+  `nautilus/status_table.py`; `nautilus/manifests/nights_dryrun.csv`;
+  `nautilus/README.md` operator section (build, push, ConfigMap, apply,
+  follow, inspect, sync back, re-run a failed night). Run the dry run; then
+  `s3_sync.py pull mosfire/20220409` into the data root.
+- **Verify:** `yaml.safe_load` and `bash -n` on every manifest; the pod log
+  shows the PROVENANCE block with both SHAs and the image digest, and the
+  PypeIt SHA equals the pin; all gates pass including zero-point agreement
+  with the S4 reference to 1 percent over 1.117-1.260 um and `S2N` to 5
+  percent; wall-clock, peak memory and scratch usage are logged and written
+  into the `night_job.yaml` header as the measured sizing; the pushed prefix
+  contains everything in the design 4.2 push list; re-applying the Job skips
+  the night (idempotency) and `REPLACE=1` redoes it; no credential value
+  appears in any log.
+- **Depends on:** S1b, S4, S4a. **Risk:** in-pod numerical differences from
+  the local run (BLAS, Python 3.12 vs 3.14) show up here, which is the point;
+  if the 1 percent gate fails for that reason, record the offset and decide
+  with the user whether to switch the base image to 3.14 before S15.
+
+### S5. LDS749B sensfunc (J2) *(local reference; in-pod from S4b on)*
+- **Goal:** a telluric-corrected `IR` sensfunc for J2, produced identically by
+  the local reference run and by the dry-run pod.
+- **Inputs:** `spec1d_*LDS749B*.fits` from S4 (local) and from S4b (synced);
+  the telluric grid (S2 locally; baked into the image).
 - **Outputs:** `keck_etcs/data/pypeit_par/keck_mosfire_J.sens` (polyorder 6,
-  design 4.3); `mosfire/20220409/sens/sens_LDS749B_20220409.fits` and QA
-  plots; a short note on the fitted PWV and airmass.
+  design 4.3; ships in the image from `0.1.0` on, so write it before the
+  image build or rebuild); `mosfire/20220409/sens/sens_LDS749B_20220409.fits`
+  and QA (local, and the synced in-pod copy under the same name); a short
+  note on the fitted PWV and airmass; `scripts/mosfire/inspect_sensfunc.py`.
 - **Verify:** the zero point is finite over 1.117-1.260 um; the implied
   end-to-end throughput has median 0.15-0.45 over that window (XTcalc's 2012
   value is 0.28); telluric residuals near 1.13 um are below 5 percent; the red
-  trim at 1.260 um judged from the fluxed spectrum (D8, open item).
-- **Depends on:** S2, S4. **Risk:** low S/N (J ~ 15 star, 2 x 120 s, 5" slit
-  admitting 7x the sky of a 0.7" slit) may make the polynomial fit unstable;
+  trim at 1.260 um judged from the fluxed spectrum (D8, open item); local and
+  in-pod zero points agree to 1 percent (the S4b gate, re-checked here).
+- **Depends on:** S2, S4 (and S4b for the in-pod copy). **Risk:** low S/N
+  (J ~ 15 star, 2 x 120 s, 5" slit) may make the polynomial fit unstable;
   fall back to polyorder 4-5 or a BOX extraction; if the telluric fit fails to
   converge, fix PWV and airmass at plausible values and note it.
 
-### S6. Harvest zero points and throughput
-- **Goal:** the per-standard table and curve archive of design 4.4.
-- **Inputs:** `sens_*.fits` files (one so far).
-- **Outputs:** `keck_etcs/calib/harvest.py` (reads `SensFunc` datamodel fields
-  `wave`, `zeropoint`, `throughput`, `airmass`, `exptime`, `std_name`,
-  `std_cal`, `telluric` model parameters; computes `zp_1200/1250/1300`,
-  `thru_median_1117_1260`; divides out the filter curve); per-standard ECSV
-  row in `keck_etcs/data/mosfire/throughput/standards.ecsv` and the curve
-  file; `scripts/mosfire/harvest_sens.py` CLI.
-- **Verify:** the LDS749B row has all fields; recomputing throughput from the
-  zero point with `flux_calib.zeropoint_to_throughput` and A = 72.3674 m^2
-  matches the stored curve to 1e-6; the row's `pypeit_version` matches
-  `pypeit.__version__`.
-- **Depends on:** S5, S8 (filter curves). **Risk:** the `SensFunc` datamodel
-  or the telluric parameter layout (`TELL_THETA`) may differ from what was
-  read on 2026-09-29; keep the reader tolerant and log the version.
+### S6. Harvest zero points and throughput *(module runs in-pod; merge local; D34)*
+- **Goal:** the per-standard table and curve archive of design 4.4, with the
+  harvest computed where the sens file is made.
+- **Inputs:** `sens_*.fits` files (one so far); `run_manifest.json` for the
+  provenance columns; filter curves from S8 (skip the division and set
+  `flag = nofilter` if they do not exist yet).
+- **Outputs:** `keck_etcs/calib/harvest.py` (reads `SensFunc` fields `wave`,
+  `zeropoint`, `throughput`, `airmass`, `exptime`, `std_name`, `std_cal`,
+  `telluric` model parameters; computes `zp_1200/1250/1300`,
+  `thru_median_1117_1260`; divides out the filter curve; fills the D36
+  provenance columns from `run_manifest.json` or `keck_etcs.provenance`);
+  `scripts/mosfire/harvest_sens.py` with two modes: `harvest SENS... --out
+  DIR` (used by the pod) and `--merge DIR...` (local; appends or replaces
+  rows in `keck_etcs/data/mosfire/throughput/standards.ecsv` keyed on
+  `(standard, date, koa_id)` and copies curve files into
+  `keck_etcs/data/mosfire/throughput/standards/`); the LDS749B row and curve
+  from the synced in-pod harvest (or from the local reference, `image =
+  local`, until S4b has run).
+- **Verify:** the LDS749B row has all fields including the six D36 columns;
+  recomputing throughput from the zero point with
+  `flux_calib.zeropoint_to_throughput` and A = 72.3674 m^2 matches the stored
+  curve to 1e-6 before filter division; the row's `pypeit_version` ends with
+  the pin's short SHA; harvesting the synced sens file locally reproduces the
+  in-pod row to 1e-6 in every numeric column.
+- **Depends on:** S5, S8 (filter curves), S4a for the in-pod path. **Risk:**
+  the `SensFunc` datamodel or the telluric parameter layout (`TELL_THETA`)
+  may differ on `develop` from what was read on 2026-09-29; keep the reader
+  tolerant and log the version.
 
-### S13. LSF from OH lines (can run any time after S4)
+### S13. LSF from OH lines *(local, on synced WaveCalib)*
 - **Goal:** replace the XTcalc LSF constants (2.2 pix floor, 0.24"/pix slope).
-- **Inputs:** the wavelength calibration of S4 (arc/tilt from the science
-  frames' OH lines; PypeIt's `WaveCalib` `fwhm` per line) for the 1" slit,
-  and, once available, other slit widths from KOA nights.
-- **Outputs:** `scripts/mosfire/measure_lsf.py`; values written into
+- **Inputs:** `Calibrations/WaveCalib*.fits` of the 1" slit from S4 (local)
+  or synced from S4b/S15 with `s3_sync.py pull --calibs` (the push list
+  includes `Calibrations/`; the backup set does not, D39, so pull it while
+  the night is on S3); more slit widths from KOA nights after S15.
+- **Outputs:** `scripts/mosfire/measure_lsf.py`;
+  `keck_etcs/data/mosfire/lsf_measurements.ecsv` with provenance (committed,
+  which is why `WaveCalib*` need not be backed up); values written into
   `instruments/mosfire.py` with source comments; a figure of FWHM_pix versus
   slit width.
-- **Verify:** for the 1" slit, FWHM_pix is within 20 percent of 1.0/0.24 = 4.2
+- **Verify:** for the 1" slit, FWHM_pix within 20 percent of 1.0/0.24 = 4.2
   pix; R at 1.25 um within 15 percent of 3310 x 0.7 / 1.0 = 2300.
-- **Depends on:** S4; more slit widths need S15.
+- **Depends on:** S4 or S4b; more slit widths need S15.
 
-## Phase 2: ETC core
+## Phase 2: ETC core *(all local; unchanged from v0.1)*
 
 ### S7. Core modules and schemas
-- **Goal:** design 5.1's `core/` and the two JSON schemas, without instrument
-  specifics.
-- **Inputs:** design 5.2 and 5.3; the sky grid FITS from S3 (a synthetic grid
-  can stand in for unit tests).
-- **Outputs:** `keck_etcs/core/{source,atmosphere,sky,slitloss,lsf,detector,snr}.py`;
-  `keck_etcs/schema/etc_input.json`, `etc_output.json`; unit tests of design
-  6.2 (analytic cases) in `keck_etcs/tests/test_core_*.py`.
-- **Verify:** `pytest keck_etcs/tests -k core` passes; the Moffat plane
-  integral is 1 to 1e-4; the exptime solver round-trips to 1e-6; the schemas
-  validate the examples with `jsonschema` (add to `requirements.txt`).
-- **Depends on:** S3 (loosely). **Risk:** numerical cost of the 2-D Moffat
-  integral on a 0.01" grid for large apertures; cache by (FWHM, w, L).
+- As v0.1: `keck_etcs/core/{source,atmosphere,sky,slitloss,lsf,detector,snr}.py`,
+  the two JSON schemas, analytic unit tests. **Verify:** `pytest keck_etcs/tests
+  -k core` passes; Moffat plane integral 1 to 1e-4; exptime solver round-trip
+  1e-6; schemas validate the examples. **Depends on:** S3 (loosely). The
+  core keeps its no-I/O rule; nothing in this step touches S3 or Nautilus.
 
 ### S8. MOSFIRE instrument module and data files
-- **Goal:** `instruments/mosfire.py` and the data it loads.
-- **Inputs:** Keck filters page ASCII curves (J, J2; also Y, J3, H, K while
-  there), Keck detector page numbers, design section 3, band windows (N2).
-- **Outputs:** `keck_etcs/instruments/base.py`, `mosfire.py`;
-  `keck_etcs/data/mosfire/filters/mosfire_<band>.ecsv`;
-  `keck_etcs/data/mosfire/detector.ecsv`; `keck_etcs/data/index.yaml` entries;
-  `scripts/mosfire/fetch_keck_filter_curves.py`; a computed Vega-AB offset per
-  band stored in the filter `meta`.
-- **Verify:** `RN(16) = 5.8`, `RN(1) = 21`; the J Vega offset is 0.85-0.97;
-  the J2 half-power bandpass from the curve matches 1.181 +/- 0.065 um to 0.01
-  um; every data file has the provenance `meta` keys.
-- **Depends on:** nothing (parallel with S7). **Risk:** the Keck filter ASCII
-  files may be imaging-only curves or in air wavelengths; note which and
-  convert to vacuum.
+- As v0.1: `instruments/base.py`, `mosfire.py`, filter ECSVs from the Keck
+  page, `detector.ecsv`, `index.yaml` entries, Vega-AB offsets. **Verify:**
+  `RN(16) = 5.8`, `RN(1) = 21`; J Vega offset 0.85-0.97; J2 half-power
+  bandpass 1.181 +/- 0.065 um to 0.01 um; provenance `meta` on every file.
+  **Depends on:** nothing. **Note (v0.2):** the filter curves are read by the
+  in-pod harvest, so S8 must be merged before the `0.2.0` image build (S4a)
+  that precedes S15; until then in-pod rows carry `flag = nofilter`.
 
 ### S9. `compute()`, CLI and regression fixtures
-- **Goal:** the public API end to end for J and J2.
-- **Inputs:** S7, S8, and a throughput product: S10 if available, otherwise a
-  provisional curve made from XTcalc's `Jeff.sm.dat` x 0.89^2 and labeled
-  `calib_version = provisional-xtcalc-2012` (must be replaced before release).
-- **Outputs:** `keck_etcs/etc.py` (`validate`, `compute`); `bin/keck_etc`;
-  `keck_etcs/tests/data/reference_{J,J2,line}.json` and
-  `test_regression.py`; `scripts/regen_regression_fixtures.py`.
-- **Verify:** `keck_etc examples/J_point.json` prints a summary; regression
-  tests pass; a J = 20 AB point source, 0.7" slit, 0.7" seeing, 4 x 120 s
-  MCDS-16 ABBA at airmass 1.2 gives a band-median `snr_pixel` within a factor
-  2 of XTcalc's number for the same inputs (the S12 script makes this exact).
-- **Depends on:** S7, S8; S10 preferred.
+- As v0.1: `keck_etcs/etc.py`, `bin/keck_etc`, fixtures, `test_regression.py`,
+  `scripts/regen_regression_fixtures.py`; provisional XTcalc throughput if
+  S10 has not run. **Verify** as v0.1. **Depends on:** S7, S8; S10 preferred.
+  `meta.pypeit_version` continues to come from `index.yaml`, not from
+  importing PypeIt; the image tags behind a calibration are in `CHANGES.md`,
+  not in `compute` output.
 
-## Phase 3: validation
+## Phase 3: validation *(all local)*
 
 ### S10. Throughput product v0
-- **Goal:** the first era file from the one standard we have.
-- **Inputs:** S6 table and curve.
-- **Outputs:** `keck_etcs/calib/combine.py`;
-  `keck_etcs/data/mosfire/throughput/mosfire_thru_2017-2025.ecsv` with
-  `n_std = 1` and `thru_mad = NaN`; `index.yaml` entry with
-  `calib_version = mosfire-J-2026.10-dev`.
-- **Verify:** the file loads through `instruments/mosfire.py`; `compute`
-  echoes `meta.era = 2017-02..2025-02` for `throughput.date = 2022-04-09`.
-- **Depends on:** S6.
+- As v0.1: `keck_etcs/calib/combine.py`, `mosfire_thru_2017-2025.ecsv` with
+  `n_std = 1`, `index.yaml` entry `calib_version = mosfire-J-2026.10-dev`;
+  the per-era `meta` lists the image tags of the contributing rows (D36).
+  **Verify** as v0.1 plus: `meta.images` equals the set of `image` values in
+  the contributing rows. **Depends on:** S6.
 
 ### S11. Validation against J0841+3814
-- **Goal:** design 6.1.
-- **Inputs:** spec1d science files from S4; sensfunc from S5; `compute` from
-  S9 with S10.
-- **Outputs:** `scripts/mosfire/validate_j0841.py` (fluxes with
-  `pypeit_flux_calib`, measures S/N per pixel per frame and for the coadd,
-  runs the ETC with the fluxed spectrum as `user` shape, writes a comparison
-  ECSV and a figure); `keck_etcs/tests/test_validation_j0841.py` marked
-  `slow`; a results section appended to the design doc.
-- **Verify:** median ratio ETC/measured within 20 percent over 1.117-1.260 um;
-  within 10 percent between OH lines; the fitted effective aperture factor and
-  any `sky_scale` recorded in the instrument config with provenance.
-- **Depends on:** S4, S9, S10. **Risk:** the quasar is faint, so the measured
-  S/N between OH lines may itself be noisy; use 50 A bins and the four-frame
-  coadd.
+- As v0.1, with the inputs now the *synced* products: `s3_sync.py pull
+  mosfire/20220409 --spec2d` (the dry run pushed spec2d because `SPEC2D=1`;
+  spec2d is not in the backup set, so pull it while the night is on S3),
+  then `pypeit_flux_calib` and `pypeit_coadd_1dspec` run locally in
+  `pypeit14` on the pinned develop commit. **Verify** as v0.1 (median
+  ETC/measured ratio within 20 percent over 1.117-1.260 um; 10 percent
+  between OH lines; N5 and D14 checks). **Depends on:** S4b (or S4 as
+  fallback), S9, S10. **Risk:** as v0.1; also, if local and in-pod spec1d
+  differ (S4b gate), validate against the in-pod products, since those feed
+  the calibration.
 
 ### S12. XTcalc sanity comparison
-- **Goal:** design 6.2's script.
-- **Inputs:** XTcalc data files (S1) and formula (Prompt #1 log); `compute`.
-- **Outputs:** `scripts/mosfire/compare_xtcalc.py` producing a table of
-  S/N ratios for J magnitudes 17-23 and slits 0.7", 1.0" at 4 x 120 s; an
-  appendix in the design doc.
-- **Verify:** the script reproduces XTcalc's example (K, 0.7", 16 reads,
-  m = 18.6 AB, 1000 s) within 10 percent when run in "XTcalc mode" against its
-  own inputs; the ratio to ours is explained by the known differences
-  (throughput era, RN model, slit loss, sky model).
-- **Depends on:** S9.
+- Unchanged from v0.1. **Depends on:** S9.
 
 ## Phase 4: time series
 
-### S14. KOA standards search (own prompt doc)
-- **Goal:** the candidate list of design 4.1 and the `SAMPMODE` census.
-- **Inputs:** KOA (koa.ipac.caltech.edu) MOSFIRE metadata; the standard lists
-  (PypeIt `calspec_info.txt`, `xshooter_info.txt`; SIMBAD for A0V).
-- **Outputs:** `claude_prompts/koa_search_prompts.md` (new prompt doc, per the
-  project decisions); `scripts/koa/search_mosfire_standards.py`;
-  `keck_etcs/data/mosfire/koa_standards_candidates.ecsv` (dates, KOA IDs,
-  slit, filter, `SAMPMODE`, `NUMREADS`, airmass, program, 2MASS J for A0V);
-  the `SAMPMODE` histogram for science frames; downloads into
-  `mosfire/<YYYYMMDD>/raw/` for the first batch (priority: Hennawi/Yang/Wang
-  nights; wide-slit standards).
-- **Verify:** the 2022-04-09 LDS749B frames appear in the candidate list; the
-  table has at least 10 wide-slit standards or, if not, the shortfall is
-  reported against the Q3 open item.
-- **Depends on:** S1 for the download location; otherwise independent.
-  **Risk:** KOA query interface (TAP/PyKOA) and proprietary periods; the
-  wide-slit sample may be small (Q3, Josh Walawender).
+### S14. KOA standards search *(local; own prompt doc)*
+- **Goal:** the candidate list of design 4.1 and the `SAMPMODE` census. The
+  metadata queries stay local; the downloads move to S14b.
+- **Inputs/Outputs:** as v0.1 (`claude_prompts/koa_search_prompts.md`,
+  `scripts/koa/search_mosfire_standards.py`,
+  `keck_etcs/data/mosfire/koa_standards_candidates.ecsv`, the census), plus
+  `nautilus/manifests/nights_<batch>.csv` generated from the candidate table
+  by `scripts/koa/make_night_manifest.py` (columns of design 4.8.4; the
+  batch order of the koa doc: wide-slit standards, then Hennawi/Yang/Wang
+  nights).
+- **Verify:** as v0.1; the dry-run night appears in a one-row manifest whose
+  columns match `night_job.yaml`'s expectations.
+- **Depends on:** S1 for the local layout; otherwise independent. **Risk:**
+  KOA TAP/`pykoa` quirks; proprietary periods; small wide-slit sample (Q3).
 
-### S15. Batch reductions and harvest
-- **Goal:** sensfuncs for every candidate night.
-- **Inputs:** S14 downloads; `reduce_standard.py` from S4; `harvest_sens.py`
-  from S6.
-- **Outputs:** `mosfire/<YYYYMMDD>/{redux,sens}` per night; rows appended to
-  `standards.ecsv`; a per-night status table (`success`, `no calibs`,
-  `fit failed`) in the prompt-doc log.
-- **Verify:** every processed night has a row or a recorded failure reason;
-  narrow-slit standards land in the slit-loss sample with their `FWHM`.
-- **Depends on:** S6, S14. **Risk:** nights without dome flats; masks with the
-  standard in a `long2pos` configuration need PypeIt's `long2pos` handling;
-  run time (allow several sessions; this step will likely be split by year).
+### S14b. In-cluster KOA download Job *(Nautilus; D37)*
+- **Goal:** raw frames for a batch of nights on S3, downloaded by a pod, with
+  manifests; or, if the reachability check fails, downloaded locally and
+  pushed.
+- **Inputs:** a night manifest (S14); image (S4a; `pykoa` added to the image
+  requirements); the private bucket and the credentials secret (S1b).
+- **Outputs:** first, a reachability check: a one-off Job on the image that
+  runs `pykoa` against one public 2022-04-09 KOA ID and reports success or
+  the error (this decides in-cluster versus fallback and is logged);
+  `scripts/koa/download_mosfire_night.py` with `--to-s3 PREFIX` (downloads
+  the standard, the science frames of interest and the night's dome flats to
+  scratch, writes `raw/manifest.ecsv` with koaid, file, frame type, target,
+  slit, `SAMPMODE`, `NUMREADS`, exptime, airmass and sha256, pushes with the
+  mounted credentials, skips frames already on S3 with the same size; the
+  same script with `--to-s3` and the local AWS profile is the fallback);
+  `nautilus/koa_download_job.yaml` (Indexed over the manifest, `parallelism:
+  2` out of politeness to KOA, small resources, `activeDeadlineSeconds`, the
+  credentials secret mounted); a per-night `download_status.ecsv` under
+  `runs/<job_name>/`.
+- **Verify:** the reachability result is logged before any batch; every
+  downloaded night has flats and a standard in its manifest; `s3_sync.py
+  ls` sizes match the manifest; total bytes reported; re-applying downloads
+  nothing; a night with no flats is recorded `no calibs` and not reduced
+  later. Public data only (no KOA login in pods).
+- **Depends on:** S1b, S4a, S14. **Risk:** KOA reachability or anonymous
+  download from the cluster (the check settles it); KOA rate limits (keep
+  `parallelism` at 2).
 
-### S16. Trend analysis and first calibration release
-- **Goal:** design 4.5-4.6 and D28.
-- **Inputs:** `standards.ecsv` with >= 10 wide-slit standards over >= 2 eras.
-- **Outputs:** `keck_etcs/calib/trend.py`; `scripts/mosfire/plot_throughput_trend.py`;
-  per-era `mosfire_thru_<era>.ecsv`; `index.yaml` bumped to
-  `mosfire-J-YYYY.MM`; `CHANGES.md` section; the regression fixtures
-  regenerated deliberately.
-- **Verify:** per-era median and MAD reported; the 3-MAD exclusion list
-  documented; the 2012-2016 era median within ~10 percent of XTcalc's curve
-  after the aperture correction (design 4.6); `compute` with
-  `throughput.date` in each era returns that era's curve.
-- **Depends on:** S15.
+### S15. Batch reductions, harvest and per-batch backup *(Nautilus; D33, D34, D39)*
+- **Goal:** sensfuncs and harvest rows for every candidate night, as Indexed
+  Jobs on a tagged image, with a status table, targeted sweeps, and the
+  high-level products backed up after each batch.
+- **Inputs:** S14b downloads; `night_job.yaml`, `gates.py`,
+  `night_failures.py`, `status_table.py` (S4b); image `keck-etcs:0.2.0` or
+  later (S4a rebuilt with S6 and S8 merged, and with S15a's A0V support;
+  same PypeIt pin unless deliberately moved); `harvest_sens.py --merge`
+  (S6).
+- **Sub-steps:**
+  - **S15a** *(local code, then a Nautilus pilot):* A0V support in
+    `keck_etcs/calib/standards.py` (Vega + 2MASS J, N3) wired into
+    `reduce_standard.py` and the image; `long2pos` handling; the pilot batch
+    of 3-5 wide-slit nights as one Indexed Job.
+  - **S15b** *(Nautilus, several sessions):* the remaining manifests, one Job
+    per batch (by year or by program), `parallelism` raised only as far as
+    the pilot's measured memory allows; after each batch, `night_failures.py`
+    writes the sweep manifest, the sweep Job is applied once, and remaining
+    failures are recorded with their data reason; then
+    `scripts/nautilus/backup_products.py` (an `rclone copy
+    nautilus_s3:keck-etcs/ AIOcean:keck-etcs/` with `--include` filters for
+    the D39 set, `--dry-run` first, idempotent) is run and its object count
+    and bytes logged.
+  - **S15c** *(local):* `s3_sync.py pull` of `harvest/`, `sens/` and
+    `Calibrations/WaveCalib*` for every `success` night; `harvest_sens.py
+    --merge`; `status_table.py` output copied into the prompt-doc log.
+- **Outputs:** `s3://keck-etcs/mosfire/<YYYYMMDD>/{redux,sens,harvest}` per
+  night with `run_manifest.json`; `runs/<job_name>/status.ecsv`; rows
+  appended to `standards.ecsv` and curve files; `scripts/nautilus/backup_products.py`
+  and the `AIOcean:keck-etcs/mosfire/` mirror of the D39 set; the per-night
+  status table (`success`, `no calibs`, `setup failed`, `reduce failed`,
+  `no trace`, `sens failed`, `gate failed`, `push failed`) in the prompt-doc
+  log, with wall-clock per night and the image tag, digest and PypeIt pin per
+  batch.
+- **Verify:** every night in every manifest has exactly one status; every
+  `success` night has `sens_*.fits`, a harvest row and a `run_manifest.json`
+  whose `image_digest` and `pypeit_git_sha` match the batch's recorded
+  values; the count of `success` nights equals the number of new rows in
+  `standards.ecsv`; narrow-slit standards land in the slit-loss sample with
+  their `FWHM` and `flag = narrow`; no pod ran past `activeDeadlineSeconds`;
+  a failed night re-applied via the sweep manifest either succeeds or carries
+  a data reason; after each batch `rclone check --one-way` with the same
+  filters reports the backup complete and `rclone size AIOcean:keck-etcs/`
+  is logged; `git status` shows only the ECSV files, manifests and the
+  backup script.
+- **Depends on:** S4b, S6, S14b. **Risk:** nights without dome flats; masks
+  with the standard in a `long2pos` configuration; the sizing is unmeasured
+  until the dry run and pilot (take rates from the pilot, not the first pod);
+  preemption (idempotent pods resume on re-apply); a wedged pod holds its
+  resources until the deadline (hence `activeDeadlineSeconds`); registry
+  push hangs when re-tagging the image between batches; Google Drive
+  rate-limits many small files (the D39 set is a few files per night, so
+  this is minor, but run the backup after the batch, not per pod).
+
+### S16. Trend analysis and first calibration release *(local)*
+- As v0.1: `keck_etcs/calib/trend.py`, `scripts/mosfire/plot_throughput_trend.py`,
+  per-era `mosfire_thru_<era>.ecsv`, `index.yaml` bumped to
+  `mosfire-J-YYYY.MM`, `CHANGES.md` section (now also listing the image tags,
+  digests and PypeIt pins of the reductions used, design 4.8.5), fixtures
+  regenerated deliberately; then the release backup:
+  `backup_products.py --release <calib_version>` copies the D39 set of every
+  contributing night into `AIOcean:keck-etcs/releases/<calib_version>/` so
+  the release's inputs are frozen (D39). **Verify** as v0.1 plus: every row
+  that enters an era median has a non-empty `image_digest` and
+  `pypeit_git_sha`, `CHANGES.md` lists each distinct pair, and `rclone check
+  --one-way` reports the release backup complete. **Depends on:** S15.
 
 ## Phase 5: wrap-up
 
-### S17. PypeIt `ronoise` branch
-- **Goal:** D19.
-- **Inputs:** the Keck RN table (S8) and, if feasible, an RN check from two
-  dome flats at `NUMREADS = 1` (CDS) in our data (their difference divided by
-  sqrt(2), in electrons).
-- **Outputs:** a branch in `/Users/xavier/Projects/PypeIt/PypeIt` (the user
-  creates it and commits; the session edits `keck_mosfire.py`'s
-  `get_detector_par` to read `SAMPMODE`/`NUMREADS` from `hdu` and look up RN,
-  defaulting to 5.8 when no header is given), plus a unit test in PypeIt.
-- **Verify:** `get_detector_par(1, hdu)` returns 21 for the CDS flats and 5.8
-  for the MCDS-16 frames; PypeIt's own tests pass.
-- **Depends on:** S8. **Risk:** PypeIt's dev-suite expectations may encode the
-  fixed 5.8 for the flats.
+### S17. PypeIt `ronoise` branch *(local; off `develop`)*
+- As v0.1 (edit `keck_mosfire.py`'s `get_detector_par`; unit test; commit
+  message for the user), with the branch created by the user **from
+  `develop` at or after the pin**, not from `orig-hires-fixes`. **Note:**
+  once the branch exists, the image (S4a) may pin its commit instead of the
+  `develop` pin; that is an edit of `nautilus/pypeit_pin.txt` plus a tag
+  bump recorded in `nautilus/README.md` and `CHANGES.md`, and any night
+  reduced with it carries the new `pypeit_git_sha`. Because
+  `build_image.sh` requires the pin to be on `develop`'s history, pinning a
+  feature-branch commit needs an explicit `--allow-branch` flag and a log
+  line saying so. **Depends on:** S8.
 
-### S18. Documentation, README, CHANGES, WMKO API note
-- **Goal:** items 4 and 6 of the definition of done.
-- **Inputs:** everything above.
-- **Outputs:** design doc updated to "as built" with validation and XTcalc
-  appendices; `README.md` usage (Python and CLI, env var, how to refresh
-  calibrations); `CHANGES.md`; `docs/wmko_api_note.md` (one page).
-- **Verify:** README example runs as written; `index.yaml` and `CHANGES.md`
-  agree on the calibration version; the WMKO note lists every schema field.
-- **Depends on:** S9, S16 (a draft can be written after S9).
+### S18. Documentation, README, CHANGES, WMKO API note *(local)*
+- As v0.1, plus: `nautilus/README.md` finished as the operator guide (image
+  build and push, the pin and how to move it, bucket layout and its private
+  status, secret names and the credentials test, the `kubectl` idioms, how
+  to reduce a new batch, how to sweep failures, how to sync products back,
+  how to run the backup, and how to cut a calibration release), and a README
+  section "Refreshing calibrations" that points at it. The WMKO note states
+  that `keck_etcs.core`/`etc` need neither PypeIt, Nautilus nor S3 access,
+  and that all calibration products are in the package (git), the S3 bucket
+  being private working storage. An optional, later item is noted (not a
+  deliverable): widening bucket access for collaborators. **Verify:** README
+  examples run as written; `index.yaml`, `CHANGES.md` and
+  `nautilus/README.md` agree on the image tags and pins behind the current
+  calibration; the WMKO note lists every schema field. **Depends on:** S9,
+  S16 (a draft can be written after S9).
 
 ## Risks across steps
 
 - **LDS749B S/N.** Faint star, wide slit, two frames: the first sensfunc may
   be noisy and the J2 red edge hard to judge; S5 has fallbacks and S15 brings
   brighter stars.
-- **PypeIt 2.0 API drift.** Between the 1.8 template and today, standard
-  lookup moved to `pypeit.core.standard`, the cache to `pypeit.pkg.cache`, and
-  the data paths to `pypeit.dataPaths`; assume other names have moved and
-  read the source before coding (S2, S4, S6).
+- **PypeIt `develop` drift.** The pin file, not the branch tip, is the
+  reference; local (`pypeit14`) and image must be on the pin for the S4b
+  gate to mean anything (S0 check, `gates.py --reference` SHA assertion).
+  API names (`pypeit.core.standard`, `pypeit.pkg.cache`,
+  `pypeit.dataPaths.telgrid`) were read on `orig-hires-fixes` and may differ
+  on `develop`; read the source at the pin before coding (S2, S4, S6). An
+  editable install does not refresh `pypeit.__version__` on checkout (S0).
+- **Local versus in-pod agreement.** Same PypeIt commit, but the base Python
+  (3.12 vs 3.14) and BLAS differ; the S4b gate measures the effect before
+  any batch. If it matters, switch the base image, do not loosen the gate.
+- **Private bucket.** Every access needs the user's keys: the local AWS
+  profile, the pod secret (verified in S1b), and any collaborator must go
+  through git for products. A wrong or missing secret shows up as
+  `AccessDenied` in the first `s3_sync.py pull` of a pod, so the manifests
+  fail fast rather than reduce and then fail to push. No key value is ever
+  printed or committed.
+- **Image build and registry.** Builds happen on the Linux workstation; the
+  NRP registry has hung on manifest writes; a stale image silently reduces
+  with old code. Every batch logs the tag, digest and pin, and the
+  PROVENANCE block prints the SHAs so a wrong image is visible in the first
+  log lines.
+- **Storage and backup.** No CephFS PVC is used, so PAB's SQLite hang cannot
+  recur; the trade is that a preempted pod loses its scratch and redoes the
+  night (minutes to an hour). Nautilus S3 is not backed up: the committed
+  products are the primary record, the D39 set is copied to `AIOcean:` after
+  each batch and at each release, and anything outside the D39 set
+  (`spec2d`, `Calibrations/`) must be pulled locally while the night is on
+  S3 if a local step needs it (S11, S13).
+- **Secrets and outward-facing actions.** Only secret *names* appear in the
+  repo; image pushes, jobs beyond the pilot and any change to bucket access
+  are proposed to the user, not run unasked.
 - **Wide-slit sample size** depends on Keck practice (Q3, Josh Walawender).
 - **Gemini grid provenance** is second hand (XTcalc `.sav`); verify against
   gemini.edu if it becomes reachable.
-- **Network dependence** of S2 and S14; nothing else needs the network.
-- **Run time.** S4 and S15 are compute-bound; keep them in their own
-  sessions and log intermediate status.
+- **Network dependence.** S2 and S14 need the network locally; S14b needs
+  KOA reachable from the cluster (checked first; fallback: local download
+  and push); everything else in the pods talks only to Nautilus S3.
+- **Run time and sizing.** Per-night wall-clock and memory are unmeasured
+  until S4b; size the batch Jobs from the pilot (S15a), never from the first
+  pod, and keep `activeDeadlineSeconds` on every Job.
 - **Regression churn.** Every calibration release changes numbers; the
   fixtures are regenerated only in S16-type steps, with a `CHANGES.md` line.

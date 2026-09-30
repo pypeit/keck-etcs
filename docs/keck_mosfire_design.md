@@ -1,9 +1,29 @@
 # Keck/MOSFIRE J-band: sensitivity analysis and exposure-time calculator design
 
-*Version 0.1, 2026-09-29. Decisions come from the Q&A in
-`claude_prompts/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed). Readers:
-the PypeIt/keck-etcs developers, future implementation sessions, and WMKO
-staff who will host the web front end.*
+*Version 0.3, 2026-09-30. Decisions come from the Q&A in
+`claude_prompts/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed; round
+(d) on Nautilus, Q27-Q39, answered 2026-09-30). Readers: the PypeIt/keck-etcs
+developers, future implementation sessions, and WMKO staff who will host the
+web front end.*
+
+*Change note, v0.2 (Prompt #5):* the PypeIt reductions now run as Kubernetes
+Jobs on the NRP Nautilus cluster instead of on the workstation (new decision
+D30; new section 4.8; section 4.2 rewritten; provenance fields added in 4.4
+and 5.4; eight flagged decisions and new open items in section 8). The ETC
+library design (section 5) is unchanged except for the provenance fields.
+Conventions follow the user's PAB project (`Oceanography/python/PAB/nautilus/`)
+and the PypeIt dev suite (`PypeIt-development-suite/nautilus/`).
+
+*Change note, v0.3 (Prompt #6):* the user answered Q27-Q39. The eight
+flagged decisions of v0.2 are now settled decisions D31-D38, with three
+changes from the recommended defaults folded in: the bucket `keck-etcs`
+exists and is **private** (D32: every read and write, local or in-pod, needs
+the user's credentials; products are distributed through git, not S3 URLs);
+PypeIt is pinned to a commit on **`develop`**, not `orig-hires-fixes` (D31,
+D35: the local reference reduction must run on the same develop commit);
+and the backup set is defined as the high-level products only (new D39).
+Sections 4.2, 4.3, 4.8 and 8 updated accordingly; the residual items in
+section 8 are verifications, not decisions.
 
 ## 1. Purpose and scope
 
@@ -60,6 +80,16 @@ masks, imaging, and the other Keck instruments (which will reuse
 | D27 | Tests: analytic unit tests, a frozen JSON regression fixture, the XTcalc comparison as a script (not CI), the J0841 validation as a `slow` test. | See section 6. |
 | D28 | Semantic versions for code, date tags for calibration products (`mosfire-J-2026.10`), both echoed in every output with `pypeit_version`; `CHANGES.md`; a calibration release touches only `keck_etcs/data/` and `CHANGES.md`. | WMKO can diff releases. |
 | D29 | Definition of done in section 7. | |
+| D30 | All PypeIt reductions (`pypeit_setup`, `run_pypeit`, `pypeit_sensfunc`, the per-night harvest) and the KOA raw-data downloads run as Kubernetes Jobs on the NRP Nautilus cluster, following the conventions of the user's PAB project and the PypeIt dev suite; the ETC library, its tests, the combine/trend/validation analyses and the KOA metadata search stay local. Section 4.8. | User decision, Prompt #5 (2026-09-30). Tens of KOA nights do not belong on a laptop; the user already runs PypeIt and PAB on Nautilus, and Nautilus S3 already hosts PypeIt's telluric grids. |
+| D31 | Container image `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:<semver>` (public registry, same as `profx/pab`), base `python:3.12`, built on the user's Linux workstation. PypeIt is installed from GitHub at a pinned commit on **`develop`** (recorded in `nautilus/pypeit_pin.txt`; `f3a1f1d27` = `origin/develop` on 2026-09-30, re-pinned only deliberately with an image tag bump); `keck_etcs` installed from this repo; the PypeIt cache populated at build time (`pypeit_cache_github_data keck_mosfire`, `pypeit_install_telluric` on `TellPCA_3000_26000_R10000.fits`, `XDG_CACHE_HOME` pinned); PypeIt and keck_etcs SHAs baked in as `KECK_ETCS_GIT_SHAS` (ENV + label). Section 4.8.2. | Q29, Q30, Q31, Q38. `orig-hires-fixes` is not needed for this work; `develop` is PypeIt's integration branch. 3.12 is what the dev suite and PAB use; switch to 3.14 only if the dry run shows a numerical difference. |
+| D32 | Storage: the **private** bucket `s3://keck-etcs` on Nautilus S3 (Ceph RGW; created by the user 2026-09-30; only the user has read/write) is the canonical store of raw and reduced data, laid out as in 4.2. Every access, local (`scripts/nautilus/s3_sync.py`) or in-pod (a mounted credentials secret in namespace `pypeit`), uses the user's credentials; nothing is public. Pods work on `emptyDir` scratch; no PVC. `$KECK_ETCS_DATA` is the local mirror. Products reach WMKO and collaborators through the committed ECSV/FITS files in git, not through S3 URLs. | Q27, Q28, Q35. A private bucket needs no policy work and cannot be overwritten by others; the committed products were always the primary record (D21, D28). |
+| D33 | One night per pod as an Indexed Job over a night manifest (`completions = n_nights`, `parallelism` 4 to start); each pod idempotent (a night whose `run_manifest.json` exists on S3 is skipped unless `REPLACE=1`). Section 4.8.4. | Q34. PypeIt nights share no writer, so fan-out is safe; PAB's single pod protected a single SQLite writer. |
+| D34 | Each night job harvests its own `sens_*.fits` (`keck_etcs.calib.harvest`) and pushes the per-standard row and curve to `mosfire/<night>/harvest/`; the local `scripts/mosfire/harvest_sens.py --merge` builds `standards.ecsv`. Harvesting a synced sens file locally gives the same row. | Q36. |
+| D35 | The 2022-04-09 night is reduced once locally in `pypeit14` **on the same develop commit as the image pin** (the user switches the PypeIt checkout to `develop`; plan step S0), and that reduction gates the Nautilus dry run: the in-pod LDS749B zero point must agree to 1 percent over 1.117-1.260 um. Every other night is reduced on Nautilus only. | Q37, Q38. The gate is meaningless if local and image run different PypeIt code. |
+| D36 | Reduction provenance on every product: `image`, `image_digest`, `pypeit_git_sha`, `keck_etcs_git_sha`, `job_name`, `s3_prefix`, in the per-standard table (4.4), the per-night `run_manifest.json`, the curve and era `meta` (5.4) and `CHANGES.md` (5.5). A locally harvested row carries `image = local`. | Q38. |
+| D37 | KOA raw-frame downloads run as a Nautilus Job writing to `mosfire/<night>/raw/` on S3 with a manifest; the KOA metadata search stays local; fallback is a local download and `s3_sync.py push` if pods cannot reach KOA anonymously (checked first in plan step S14b). The 2022-04-09 dev-suite frames are pushed from the workstation. | Q33. |
+| D38 | Stays local, in `pypeit14`, on synced products: `keck_etcs.core`, `etc.compute`, the schemas, tests, the Gemini grid build, combine, trend, the J0841 validation, the XTcalc comparison, the KOA metadata search, the PypeIt `ronoise` branch (off `develop`) and the documentation. Pods never call `compute()`; the core keeps its no-I/O rule. | Q39. |
+| D39 | Backup (Nautilus is not backed up): only the high-level products needed for the sensitivity analysis and the ETC are copied from `s3://keck-etcs` to the Google shared drive `AIOcean:keck-etcs/` with `rclone`, after each successful batch of plan step S15 and again, under the calibration tag, at each release (S16). The set is defined in 4.8.9: `sens/`, `harvest/`, `run_manifest.json`, `run.log`, the pypeit file, `Science/spec1d_*`, `manifests/`, `runs/`. Excluded: raw frames (re-downloadable from KOA), `spec2d_*`, `Calibrations/`, PypeIt `QA/`. | Q32. The excluded items are large and re-derivable by re-running a night; the included ones are what the analysis reads and what a re-run would have to reproduce. |
 
 Decisions made while writing this document (not in the Q&A; flagged for
 review):
@@ -85,6 +115,11 @@ review):
   fixed `n_frames` (quadratic, section 5.3.9), as XTcalc does.
 - **N8.** The KOA search will live in `claude_prompts/koa_search_prompts.md`
   (to be created).
+
+The eight decisions flagged in v0.2 while moving the reductions to Nautilus
+were put to the user as Q27-Q39 and are now settled as D31-D38 above (with
+the bucket, PypeIt branch and backup answers folded in, and D39 added for
+the backup set). Section 4.8 carries the detail.
 
 ## 3. Instrument facts and sources
 
@@ -134,29 +169,57 @@ Walawender (WMKO) will say whether the 5" slit was routine for standards; if
 not, the wide-slit sample may be small and `long2pos_specphot` frames become
 important.
 
-### 4.2 Reduction workflow and data root
+### 4.2 Reduction workflow, S3 layout and data root
 
-Data root `KECK_ETCS_DATA`, default `/Users/xavier/Projects/PypeIt/keck-etcs-data`,
-never in git:
+Reductions run on Nautilus (D30). The canonical store is the private bucket
+`s3://keck-etcs` on Nautilus S3 (D32; endpoint
+`https://s3-west.nrp-nautilus.io`, in-cluster
+`http://rook-ceph-rgw-nautiluss3.rook`; only the user's credentials can read
+or write it, so `s3_sync.py` runs with the user's AWS profile and pods mount
+a credentials secret), laid out per instrument and night:
+
+```
+s3://keck-etcs/
+  mosfire/<YYYYMMDD>/raw/*.fits, manifest.ecsv     # KOA frames (download Job, D37) or pushed from local
+  mosfire/<YYYYMMDD>/redux/<night>.pypeit           # the pypeit file actually run
+  mosfire/<YYYYMMDD>/redux/Calibrations/            # WaveCalib*, Flat*, Edges*, Tilts* (for S13 and QA)
+  mosfire/<YYYYMMDD>/redux/Science/spec1d_*.fits    # spec1d always; spec2d only when SPEC2D=1
+  mosfire/<YYYYMMDD>/redux/QA/                      # PypeIt QA PNGs
+  mosfire/<YYYYMMDD>/sens/sens_*.fits, *_QA.png     # pypeit_sensfunc output and telluric QA
+  mosfire/<YYYYMMDD>/harvest/<standard>_<date>.ecsv # per-standard row + curve (D34)
+  mosfire/<YYYYMMDD>/run_manifest.json, run.log     # provenance and the tee'd pod log (D36)
+  manifests/nights_<batch>.csv                      # night manifests that drive the Indexed Jobs
+  runs/<job_name>/status.ecsv                       # per-night status written by the job
+```
+
+The local data root `KECK_ETCS_DATA` (default
+`/Users/xavier/Projects/PypeIt/keck-etcs-data`, never in git) keeps the same
+layout and is a *mirror* of the bucket, filled by
+`scripts/nautilus/s3_sync.py pull mosfire/<night>` (sens, harvest, spec1d and
+`Calibrations/WaveCalib*` by default; raw and spec2d on request). It also
+holds the external inputs that never go to S3:
 
 ```
 $KECK_ETCS_DATA/
   external/xtcalc/XTcalc_dir/          # Keck XTcalc tarball, unpacked (Gemini grids)
-  mosfire/<YYYYMMDD>/raw/              # KOA downloads
-  mosfire/<YYYYMMDD>/redux/            # run_pypeit output (Calibrations/, Science/)
-  mosfire/<YYYYMMDD>/sens/             # sens_*.fits, telluric QA
+  mosfire/<YYYYMMDD>/{raw,redux,sens,harvest}/   # synced from S3 (raw only for 2022-04-09 and on request)
 ```
 
-Per night, `scripts/mosfire/reduce_standard.py` does: `pypeit_setup -s
-keck_mosfire -r raw/ -d redux/ -c all`; edit the generated pypeit file
-(standards longer than 20 s must be retyped `standard`, because PypeIt types
-standards by `exptime < 20 s`; nod pairs get `comb_id`/`bkg_id` as in
-`keck_mosfire_j2_long.pypeit`); `run_pypeit`; then `pypeit_sensfunc -s
-<repo>.sens spec1d_<standard>.fits -o sens/sens_<standard>.fits`. The `.sens`
+Per night, one pod of the Indexed Job (D33) runs `scripts/mosfire/reduce_standard.py`
+on `emptyDir` scratch: pull `raw/` from S3; `pypeit_setup -s keck_mosfire -r
+raw/ -d redux/ -c all`; patch the generated pypeit file (standards longer
+than 20 s must be retyped `standard`, because PypeIt types standards by
+`exptime < 20 s`; nod pairs get `comb_id`/`bkg_id` as in
+`keck_mosfire_j2_long.pypeit`); `run_pypeit`; `pypeit_sensfunc -s <repo>.sens
+spec1d_<standard>.fits -o sens/sens_<standard>.fits`; run the gates
+(`nautilus/gates.py`, 4.8.7); run the harvest (D34); write
+`run_manifest.json`; push everything listed above to S3. The `.sens`
 parameter file is repo-owned (`keck_etcs/data/pypeit_par/keck_mosfire_J.sens`,
-one per band). `scripts/mosfire/harvest_sens.py` then reads every
-`sens_*.fits` into the per-standard table (4.4). Only the harvested tables and
-the combined products are committed.
+one per band) and ships inside the image. The same `reduce_standard.py` runs
+locally in `pypeit14` for the 2022-04-09 reference reduction (D35); the only
+difference is the `--s3` flags. Locally, `scripts/mosfire/harvest_sens.py
+--merge` folds the synced harvest rows into the per-standard table (4.4). Only
+the harvested tables and the combined products are committed.
 
 ### 4.3 Sensfunc and telluric settings
 
@@ -173,8 +236,12 @@ PypeIt `IR` algorithm (`pypeit_sensfunc --algorithm IR`) with:
     maxiter = 2
 ```
 
-The telluric grid (6 MB) is fetched by PypeIt from its S3 host into
-`~/.cache/pypeit` on first use; it is not on this machine yet. PypeIt's
+The telluric grid (6 MB) is fetched by PypeIt from its S3 host into the
+astropy cache (`~/.cache/pypeit` on the workstation) on first use. That host
+is Nautilus S3 itself: PypeIt's `pypeit/data/s3_url.txt` reads
+`s3-west.nrp-nautilus.io`, and the grid is the public object
+`s3://pypeit/telluric/atm_grids/TellPCA_3000_26000_R10000.fits`. The image
+installs it at build time (D31), so pods never download it. PypeIt's
 `tweak_standard` already zeroes J2 outside 1.117-1.260 um and masks Paschen
 lines in DA white dwarfs and A0V stars (`mask_recomb`). The telluric fit
 returns the model parameters (`TELL_THETA`: pressure, temperature, water,
@@ -197,7 +264,10 @@ which is PypeIt's `flux_calib.zeropoint_to_throughput`. `T_sys` is the
 end-to-end fraction of photons above the atmosphere that become electrons:
 telescope, instrument, filter and QE. Per standard we store, in one ECSV row:
 
-`date, mjd, koa_id, standard, std_class (WD|A0V), std_model (calspec file or "vega+2MASS J=..."), filter, slit_width, slit_length, sampmode, numreads, exptime, airmass, pwv_fit, seeing_fwhm_pix (PypeIt FWHM), zp_1200, zp_1250, zp_1300, thru_median_1117_1260, thru_curve_file, pypeit_version, keck_etcs_version, flag`
+`date, mjd, koa_id, standard, std_class (WD|A0V), std_model (calspec file or "vega+2MASS J=..."), filter, slit_width, slit_length, sampmode, numreads, exptime, airmass, pwv_fit, seeing_fwhm_pix (PypeIt FWHM), zp_1200, zp_1250, zp_1300, thru_median_1117_1260, thru_curve_file, pypeit_version, keck_etcs_version, image, image_digest, pypeit_git_sha, keck_etcs_git_sha, job_name, s3_prefix, flag`
+
+(the six columns from `image` to `s3_prefix` are the reduction provenance of
+D36; a row harvested from a local reduction carries `image = local`)
 
 and the full `T_sys(lam)` curve on a common 1 A vacuum grid in a per-standard
 ECSV under `keck_etcs/data/mosfire/throughput/standards/`. Filter curves are
@@ -237,6 +307,187 @@ brighter stars. Expect 3-5 percent scatter per standard, which sets the
 smallest era-to-era change we can detect at a few percent with ~10 standards
 per era.
 
+### 4.8 Reduction infrastructure on Nautilus
+
+This section records how the reductions of 4.2 are run (D30) and which of
+the user's established conventions they inherit. Nothing here changes the
+physics or the ETC; it changes where `run_pypeit` executes and where its
+products live.
+
+**4.8.1 Conventions carried over.** From `Oceanography/python/PAB/nautilus/`
+(HOWTO.md, `build_image.sh`, the `*_job.yaml` manifests and their helper
+scripts) and `PypeIt-development-suite/nautilus/` (`gen_kube_devsuite`,
+`kube_dev_suite.yaml`):
+
+- One Kubernetes Job (`batch/v1`) per unit of work, `restartPolicy: Never`,
+  `backoffLimit: 4` for idempotent, resumable work and `0` for one-shots and
+  validation runs, `activeDeadlineSeconds` as a safety net against hung pods,
+  `imagePullPolicy: Always` on a semver tag with the image digest noted in a
+  comment.
+- `command: ["/bin/bash", "-lc"]` with a YAML literal block (`|`, never the
+  folded `>`), `set -o pipefail`, a `log()` helper printing
+  `=== <stage> <date -Is> ===` tee'd to a durable log, a PROVENANCE block
+  first (versions and git SHAs), counts or checks before and after, `du -sh`,
+  a `*_DONE` sentinel, and `exit 1` on a failed stage so a broken run stops
+  rather than carries on. One-line `python -c` snippets, no here-docs.
+- A header comment on every manifest stating purpose, sizing from measured
+  rates (never from an early sample), and the three `kubectl` lines to delete,
+  apply and follow the job. Helper scripts are mounted as ConfigMaps
+  (`kubectl create configmap ... --from-file ... --dry-run=client -o yaml |
+  kubectl apply -f -`); anything over the 1 MiB ConfigMap limit goes to S3.
+- Secrets are mounted, never copied: `prp-s3-credentials` at
+  `/root/.aws/credentials` (subPath `credentials`); `HOME=/root`. No secret
+  value ever appears in this repository.
+- Storage: Nautilus S3 with path-style addressing, uploads through a boto3
+  helper (the image ships no `aws` CLI) that is idempotent by key and size;
+  the dev suite instead installs `awscli` in the pod, which is also
+  acceptable. PAB's bucket is public-read; ours is private (D32), so the
+  credentials secret is mounted for reads as well as writes. Nautilus is not
+  backed up, so the high-level products are copied to the Google shared
+  drive (`AIOcean:` via rclone; D39, 4.8.9).
+- Pilot before production: a tiny validation run with hard gates that exit
+  non-zero (`v2_validate_gates.py`), then a subsample, then the full batch.
+  Failures are re-run by targeted manifests (the `rediscover_csv.py` /
+  `sweep_stalled.csv` pattern), never by re-running everything.
+- A throwaway `python:3.12-slim` inspect pod for looking at storage.
+- Outward-facing infrastructure (namespaces, buckets, image pushes, large
+  jobs) is confirmed with the user first.
+
+**4.8.2 Image (D31).** `nautilus/Dockerfile` and `nautilus/build_image.sh
+[--push]`, run on the Linux workstation (Q30; this Mac has `kubectl` and
+`rclone` but no `docker`), built from a staged context (this repo plus
+nothing else; PypeIt comes from GitHub). The PypeIt pin is the single file
+`nautilus/pypeit_pin.txt` holding one full commit SHA on `develop`
+(`f3a1f1d274b15ee1358f167819d77f1948fce1bd` = `origin/develop` on
+2026-09-30, `git describe` 2.0.1-1216, expected version string
+`2.0.2.dev1216+gf3a1f1d27`; confirmed in plan step S0). Re-pinning is a
+deliberate edit of that file plus an image tag bump recorded in
+`nautilus/README.md` and `CHANGES.md`; `build_image.sh` refuses to build if
+the pin is not an ancestor of `origin/develop`. Layers: (1) third-party
+dependencies only, so a keck_etcs edit rebuilds a small layer (PAB's
+2026-09-26 lesson); (2) `pip install
+git+https://github.com/pypeit/PypeIt.git@$(cat nautilus/pypeit_pin.txt)`
+and `pip install /opt/src/keck-etcs`; (3) cache population:
+`pypeit_cache_github_data keck_mosfire` and `pypeit_install_telluric` on the
+TellPCA grid downloaded from the public Nautilus URL
+(`s3://pypeit/telluric/atm_grids/`, which *is* public) with a sha256 check
+against `nautilus/telluric_grid.sha256`, and `ENV XDG_CACHE_HOME=/opt/cache`
+so the cache lands at `/opt/cache/pypeit` regardless of `HOME`; (4) build
+guards that fail the build: `pypeit.__version__` ends with the pinned short
+SHA, `pypeit.pkg.cache.search_cache('TellPCA')` returns the grid, `run_pypeit
+--help`, `pypeit_sensfunc --help`, `python -c "import keck_etcs.calib.harvest"`,
+and `KECK_ETCS_GIT_SHAS` has no `unknown`. `MPLBACKEND=Agg`,
+`PYTHONUNBUFFERED=1`, `OMP_NUM_THREADS` left to the manifest. Image tags
+follow `keck_etcs.__version__`; every tag is recorded with its digest and
+its PypeIt pin in `nautilus/README.md`. The registry project and its
+`write_registry` deploy token are created once by the user (Q29), who runs
+`docker login gitlab-registry.nrp-nautilus.io` on the workstation.
+
+**4.8.3 Storage (D32).** Layout in 4.2. The pod's working directory is an
+`emptyDir` sized by `ephemeral-storage` (a MOSFIRE night is a few GB of
+outputs); nothing is written to a shared file system. Push list per night:
+the pypeit file, `Calibrations/`, `Science/spec1d_*`, `QA/`, `sens/`,
+`harvest/`, `run_manifest.json`, `run.log`; `spec2d_*` (large) only when the
+manifest sets `SPEC2D=1`, which the validation nights do. The bucket is
+private (D32): only the user's Nautilus S3 keys can list, read or write it,
+so `scripts/nautilus/s3_sync.py` (boto3; endpoint from `ENDPOINT_URL`,
+credentials from `AWS_PROFILE` in `~/.aws/credentials` or the `AWS_*`
+environment, never from the repo) is the only local access path, pods mount
+the credentials secret named in the manifests (`KECK_ETCS_S3_SECRET`,
+default `prp-s3-credentials` in namespace `pypeit`; whether that secret
+holds keys with access to `keck-etcs` is a verification item for the user in
+plan step S1b, otherwise a new secret `keck-etcs-s3-credentials` is created
+from the user's `~/.aws/credentials`), and anyone else (WMKO, collaborators)
+gets the products from git, not from S3. Only public KOA data are staged in
+any case. `s3_sync.py` has `push`, `pull` and `ls` subcommands, skips
+objects already present with the same size, and fails loudly on
+`AccessDenied` rather than falling back to anonymous access. Widening bucket
+access later (a read policy for named users, or pre-signed URLs) is an
+optional step, not a deliverable of this plan.
+
+**4.8.4 Jobs (D33).** `nautilus/night_job.yaml` is an Indexed Job
+(`completionMode: Indexed`); the pod reads its night from row
+`JOB_COMPLETION_INDEX` of the manifest CSV (columns: `night`, `instrument`,
+`s3_prefix`, `standard`, `slit`, `spec2d`, `notes`) mounted as a ConfigMap or
+pulled from `manifests/`. `parallelism: 4` to start; raise only after the
+per-night rate and memory are measured on the pilot. Initial resources per
+pod, to be measured in the dry run: requests and limits `cpu: 4`, `memory:
+16Gi`, `ephemeral-storage: 30Gi` request / `60Gi` limit; `OMP_NUM_THREADS=4`;
+`activeDeadlineSeconds: 21600` (6 h) per job. Other manifests:
+`nautilus/koa_download_job.yaml` (D37), `nautilus/inspect_pod.yaml`, and
+`nautilus/validate_job.yaml` (the 2022-04-09 dry run with `backoffLimit: 0`).
+All manifests use namespace `pypeit` (Q27) and mount the credentials secret
+of 4.8.3 at `/root/.aws/credentials` (subPath `credentials`), for reads and
+writes alike.
+
+**4.8.5 Provenance (D36).** The pod's PROVENANCE block prints and
+`run_manifest.json` records: `image` (tag), `image_digest`, `pypeit_version`,
+`pypeit_git_sha`, `keck_etcs_version`, `keck_etcs_git_sha`, `job_name`,
+`pod`, `node`, `started`, `finished`, `night`, `s3_prefix`, the sha256 of
+every raw frame and of every pushed product, the pypeit file text, and the
+gate results. `keck_etcs.calib.harvest` copies these into the per-standard
+row (4.4) and into the `meta` of the curve file (5.4). A calibration release
+lists in `CHANGES.md` the image tags whose reductions it used.
+
+**4.8.6 Failure handling.** A night is `success` only when all gates pass and
+the push completes; otherwise the pod writes `status in {no calibs, setup
+failed, reduce failed, no trace, sens failed, gate failed, push failed}` with
+the exception text to `runs/<job_name>/status.ecsv` and exits non-zero, so the
+Job reports the failed index. Pods are idempotent: a night whose
+`run_manifest.json` already exists on S3 is skipped unless `REPLACE=1`, so
+re-applying a Job after preemption resumes. `nautilus/night_failures.py`
+turns `status.ecsv` into a sweep manifest of failed nights;
+`nautilus/status_table.py` builds the per-night status table of step S15 from
+the `run_manifest.json` objects (store-only, no reduction). A night that fails
+twice for a data reason (no flats, standard off-slit) is recorded as such and
+not retried.
+
+**4.8.7 Dry run and gates (D35).** Before any batch, `validate_job.yaml`
+reduces 2022-04-09 in one pod and `nautilus/gates.py` checks: spec1d files
+for both LDS749B traces and all four J0841 frames; wavelength RMS below
+PypeIt's threshold; sensfunc zero point finite over 1.117-1.260 um; implied
+median throughput 0.15-0.45; and, given the local reference products from
+step S4 (`--reference` pointing at a synced-back copy), zero-point agreement
+to 1 percent and `S2N` agreement to 5 percent. The same gates run inside every
+production pod (without `--reference`). The pilot after the dry run is a
+3-5 night batch (the first wide-slit standards) before the full manifest.
+
+**4.8.8 What stays local (D38).** Everything under `keck_etcs/` that WMKO will
+call, and every analysis that reads harvested products: the Gemini grid build
+(S3), core, instrument module, `compute()`, tests, `combine`, `trend`, the
+J0841 validation (on synced spec1d and sens files), the XTcalc comparison, the
+KOA metadata search, the PypeIt `ronoise` branch, and the documentation.
+`pypeit14` remains the local environment; the image pins the same PypeIt
+commit so local and in-pod PypeIt agree.
+
+**4.8.9 Backup (D39).** Nautilus S3 is not backed up and the raw frames are
+re-downloadable, so the backup set is the high-level products only, per
+night under `mosfire/<YYYYMMDD>/`:
+
+| Included (copied to `AIOcean:keck-etcs/`) | Excluded (re-derivable or re-downloadable) |
+|---|---|
+| `sens/sens_*.fits` and the telluric QA PNGs | `raw/*.fits` (KOA) |
+| `harvest/*.ecsv` (row and curve) | `redux/Science/spec2d_*.fits` |
+| `run_manifest.json`, `run.log`, `redux/<night>.pypeit` | `redux/Calibrations/` (incl. `WaveCalib*`; S13 commits its measurements to `lsf_measurements.ecsv`) |
+| `redux/Science/spec1d_*.fits` (standards and validation science frames) | `redux/QA/` |
+| `manifests/`, `runs/<job>/status.ecsv`, `raw/manifest.ecsv` | |
+
+Per night this is tens of MB, dominated by spec1d and sens files. Timing:
+`scripts/nautilus/backup_products.py` (an `rclone copy nautilus_s3:keck-etcs/
+AIOcean:keck-etcs/` with `--include` filters for the set above; idempotent)
+runs after every successful S15 batch and, at each calibration release
+(S16), once more into a dated, tagged subdirectory
+`AIOcean:keck-etcs/releases/<calib_version>/` so the release's inputs are
+frozen. The committed products in git remain the primary record; the backup
+exists to avoid re-reducing if the bucket is lost. Two judgment calls are
+flagged: including *all* spec1d files (the science frames are small and S11
+needs them) and excluding `WaveCalib*` (needed only to redo S13, which a
+re-reduction regenerates).
+
+**4.8.10 Residual verification items** are listed in section 8 (credentials
+secret, registry project and token, local PypeIt checkout on `develop`, KOA
+reachability from pods).
+
 ## 5. ETC design (B)
 
 ### 5.1 Package layout
@@ -272,7 +523,9 @@ keck_etcs/
     pypeit_par/*.sens
   tests/
 scripts/                      # one-off analyses and reduction drivers
-  mosfire/
+  mosfire/                    # reduce_standard.py runs locally (reference) and inside the pods
+  nautilus/s3_sync.py         # boto3 push/pull between the bucket and $KECK_ETCS_DATA
+nautilus/                     # Dockerfile, build_image.sh, Job manifests, ConfigMap helpers (D30, 4.8)
 bin/keck_etc                  # CLI: JSON file in, JSON out
 docs/
 ```
@@ -498,7 +751,10 @@ modeled; the output carries a fixed warning when the flag is not `ok`.
   minimum integration, source URLs.
 - **Throughput** per era (4.5) and per standard (4.4), ECSV, with `meta`:
   `instrument`, `band`, `era`, `standards` (list of name/date/KOA id),
-  `pypeit_version`, `keck_etcs_version`, `created`, `script`.
+  `pypeit_version`, `keck_etcs_version`, `created`, `script`, and the
+  reduction provenance of D36 (`image`, `image_digest`, `pypeit_git_sha`,
+  `keck_etcs_git_sha`, `job_name`, `s3_prefix`; per-era files carry the list
+  of image tags used).
 - **Instrument config** in code (`instruments/mosfire.py`): band windows,
   dispersions, LSF parameters, era boundaries, each with a source comment.
 - **Registry** `keck_etcs/data/index.yaml`: every shipped file with its
@@ -511,7 +767,8 @@ date tags `mosfire-J-YYYY.MM` in `index.yaml` and in each file's `meta`.
 Every `compute` output echoes `keck_etcs_version`, `calib_version` and the
 `pypeit_version` used to build the products. `CHANGES.md` has a section per
 calibration release listing standards added, the era medians before and
-after, and any change in the detector table. A calibration release is one
+after, any change in the detector table, and the image tags (with digests)
+of the Nautilus reductions that fed it (4.8.5). A calibration release is one
 commit touching only `keck_etcs/data/` and `CHANGES.md`.
 
 ## 6. Validation and testing
@@ -593,6 +850,34 @@ not circular. Later, every KOA quasar night adds a validation point.
   files (comment "From Gemini: mk_skybg_zm_16_10.dat"); record the Gemini
   page URL and, if it becomes reachable, verify against the original ASCII.
 
+Nautilus items (v0.3): the decisions of v0.2 were answered in Q27-Q39 and
+are settled as D31-D39. What remains are verifications and one-time actions
+by the user, each tied to the plan step that checks it:
+
+- **Local PypeIt checkout on `develop` (S0, user action):** switch
+  `/Users/xavier/Projects/PypeIt/PypeIt` from `orig-hires-fixes` to
+  `develop` at the pinned commit (`nautilus/pypeit_pin.txt`), and if
+  `pypeit.__version__` in `pypeit14` still reports `g017bece06` afterwards,
+  re-run `pip install -e .` there so `pypeit/pkg/version.py` is regenerated.
+  `scripts/check_pypeit_pin.py` verifies the SHA and version string match.
+- **Credentials secret in namespace `pypeit` (S1b, user verification):**
+  whether `prp-s3-credentials` there holds keys that can list
+  `s3://keck-etcs` (test: the inspect pod lists the bucket with the mounted
+  secret), or a new `keck-etcs-s3-credentials` secret must be created from
+  the user's `~/.aws/credentials`. Local `s3_sync.py` uses the same keys via
+  `AWS_PROFILE`.
+- **Registry project and deploy token (S4a, user action):** create the
+  GitLab project `profx/keck-etcs` (public) and a `write_registry` deploy
+  token; `docker login` on the workstation.
+- **KOA from the cluster (S14b check):** that pods reach
+  `koa.ipac.caltech.edu` and `pykoa` downloads public data without a login;
+  otherwise the D37 fallback (local download, `s3_sync.py push`).
+- **Base Python revisit (S4b):** only if the dry run shows a numerical
+  difference between the local 3.14 reference and the 3.12 image.
+- **Wider bucket access (optional, later):** if WMKO or collaborators ever
+  need the S3 products directly, a read policy for named users or pre-signed
+  URLs; not part of this plan, since products ship in git.
+
 ## 9. References
 
 - Keck MOSFIRE pages: instrument home, detector (`detector.html`), filters
@@ -618,3 +903,12 @@ not circular. Later, every KOA quasar night adds a validation point.
   `scripts/inspect_mosfire_j2_headers.py`, `scripts/check_mosfire_standards.py`,
   `scripts/inspect_xtcalc_files.py`, `scripts/size_gemini_sky_subset.py`,
   `scripts/mosfire_band_footprints.py`.
+- Nautilus precedents (D30, section 4.8): the PAB project's
+  `Oceanography/python/PAB/nautilus/` (`build_image.sh`, `Dockerfile`,
+  `*_job.yaml`, `s3_push.py`, `v2_validate_gates.py`, `rediscover_csv.py`,
+  `v2_ingest_failures.py`, `inspect_pod.yaml`), its `HOWTO.md` and
+  `claude_prompts/nautilus_prompts.md`; the PypeIt dev suite's
+  `PypeIt-development-suite/nautilus/` (`gen_kube_devsuite`,
+  `kube_dev_suite.yaml`, `README_s3`, `s3_pypeit_policy.json`); PypeIt's
+  `pypeit/pkg/cache.py`, `pypeit/data/s3_url.txt` and the
+  `pypeit_install_telluric` / `pypeit_cache_github_data` scripts.

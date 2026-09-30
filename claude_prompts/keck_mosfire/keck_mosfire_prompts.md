@@ -36,6 +36,88 @@ Use Fable if you can.  Log your work.
 4. The Implementation plan looks very good.  Please generate one or more prompt docs to perform it.  Call them `keck_mosfire/keck_mosfire_prompt_1.md`, etc.  
 Use Fable if you can.  Log your work.
 
+5. Ok, I have one significant change for the design and implementation plan. 
+I wish to perform the data reduction within Nautilus.  Please examine the code and files in
+the `Oceanography/python/PAB/nautilus/` folder to see how I have performed such work 
+previously.  Then modify the design and implementation plans to reflect this change.
+Use Fable if you can.  Log your work.
+
+6. I have answered your questions about Nautilus below.  Please read the answers and make updates to the design, plan, and prompt docs.
+Use Fable if you can.  Log your work.
+
+## Registry
+
+*2026-09-30. One-time setup of the container registry for the keck-etcs image
+(D31; plan steps S0 item 4 and S4a). It is the same procedure you followed for
+`profx/pab` in July (PAB `claude_prompts/nautilus_prompts.md`, Container
+section). Your part is steps 1-4. Step 5 happens in S4a.*
+
+**Target:** `gitlab-registry.nrp-nautilus.io/profx/keck-etcs`, a **public**
+image, so pods in namespace `pypeit` pull it without an `imagePullSecret`.
+
+1. **Create the GitLab project.** Sign in at `https://gitlab.nrp-nautilus.io`
+   and choose New project, then Create blank project:
+   - Project name `keck-etcs`, namespace `profx` (your user).
+   - Visibility level **Public**. The repository stays empty; the project is
+     only a home for the registry, so leave the README unchecked (or check
+     it, it doesn't matter).
+   - After creating it, open Settings, General, "Visibility, project features,
+     permissions" and confirm **Container registry** is enabled and visible to
+     "Everyone with access". Otherwise anonymous pulls from pods fail.
+   - Check: Deploy, Container Registry in the left sidebar shows an empty
+     registry at the path above.
+
+2. **Create a deploy token.** In the project, go to Settings, Repository,
+   Deploy tokens, then Add token:
+   - Name `keck-etcs-build`. Set no expiry, or one after the MOSFIRE
+     milestone.
+   - Scopes: **`read_registry`** and **`write_registry`** only.
+   - Copy the token **username** (e.g. `gitlab+deploy-token-NNN`) and the
+     **token** into your password manager. GitLab shows the token only once.
+   - A Personal Access Token with `write_registry` also works, but a deploy
+     token is limited to this one project, which is safer.
+
+3. **Log in on the build host** (the Linux workstation, D31). Use stdin so the
+   token stays out of shell history and `ps`:
+   ```bash
+   docker --version     # confirm docker is installed
+   printf '%s' '<token>' | docker login gitlab-registry.nrp-nautilus.io \
+       -u 'gitlab+deploy-token-NNN' --password-stdin
+   ```
+   The expected output is `Login Succeeded`. The credential lands in
+   `~/.docker/config.json` on the workstation, which you were already logged
+   into for `profx/pab`. A deploy token is per project, so this is a new login
+   for `keck-etcs`. It replaces the PAB entry for the same registry host, and
+   that is fine: to push PAB again, log in with the PAB token.
+
+4. **Tell me when it's done**, and confirm (a) the exact registry path, if it
+   differs from the one above, and (b) that the project is Public. **Do not**
+   paste the token anywhere in this repository or in chat.
+
+5. **(S4a, done by me with you at the workstation.)** `nautilus/build_image.sh`
+   builds and smoke-tests `profx/keck-etcs:0.1.0`. With `--push` it runs
+   ```bash
+   docker push gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.0
+   docker manifest inspect gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.0
+   ```
+   and records the digest in the job YAML header. An anonymous pull from the
+   cluster (the S1b inspect pod, with the image swapped in) confirms that pods
+   can fetch it.
+
+**Things to know**
+- **The image is public; the bucket is private.** Nothing secret goes into the
+  image: no S3 keys and no `.netrc`. Pods get S3 credentials only by mounting
+  the Kubernetes secret at run time (D32). `build_image.sh` will refuse to
+  build if a credentials file is in the build context.
+- **Registry hangs.** The NRP registry has hung on manifest writes before.
+  If a `docker push` stalls for more than about 10 minutes on "Waiting" or at
+  the manifest step, interrupt it and push again. Layers already uploaded are
+  skipped. Then confirm with `docker manifest inspect`.
+- **Tags.** Semantic versions (`0.1.0` for the dry run, `0.2.0` before the
+  batches) plus `latest`. Jobs reference the explicit tag, never `latest`, and
+  carry the digest in a comment (PAB convention).
+- **Revoking.** If the token leaks, revoke it under Settings, Repository,
+  Deploy tokens and repeat steps 2-3. Already-pushed images are unaffected.
 
 ## Q&A
 
@@ -354,6 +436,95 @@ term to explain, then the questions I still need answered before drafting
 on the 5" slit and the KOA `SAMPMODE` census only change numbers in the
 sensitivity section, and I would mark both as TBD in the draft.
 
+### (d) Reductions on Nautilus
+
+*2026-09-30, after Prompt #5. These are the decisions that moving the
+reductions to Nautilus left for you (design doc v0.2, section 8, and decisions
+N9-N16 in section 2; detail in section 4.8). As before, each ends with my
+recommended default, so "agree" is a complete answer.*
+
+27. **Namespace.** `pypeit` (the dev-suite namespace, where
+    `prp-s3-credentials` already exists) or `sea-meets-the-stars` (PAB)?
+    *Default:* `pypeit`.
+>A. Default
+
+28. **S3 bucket.** A new bucket `keck-etcs` with a public-read policy like
+    `pab`'s, or a prefix inside the existing `pypeit` bucket? The `pypeit`
+    bucket's policy allows anonymous `PutObject`/`DeleteObject`, so anyone
+    could overwrite our products there. *Default:* a new bucket `keck-etcs`,
+    public-read only, writes need credentials.
+>A. A new bucket named `keck-etcs`.  I have created it.  Only I have read/write access for now 
+
+29. **Container registry.** `gitlab-registry.nrp-nautilus.io/profx/keck-etcs`,
+    public, same as `profx/pab`. This needs you to create the GitLab project
+    and a deploy token with `write_registry` once. *Default:* yes, that path.
+>A. Default
+
+30. **Build host.** This Mac has no `docker`. Build on the Linux workstation
+    as you did for PAB, or install `colima`/`podman` here? *Default:* the
+    workstation (plan step S4a assumes it).
+>A. Default
+
+31. **Python in the image.** `python:3.12` (what the dev suite and PAB use,
+    and the safest for wheels) or `python:3.14` (matches the local `pypeit14`
+    env)? PypeIt is pinned to the same commit either way. *Default:* 3.12, and
+    switch to 3.14 if the dry run shows any numerical difference from the
+    local reduction.
+>A. Default
+
+32. **Backup.** Nautilus is not backed up. `rclone` the bucket's `harvest/`
+    and `sens/` prefixes to `AIOcean:` at each calibration release? *Default:*
+    yes, at release time only. The committed ECSV products are the primary
+    record.
+>A. Backup only the high-level products needed for the sensitivity analysis and the ETC.
+
+33. **KOA downloads (N15).** Run the raw-frame downloads as a Nautilus Job
+    that writes straight to S3, with the metadata search staying local? This
+    depends on pods reaching `koa.ipac.caltech.edu` and `pykoa`'s anonymous
+    download of public data working without a login, which step S14b checks
+    first. *Default:* in-cluster, with local download and push as the
+    fallback.
+>A. Default
+
+34. **One night per pod (N11).** An Indexed Job with one pod per night,
+    `parallelism` 4 to start. In PAB you kept to one pod because of the single
+    SQLite writer. PypeIt nights share no writer, so fanning out is safe.
+    *Default:* Indexed Job, one night per pod.
+>A. Default
+
+35. **No PVC (N10).** Pods work on `emptyDir` scratch and push to S3. S3 is the
+    canonical store and `$KECK_ETCS_DATA` is a local mirror synced by
+    `scripts/nautilus/s3_sync.py`. No CephFS PVC, given PAB's SQLite-on-CephFS
+    hangs and PypeIt's many small files. *Default:* agreed, no PVC. A small
+    one can be added later for inspection only.
+>A. Default
+
+36. **Harvest in the pod (N12).** Each night job harvests its own `sens_*.fits`
+    and pushes the per-standard row and curve, and a local `--merge` builds
+    `standards.ecsv`. *Default:* agreed.
+>A. Default
+37. **Local reference as the gate (N13).** Reduce 2022-04-09 once locally.
+    The Nautilus dry run must reproduce the LDS749B zero point to within 1
+    percent over 1.117-1.260 um before any batch runs. All other nights are
+    reduced on Nautilus only. *Default:* agreed, 1 percent tolerance.
+>A. Default
+38. **Image contents and provenance (N9, N14).** PypeIt installed from GitHub
+    at the local commit (`017bece06`, currently on `origin/orig-hires-fixes`),
+    the MOSFIRE and telluric caches baked in at build time, and git SHAs
+    baked in as `KECK_ETCS_GIT_SHAS`. Every product records `image`,
+    `image_digest`, `pypeit_git_sha`, `keck_etcs_git_sha`, `job_name` and
+    `s3_prefix`. One question inside this: pin to a commit on
+    `orig-hires-fixes`, or wait for it to merge and pin to `develop`?
+    *Default:* pin the current commit now and re-pin at the first calibration
+    release.
+>A. This work will not need the `orig-hires-fixes` branch.  Have our work use the `develop` branch.
+
+39. **What stays local (N16).** The ETC core, `compute()`, schemas, tests, the
+    Gemini grid build, combine, trend, the J0841 validation and the XTcalc
+    comparison all run locally on synced products. Pods never call
+    `compute()`. *Default:* agreed.
+>A. Default
+
 ## Logs
 
 ### 2026-09-29 (Prompt #1: context survey and Q&A for MOSFIRE J)
@@ -591,3 +762,274 @@ What I learned: `claude_prompts/` now holds `starting_up.md`, the new
 doc and six part docs; the main doc's Context still points at the dev-suite
 raw data and the Keck ETC page, so the part docs carry their own fuller
 Context sections.
+
+### 2026-09-30 (Prompt #5: move reductions to Nautilus)
+
+Read every file in `Oceanography/python/PAB/nautilus/` (26 files: the
+`*_job.yaml` manifests, `build_image.sh`, the helper scripts, the CSVs),
+PAB's `Dockerfile`, `HOWTO.md`, `CLAUDE.md`, `README.md` and
+`claude_prompts/nautilus_prompts.md`, then the PypeIt dev suite's own
+`nautilus/` folder (`gen_kube_devsuite`, `kube_dev_suite.yaml`,
+`full_dev_suite_6cpu.yaml`, `README_s3`, `s3_pypeit_policy.json`,
+`rclone.conf`, `README_gdrive`), and PypeIt's `pypeit/pkg/cache.py`,
+`pypeit/pkg/pypeitdata.py`, `pypeit/data/s3_url.txt` and the
+`install_telluric` / `cache_github_data` scripts. Then bumped both design
+documents to v0.2 with change notes. No git commands other than `git status`,
+`git log`, `git branch -r --contains` and `git remote -v`; no scripts written
+(this prompt is planning only; the plan's S1b, S4a, S4b, S14b and S15 name
+the scripts and manifests to write).
+
+**Design doc (`docs/keck_mosfire_design.md` v0.2).** New user decision D30
+(reductions and KOA downloads as Nautilus Jobs; ETC library, tests,
+combine/trend/validation and the KOA metadata search stay local). Section
+4.2 rewritten around an S3 bucket layout that mirrors the data root
+(`mosfire/<YYYYMMDD>/{raw,redux,sens,harvest}`, `run_manifest.json`,
+`manifests/`, `runs/<job>/status.ecsv`), with `$KECK_ETCS_DATA` as the local
+mirror filled by `scripts/nautilus/s3_sync.py`. Section 4.3 corrected:
+PypeIt's telluric "S3 host" is Nautilus S3 itself. Section 4.4 gains six
+provenance columns. New section 4.8 (conventions carried over, image,
+storage, jobs, provenance, failure handling, dry run and gates, what stays
+local). 5.1 layout gains `nautilus/` and `scripts/nautilus/`; 5.4 and 5.5
+carry the image tags into product `meta` and `CHANGES.md`. New flagged
+decisions N9-N16: image pinned to the local PypeIt commit with the cache
+baked in (N9); S3 canonical plus `emptyDir` scratch, no PVC (N10); one night
+per pod as an Indexed Job (N11, a deliberate departure from PAB's single
+pod, justified because PypeIt nights share no writer); harvest in the pod
+plus a local merge (N12); one local reference reduction of 2022-04-09 as
+the dry-run gate (N13); provenance fields (N14); KOA downloads in-cluster
+(N15); the local/remote split (N16). Section 8 lists the user's calls with
+recommended defaults: namespace (`pypeit`), bucket (new `keck-etcs`,
+public-read only), registry path (`profx/keck-etcs`), build host (the Linux
+workstation; this Mac has no `docker`), base Python (3.12 vs 3.14), backup
+of the bucket to `AIOcean:` at release time, KOA reachability from pods.
+
+**Implementation plan (`docs/keck_mosfire_implementation.md` v0.2).** S1-S18
+keep their numbers; new suffixed steps S1b (bucket, secrets check,
+`s3_sync.py`, bucket policy, inspect pod, push the 2022-04-09 raw frames),
+S4a (`nautilus/Dockerfile`, `build_image.sh`, `keck_etcs/provenance.py`,
+build guards), S4b (`night_job.yaml` Indexed template, `validate_job.yaml`,
+`gates.py`, `night_failures.py`, `status_table.py`, the dry run gated
+against the local S4 reference to 1 percent in zero point), S14b
+(`koa_download_job.yaml`, `download_mosfire_night.py --to-s3`). Re-scoped in
+place: S2 (records the grid sha256 for the image guard; API is
+`dataPaths.telgrid`, not `tel_model`), S4 (local reference; the driver is
+designed as the in-pod driver with `--scratch`/`--s3-*` hooks), S5, S6
+(harvest module runs in-pod, `--merge` locally), S13 and S11 (synced
+inputs), S14 (metadata only, plus night manifests), S15 (S15a pilot, S15b
+batches and sweeps, S15c sync and merge), S16, S17 and S18 (operator guide
+in `nautilus/README.md`). Dependency map, parallel groups, verification
+checks and the risks section updated (local-versus-in-pod agreement, image
+and registry, no-PVC trade-off, secrets and outward-facing actions, sizing
+from the pilot).
+
+**What I learned about the user's Nautilus workflow.** PAB: namespace
+`sea-meets-the-stars`; public image `gitlab-registry.nrp-nautilus.io/profx/pab:<semver>`
+built by `build_image.sh [--push]` from a staged rsync context with
+third-party deps in a separate first layer, git SHAs baked in as
+`PAB_GIT_SHAS` (ENV + OCI label) because the image has no `.git`, behavioural
+build guards, and a bounded `--rm` smoke test; the user does `docker login`
+with a deploy token; the NRP registry has hung on manifest writes. Storage:
+CephFS PVC `pab-data` (storage class `rook-cephfs`, not `cephfs`) at
+`/data` with per-version subdirectories, plus Nautilus S3 (Ceph RGW,
+path-style, `https://s3-west.nrp-nautilus.io`, public-read bucket `pab`)
+pushed by a boto3 helper mounted as a ConfigMap because the image ships no
+`aws` CLI; SQLite on CephFS hard-hangs, fixed by a DB-local `emptyDir` copy
+with a periodic file-copy checkpoint; Nautilus is not backed up, so releases
+are rcloned to `AIOcean:`. Jobs: one `batch/v1` Job per stage, one pod,
+in-process parallelism (the user explicitly asked "why multiple pods" and
+the answer was the single SQLite writer), `restartPolicy: Never`,
+`backoffLimit: 4` for resumable stages and `0` for one-shots,
+`activeDeadlineSeconds` after an exit hang, `imagePullPolicy: Always`, image
+digest in a comment, `bash -lc` with a literal `|` block (a folded `>` block
+broke a here-doc once; one-line `python -c` only), `set -o pipefail`, a
+`log()` helper tee'd to the PVC, a PROVENANCE block first, counts before and
+after, `du -sh`, a `*_DONE` sentinel, `exit 1` on stage failure, `ulimit -n`
+and `MALLOC_ARENA_MAX` where earned, node affinity to west-coast nodes for
+network-bound stages, secrets `earthdata-netrc` and `prp-s3-credentials`
+mounted by subPath, and a header comment with purpose, sizing from measured
+rates ("take the rate from a few hundred in, not the first fifty") and the
+three `kubectl` lines. Failures: idempotent stages re-applied; targeted
+subset CSVs (`rediscover_csv.py`, `sweep_stalled.csv`); failure-list
+scripts for the user to chase; gate scripts that exit non-zero
+(`v2_validate_gates.py`, which also learned to check artefacts, not just the
+database); a 5-profile validate, a stratified 1k pilot, then the full run.
+Dev suite: namespace `pypeit`, bucket `s3://pypeit` (in-cluster endpoint
+`http://rook-ceph-rgw-nautiluss3.rook`; its policy allows anonymous
+Put/Delete), everything on `emptyDir` ephemeral storage with results pushed
+to S3 by `awscli` installed in the pod, PypeIt installed at run time from a
+git branch, telluric grids copied from `s3://pypeit/telluric/atm_grids/`,
+raw data from S3 or Google Drive via a service-account rclone remote.
+
+**What I learned about the repository and PypeIt.** `pypeit14` is Python
+3.14.6 with PypeIt `2.0.2.dev1217+g017bece06` as an editable install of
+`/Users/xavier/Projects/PypeIt/PypeIt`, clean, on branch `orig-hires-fixes`
+whose HEAD is on `origin`, so the image can pin that commit from GitHub.
+PypeIt allows Python 3.11-3.14. PypeIt's `s3_url.txt` is
+`s3-west.nrp-nautilus.io`, so the "S3 host" of S2 is Nautilus and the grid
+is the public object `s3://pypeit/telluric/atm_grids/TellPCA_3000_26000_R10000.fits`;
+the cache is astropy's (`~/.cache/pypeit` here, `XDG_CACHE_HOME` overrides
+it); `pypeit_install_telluric` and `pypeit_cache_github_data keck_mosfire`
+populate it offline; the telluric path is `dataPaths.telgrid` (host
+`s3_cloud`), not `tel_model`. This Mac has `kubectl` (context `nautilus`)
+and `rclone` (remotes `GDrive:`, `AIOcean:`, `nautilus_s3:`, `whn:`) but no
+`docker`. The repo still has only `keck_etcs/__init__.py`, `scripts/`, the
+docs and prompt docs; `git status` shows only this prompt doc modified.
+
+**Part prompt docs that need revision to match v0.2** (not edited in this
+prompt): `keck_mosfire_prompt_1.md` (S1 adds `paths.s3_prefix`; new S1b
+prompt; S2 records the sha256 and uses `dataPaths.telgrid`);
+`keck_mosfire_prompt_2.md` (S4 becomes the local reference with the S3
+hooks; new S4a and S4b prompts; S5, S6 and S13 read synced products and S6
+gains the in-pod and `--merge` modes); `keck_mosfire_prompt_3.md` (note
+only: S8's filter curves must land before the `0.2.0` image build);
+`keck_mosfire_prompt_4.md` (S11 inputs come from `s3_sync.py pull`);
+`keck_mosfire_prompt_5.md` (S15 rewritten as Indexed Jobs, pilot, sweeps
+and sync; S16 lists image tags in `CHANGES.md`);
+`keck_mosfire_prompt_6.md` (S17 may re-pin the image; S18 writes the
+`nautilus/README.md` operator guide); `koa_search_prompts.md` (prompt 2 and
+3 downloads become the in-cluster S14b Job writing to S3, with a local
+fallback; prompt 1 also emits the night manifests).
+### 2026-09-30 (Nautilus decisions posed as Q&A)
+
+At the user's request (a follow-up to Prompt #5, not a numbered prompt),
+turned the Nautilus decisions left open in design doc v0.2 into questions
+Q27-Q39 under a new Q&A subsection "(d) Reductions on Nautilus". Q27-Q33 are
+the seven open items from design section 8: namespace, bucket, registry, build
+host, base Python, backup and KOA downloads. Q34-Q39 ask for review of the
+flagged decisions N9-N16. Each question gives the recommended default. The
+design and implementation docs were not changed; once the user answers, the
+docs should be updated (N-decisions promoted to settled D-decisions, section 8
+trimmed). No git commands were run.
+
+What I learned: the Q&A numbering is continuous across subsections (1-26 in
+(a)-(c)), and the user answers inline with `>A.` lines, so the new questions
+continue at 27 and leave room for those lines.
+
+### 2026-09-30 (Prompt #6: apply Nautilus answers)
+
+Read the answers to Q27-Q39 in subsection (d). Ten are the recommended
+defaults (namespace `pypeit`; registry `profx/keck-etcs`; build on the Linux
+workstation; `python:3.12`; in-cluster KOA downloads with a local fallback;
+Indexed Job, one night per pod; no PVC; harvest in the pod; the local
+reference as the 1 percent gate; the local/remote split). Three changed:
+Q28, the bucket `keck-etcs` exists, created by the user, and is **private**
+(only the user has read/write); Q32, back up only the high-level products
+needed for the sensitivity analysis and the ETC; Q38, this work does not use
+`orig-hires-fixes`, PypeIt comes from `develop`. Applied them to both design
+docs and all seven part prompt docs. No git commands other than read-only
+inspection (`git status`, `git branch --list`, `git rev-parse`, `git log`,
+`git ls-remote`, `git merge-base`, `git describe` on the PypeIt checkout);
+no scripts written (planning only); nothing in this file changed except this
+entry.
+
+**Design doc v0.3.** The eight flagged decisions of v0.2 are promoted to
+settled decisions **D31-D38** in the section 2 table (image; storage; job
+granularity; harvest in the pod; local reference gate; provenance fields;
+KOA downloads; what stays local), with the three changes folded in, and
+**D39** added for the backup set. All cross-references in 4.2, 4.3, 4.4,
+4.8 and 5.4 were renumbered to the D-numbers. Section 4.2 names the private
+bucket and its credential implications; 4.8.1 notes that PAB's bucket is
+public but ours is not; 4.8.2 now pins PypeIt through a single file
+`nautilus/pypeit_pin.txt` on `develop` (`f3a1f1d274b1...` =
+`origin/develop` on 2026-09-30, `git describe` 2.0.1-1216, expected version
+`2.0.2.dev1216+gf3a1f1d27`), built on the workstation, with the registry
+project and deploy token as the user's one-time actions; 4.8.3 spells out
+who needs credentials (local `s3_sync.py`, pods via `KECK_ETCS_S3_SECRET`,
+nobody else: products ship in git) and drops the public-read policy, leaving
+wider access as an optional later item; 4.8.4 fixes the namespace; the old
+4.8.9 is now the backup section (included/excluded table, per-batch and
+per-release timing, `AIOcean:keck-etcs/` and
+`AIOcean:keck-etcs/releases/<calib_version>/`) and 4.8.10 points at the
+residual items. Section 8's Nautilus block is now verifications and
+one-time user actions tied to plan steps (S0 checkout on `develop`; S1b
+credentials secret; S4a registry; S14b KOA reachability; S4b base-Python
+revisit; optional wider bucket access).
+
+**Implementation plan v0.3.** New step **S0** (user prerequisites and the
+pin check: switch the PypeIt checkout to `develop` at the pin, re-run `pip
+install -e ".[dev]"` in `pypeit14` if `pypeit.__version__` still reports
+`g017bece06`, confirm the local AWS profile lists the bucket, create the
+GitLab project and deploy token; outputs `nautilus/pypeit_pin.txt` and
+`scripts/check_pypeit_pin.py`). S1b loses the bucket-policy deliverable and
+gains the credentials test (the inspect pod listing the bucket with the
+mounted secret decides between `prp-s3-credentials` and a new
+`keck-etcs-s3-credentials`); `s3_sync.py` fails hard on `AccessDenied`. S4
+refuses to run unless the pin check passes. S4a installs PypeIt from the
+pin file, refuses to build a pin that is not on `develop`'s history, and
+records tag, digest and pin. S4b mounts the secret for the pull too, and
+`gates.py --reference` asserts equal PypeIt SHAs before comparing. S14b
+starts with a reachability probe. S15b runs `scripts/nautilus/backup_products.py`
+after each batch; S16 runs it again in `--release` mode. S17's branch comes
+off `develop`; a feature-branch pin needs `--allow-branch`. S18's operator
+guide covers the pin, the private bucket and the backup. Risks rewritten
+for `develop` drift, the private bucket and the backup set. Step numbers
+S1-S18 and the v0.2 suffixes are unchanged; S0 is new and precedes S1.
+
+**Part prompt docs.** None had been executed (no Log entries, no Q&A), so
+the prompts were revised in place, keeping the house format and the
+existing prompt numbers: `keck_mosfire_prompt_1.md` (S1 adds
+`paths.s3_prefix` and the bucket constant; S2 uses `dataPaths.telgrid` and
+writes `nautilus/telluric_grid.sha256`; new prompt 4 = S0 check + S1b);
+`keck_mosfire_prompt_2.md` (S4 is the local reference on the pin with the
+S3 hooks; S5 ships the `.sens` file in the image and compares local and
+in-pod sensfuncs; S6 has `harvest` and `--merge` modes and the six
+provenance columns; S13 pulls `Calibrations/` while it is on S3; new prompts
+5 = S4a and 6 = S4b, with the run order 1 -> 5 -> 6 -> 2 -> 3 stated);
+`keck_mosfire_prompt_3.md` (scheduling note that S8 precedes the `0.2.0`
+image; S9 verifies no PypeIt/boto3/network import); `keck_mosfire_prompt_4.md`
+(S11 pulls the dry run's spec2d before relying on the backup; S10 records
+image tags in the era `meta` and `CHANGES.md`); `keck_mosfire_prompt_5.md`
+(S15a image rebuild and pilot; S15b batches, sweeps and per-batch backup
+with the new `backup_products.py`; S15c sync and merge; S16 release backup);
+`keck_mosfire_prompt_6.md` (S17 branch off `develop`; S18 operator guide
+with pin, private bucket and backup); `koa_search_prompts.md` (prompt 1
+also writes the night manifests; prompt 2 is the in-cluster S14b Job with a
+reachability probe and the local fallback; prompt 3 marks validation nights
+`spec2d = 1`).
+
+**Judgment calls flagged for the user.** (1) Backup set: all `spec1d_*`
+files are included (small; S11 needs the science ones) and
+`Calibrations/WaveCalib*` are excluded (S13 commits its measurements; a
+re-reduction regenerates them); backups run after each S15 batch and at
+each release, to `AIOcean:keck-etcs/`. (2) The default pod secret is
+`prp-s3-credentials` in namespace `pypeit`, but whether it holds keys that
+can read the private bucket is unknown; the S1b inspect-pod test decides,
+and the fallback is a new `keck-etcs-s3-credentials` secret. (3) The pin is
+`origin/develop` as of 2026-09-30 (`f3a1f1d27`); if the user pulls a newer
+`develop` before S0, the pin file follows HEAD. (4) `build_image.sh`
+refuses pins off `develop`'s history unless `--allow-branch` is passed, so
+a `ronoise` feature-branch image is possible but deliberate.
+
+**What I learned.** The local PypeIt checkout already has a `develop`
+branch and `origin/develop` is `f3a1f1d27` (2026-09-14, "Merge pull request
+#2197"), identical to the remote's head per `git ls-remote`, so no fetch is
+needed to pin it; `orig-hires-fixes` (`017bece06`) is one commit beyond a
+different base, hence the `dev1217` versus `dev1216` version strings. An
+editable PypeIt install keeps `pypeit/pkg/version.py` from install time, so
+switching branches does not update `pypeit.__version__` until `pip install
+-e` is re-run: the S0 check covers that. `git rev-parse` of two refs in one
+call failed with "Needed a single revision" while each ref resolves alone;
+not investigated. No part prompt doc had a Log or Q&A entry, so nothing had
+to be preserved as executed.
+
+### 2026-09-30 (Registry instructions)
+
+At the user's request (a follow-up to Prompt #6, not a numbered prompt),
+filled the new `## Registry` section with one-time instructions for the
+`gitlab-registry.nrp-nautilus.io/profx/keck-etcs` registry: create a public
+GitLab project with the container registry enabled; create a project deploy
+token with `read_registry`/`write_registry`; `docker login --password-stdin`
+on the Linux workstation; report back without sharing the token. It also
+covers what S4a does next (build, push, `docker manifest inspect`, anonymous
+pull test from the cluster), keeping secrets out of the public image,
+retrying stalled pushes, tag policy and revoking the token. These follow the
+PAB Container section (`PAB/claude_prompts/nautilus_prompts.md`) and PAB's
+`build_image.sh`. One new commitment for S4a: `build_image.sh` refuses to
+build if a credentials file is in the build context.
+
+The user also settled two S0 items. Credentials are fine as they are. The
+laptop's PypeIt checkout **stays on `orig-hires-fixes`**. That conflicts with
+the v0.3 plan: S0 and S4 require the local reference reduction to run on the
+image's `develop` pin, and the S4b gate asserts equal PypeIt SHAs. This is
+raised with the user for a decision; the design and plan docs are not yet
+changed. No git commands were run.

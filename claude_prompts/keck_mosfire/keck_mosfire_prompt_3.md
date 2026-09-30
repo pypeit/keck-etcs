@@ -5,22 +5,26 @@
 Build the instrument-agnostic ETC core and its JSON schemas, the MOSFIRE
 instrument module with its data files, and the public `compute(dict) -> dict`
 entry point with a CLI and regression fixtures. These are steps S7, S8 and S9
-of the plan.
+of the plan. Everything in this doc runs locally (design D38); nothing here
+touches Nautilus or S3.
 
 Run order: S7 and S8 are independent of each other and can run in parallel
 (or in either order); S9 needs both. S7 needs the sky-grid FITS from part 1
 (S3). S9 prefers the throughput product of part 4 (S10); if it does not exist
 yet, use the provisional XTcalc curve described in prompt 3 and label it as
-such. This whole doc can run in parallel with part 2.
+such. This whole doc can run in parallel with part 2. Note for scheduling:
+the filter curves of S8 are read by the in-pod harvest of part 2, so S8
+should be merged before the `0.2.0` image build that precedes part 5's
+batches; until then in-pod harvest rows carry `flag = nofilter`.
 
 ## Context
 
-- Design: `docs/keck_mosfire_design.md`, sections 2 (D10-D13, D15-D17,
-  D20-D21, D25-D28, N1, N2, N4-N7), 3 (instrument facts), 5.1 (package
+- Design: `docs/keck_mosfire_design.md` (v0.3), sections 2 (D10-D13, D15-D17,
+  D20-D21, D25-D28, D38, N1, N2, N4-N7), 3 (instrument facts), 5.1 (package
   layout), 5.2 (input and output fields, units, defaults, ranges), 5.3 (all
   equations), 5.4 (data files and provenance), 5.5 (versioning), 6.2 (unit
   and regression tests).
-- Plan: `docs/keck_mosfire_implementation.md`, steps S7, S8, S9.
+- Plan: `docs/keck_mosfire_implementation.md` (v0.3), steps S7, S8, S9.
 - Inputs already in the repo after part 1: `keck_etcs/data/sky/gemini_mk_sky_grid.fits`
   (HDUs `WAVE` nm, `SKYBG`, `TRANS`, `GRID`), `keck_etcs/data/index.yaml`,
   `keck_etcs/paths.py`.
@@ -51,7 +55,8 @@ such. This whole doc can run in parallel with part 2.
   window at the long-slit position, decision N2).
 - Rules (CLAUDE.md): the user runs git; `conda run -n pypeit14`; scripts on
   disk; `pytest.ini` points at `keck_etcs/tests`; add `jsonschema` and
-  `pyyaml` to `requirements.txt` and `setup.py` if you use them; log each
+  `pyyaml` to `requirements.txt` and `setup.py` if you use them (they then
+  also enter the image's dependency layer, part 2 prompt 5); log each
   prompt.
 
 ## Prompts
@@ -96,7 +101,9 @@ such. This whole doc can run in parallel with part 2.
    0.91); the J2 half-power bandpass from the curve is 1.181 +/- 0.065 um to
    within 0.01 um; every data file has the provenance keys of design 5.4.
    Risk: the Keck ASCII files may be imaging curves or in air wavelengths;
-   record which. Log your work.
+   record which. Note in the log that the `0.2.0` image (part 2 prompt 5)
+   must be rebuilt after this step so the in-pod harvest can divide out the
+   filter. Log your work.
 
 3. **S9: `compute()`, CLI and regression fixtures.** Implement
    `keck_etcs/etc.py` with `validate(inputs)` (schema check, defaults filled,
@@ -121,8 +128,9 @@ such. This whole doc can run in parallel with part 2.
    MCDS-16 ABBA at airmass 1.2, PWV 1.6 gives a band-median `snr_pixel`
    within a factor of 2 of XTcalc's value for the same inputs (compute
    XTcalc's number by hand from its formula, or defer the exact comparison to
-   part 4 step S12 and say so). Log your work, stating which throughput
-   product the fixtures were frozen against.
+   part 4 step S12 and say so); `keck_etcs.core` and `keck_etcs.etc` import
+   without PypeIt, boto3 or any network access. Log your work, stating which
+   throughput product the fixtures were frozen against.
 
 ## Q&A
 
