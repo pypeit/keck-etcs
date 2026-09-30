@@ -562,8 +562,14 @@ added `boto3` 1.43.106 with pip). Per the Q&A, the PypeIt checkout is on
   `--from-file=$HOME/.aws/credentials` copies every local profile into the
   Secret; a file with only `[default]` is tighter.
 
-**(e) Secret test: PENDING.** Following the prompt, I asked the user to apply
-the inspect pod and paste its log. The outcome will be added here.
+**(e) Secret test: PASS with the default secret.** The user applied the
+inspect pod on 2026-09-30; the log is appended below. `prp-s3-credentials`
+holds profiles `default` and `mskelm`. With `default`, the pod lists
+`s3://keck-etcs/` through the in-cluster endpoint (`ACCESS_RESULT OK`):
+17 objects, all under `mosfire/20220409/raw/`, with the same keys and sizes
+as the local `s3_sync.py ls`. So the manifests use `KECK_ETCS_S3_SECRET =
+prp-s3-credentials` (the default), and `keck-etcs-s3-credentials` is not
+needed.
 
 **`git status`.**
 - New from this prompt: `nautilus/{pypeit_pin.txt, pypeit_pin_allowlist.txt,
