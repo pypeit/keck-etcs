@@ -398,6 +398,23 @@ its PypeIt pin in `nautilus/README.md`. The registry project and its
 `write_registry` deploy token are created once by the user (Q29), who runs
 `docker login gitlab-registry.nrp-nautilus.io` on the workstation.
 
+*Exception (user, 2026-09-30, S4a).* At `f3a1f1d` PypeIt's
+`pypeit_cache_github_data` crashes: `pypeit/scripts/cache_github_data.py:143`
+passes `quiet=True` to `PypeItDataPath.get_file_path()`, which has no such
+argument. The user fixed it on the PypeIt branch `etc-fixes`
+(`275a012dfcb708d4f0eaeebd56d2513083244b24`, one commit on top of
+`f3a1f1d`). Image 0.1.0 pins that commit, and `build_image.sh` accepts a pin
+on `develop` *or* `etc-fixes` (`PIN_BRANCHES`).
+`pypeit/scripts/cache_github_data.py` is on the pin allow-list (D35). When the
+fix merges into `develop`, the pin moves to the merge commit, `PIN_BRANCHES`
+returns to `develop`, and the image tag is bumped. Layer order as built: the
+cache (3) sits *before* `COPY` of keck-etcs and its `pip install`, because it
+depends only on PypeIt and the grid checksum. `KECK_ETCS_GIT_SHAS` is
+declared last, so that a new commit does not invalidate layers 1-3.
+`setup.py` ships `keck_etcs/data/` as package data. Inside the image
+`check_pypeit_pin.py` runs in image mode: it passes when
+`KECK_ETCS_GIT_SHAS.pypeit` equals the pin.
+
 **4.8.3 Storage (D32).** Layout in 4.2. The pod's working directory is an
 `emptyDir` sized by `ephemeral-storage` (a MOSFIRE night is a few GB of
 outputs); nothing is written to a shared file system. Push list per night:

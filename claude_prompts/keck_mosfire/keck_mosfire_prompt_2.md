@@ -585,3 +585,127 @@ sensfuncs, the coadd spec1d, the `.coadd1d` file, the logs, PypeIt's PDFs,
 `sens_LDS749B_20220409_vs_calspec.png` and
 `sens_LDS749B_20220409_inspect.json`. `git status` shows the `.sens` file
 and the three new scripts.
+
+### 2026-09-30 (Prompt #5 / S4a: image 0.1.0 built and guarded; PypeIt fix on etc-fixes; push pending)
+
+Linux workstation, Docker 29.6.0, `docker login gitlab-registry.nrp-nautilus.io`
+already done by the user.
+
+**PypeIt defect found and fixed (user's branch).**
+- At the pin `f3a1f1d`, `pypeit_cache_github_data` crashes:
+  `pypeit/scripts/cache_github_data.py:143` calls
+  `PypeItDataPath.get_file_path(rel_path, force_update=..., quiet=True)`,
+  but `get_file_path` (`pypeit/pkg/pypeitdata.py:232`) has no `quiet`
+  argument. The crash reproduces locally and in the image build.
+- Per CLAUDE.md the fix goes in PypeIt. The user created the branch
+  `etc-fixes` off develop; I removed `, quiet=True` there (no git from me);
+  the user committed and pushed it as
+  **`275a012dfcb708d4f0eaeebd56d2513083244b24`** ("1st fix"). `develop` was
+  still at `f3a1f1d`.
+- User decision: pin `275a012` now. `nautilus/pypeit_pin.txt` = 275a012...
+  `build_image.sh` accepts a pin on `develop` or `etc-fixes`
+  (`PIN_BRANCHES`, a recorded exception to D31, noted in design 4.8.2 and
+  the README).
+- `pypeit/scripts/cache_github_data.py` is on the pin allow-list (user).
+  The local pin check passes: HEAD = pin = 275a012, no differing files.
+- When the fix merges into develop: re-pin to the merge commit, set
+  `PIN_BRANCHES` back to `develop`, bump the tag.
+- The editable install still reports `2.0.2.dev1216+gf3a1f1d27`, because
+  setuptools_scm stamps the version at install time. That is why the check
+  compares SHAs.
+
+**Files.**
+- **`nautilus/Dockerfile`** (base `python:3.12`; `MPLBACKEND=Agg`,
+  `PYTHONUNBUFFERED=1`, `QT_QPA_PLATFORM=offscreen`; no ENTRYPOINT; workdir
+  `/opt/src/keck-etcs`):
+  - **(1)** pip installs the dependencies of PypeIt at the pin (generated
+    from its `pyproject.toml` by `build_image.sh`), `requirements.txt`
+    without `pypeit`, plus boto3 and PyYAML. Only the two requirement files
+    are copied before this layer.
+  - **(2)** `ARG PYPEIT_SHA`; `pip install git+...PypeIt.git@${PYPEIT_SHA}`,
+    with a version guard.
+  - **(3)** `ENV XDG_CACHE_HOME=/opt/cache` (astropy 8 puts the cache in
+    `$XDG_CACHE_HOME/pypeit`); `pypeit_cache_github_data keck_mosfire`;
+    `curl` of the TellPCA grid from the public Nautilus URL;
+    `sha256sum -c` against `nautilus/telluric_grid.sha256`;
+    `pypeit_install_telluric --local_file`. The cache holds exactly the
+    verified bytes.
+  - **(4)** `COPY keck-etcs/` and `pip install /opt/src/keck-etcs`. The
+    source stays in the image, so job manifests can run `scripts/` and read
+    `nautilus/`.
+  - Then `ARG/ENV/LABEL KECK_ETCS_GIT_SHAS`, last, and the guards.
+  - **Deviation from the prompt's order:** the cache (3) comes before our
+    source, because it depends only on PypeIt and the checksum. A keck_etcs
+    edit therefore rebuilds only layer 4 (rebuild about 2 min).
+    `KECK_ETCS_GIT_SHAS` is declared last for the same reason: PAB's
+    Dockerfile notes that an early ARG enters every later cache key.
+  - **Caveat:** `pypeit_cache_github_data` fetches PypeIt's GitHub `develop`
+    data at build time, not at the pin (`git_branch()` returns `develop`
+    when there is no repository).
+- **Build guards (all fail the build):**
+  - the `KECK_ETCS_GIT_SHAS` keys, no `unknown`, `.pypeit` = `PYPEIT_SHA`,
+    and `pypeit.__version__` ending with the pin's short SHA;
+  - `search_cache('TellPCA')` non-empty;
+  - `run_pypeit`, `pypeit_sensfunc` and `pypeit_setup --help`;
+  - keck_etcs package data present;
+  - `provenance.git_shas()` without `unknown`;
+  - `check_pypeit_pin.py` in image mode;
+  - `reduce_standard.py --help` and `s3_sync.py --help`.
+  - Skipped: `import keck_etcs.calib.harvest`, because S6 has not run.
+    Add it at 0.2.0.
+- **`nautilus/build_image.sh [--push]`:**
+  - Reads the pin (it must be a full SHA) and `git rev-parse --short HEAD`.
+    A dirty tree is recorded as `<sha>-dirty`, and `--push` refuses it.
+  - Checks that the pin is an ancestor of `origin/<branch>` for
+    `PIN_BRANCHES`, in a throwaway treeless clone (never the user's
+    checkout). The same clone gives the pin's `pyproject.toml`, from which
+    `pypeit_requirements.txt` (17 dependencies) is written.
+  - Stages the repo with rsync, excluding `.git`, `.claude`, caches,
+    `docs/figures`, build and dist; the context is 3.7 MB.
+  - Refuses credential-like files (names, plus grep for secret-key and
+    private-key markers). The first run caught the script itself, so the
+    patterns are now split.
+  - `docker build` with the two build args; tags `:<keck_etcs.__version__>`
+    and `:latest`.
+  - Smoke tests with `timeout 300 docker run --rm`: versions and SHAs, the
+    in-image pin check, the cache listing, `run_pypeit --help`, the size and
+    a check for ML packages.
+  - `--push`: push both tags, `docker manifest inspect`, and print the
+    digest.
+- **`keck_etcs/provenance.py`:** `git_shas()` prefers `KECK_ETCS_GIT_SHAS`,
+  then `git rev-parse` of the directories the packages are imported from,
+  else `unknown`. `image_info()` reads `KECK_ETCS_IMAGE` and
+  `KECK_ETCS_IMAGE_DIGEST`, defaulting to `local`/None.
+  `reduce_standard.py` now uses both.
+- **`scripts/check_pypeit_pin.py`:**
+  - New image mode: with no git work tree and `KECK_ETCS_GIT_SHAS` set, it
+    passes if and only if `.pypeit` equals the pin, with `files = []` and
+    `mode = image`. Without it, `reduce_standard.py` would have failed its
+    first stage in every pod.
+  - `--image TAG` (written in part 1) is now tested.
+- **Version and packaging:** `keck_etcs.__version__` is now `0.1.0`, and
+  `setup.py` reads it from there. `setup.py` gains
+  `package_data = {'keck_etcs': ['data/*.yaml', 'data/*/*', 'data/*/*/*']}`;
+  `find_packages()` alone would have dropped `keck_etcs/data/`.
+- **Documentation:** a pin and tag table in `nautilus/README.md`, and the
+  exception note in design 4.8.2.
+
+**Build results (third build; the first two stopped on the self-matching
+credential guard and the PypeIt bug).**
+- **Version and guards:** in-image PypeIt `2.0.2.dev1217+g275a012df`.
+  `GUARDS OK`, and the in-image pin check passes.
+- **Cache:** `/opt/cache/pypeit` (153 MB, 375 entries) holds the TellPCA
+  grid (sha256 OK) and MOSFIRE's reid_arxiv and line lists.
+- **Size:** **2.16 GB** (image ID `e72519c45e13`), with no torch, nvidia,
+  tensorflow or jax.
+- **Local `check_pypeit_pin.py --image ...:0.1.0`:** PASS. As a negative
+  test, `--pin f3a1f1d27` gives check (3) FAIL; checks (1) and (2) still pass
+  because `cache_github_data.py` is allow-listed.
+- **Not yet clean:** the image was built from a dirty tree, so it records
+  `keck_etcs = bd05070-dirty`.
+
+**Pending (needs the user).** Commit the S4a files, then confirm the push;
+pushes are confirmed with the user. After that:
+`bash nautilus/build_image.sh --push` rebuilds layer 4 with the clean SHA,
+pushes `0.1.0` and `latest`, runs `docker manifest inspect`, and the digest
+goes into the README table and here.

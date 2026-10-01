@@ -126,14 +126,20 @@ def run(cmd, log, env=None, cwd=None):
 
 
 def keck_etcs_git():
-    res = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], capture_output=True,
-                         text=True)
-    if res.returncode != 0:
-        return os.environ.get('KECK_ETCS_GIT_SHA', 'unknown'), None
+    """keck_etcs SHA (``keck_etcs.provenance``, which prefers ``KECK_ETCS_GIT_SHAS``)
+    and whether the local work tree is dirty (None inside the image)."""
+    from keck_etcs import provenance
+    sha = provenance.git_shas()['keck_etcs']
+    res = subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain'],
+                         capture_output=True, text=True)
     # Untracked files count: the driver itself may not be committed yet
-    dirty = subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain'],
-                           capture_output=True, text=True).stdout.strip() != ''
-    return res.stdout.strip(), dirty
+    dirty = (res.stdout.strip() != '') if res.returncode == 0 else None
+    return sha, dirty
+
+
+def provenance_image():
+    from keck_etcs import provenance
+    return provenance.image_info()
 
 
 # ---------------------------------------------------------------- frame typing
@@ -326,8 +332,7 @@ def main(args):
     import keck_etcs
     manifest = {
         'status': None, 'error': None,
-        'image': os.environ.get('KECK_ETCS_IMAGE', 'local'),
-        'image_digest': os.environ.get('KECK_ETCS_IMAGE_DIGEST'),
+        **provenance_image(),
         'pypeit_version': pypeit.__version__,
         'pypeit_git_sha': None, 'pypeit_pin': None, 'pin_check': None,
         'keck_etcs_version': keck_etcs.__version__,

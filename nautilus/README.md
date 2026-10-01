@@ -127,3 +127,28 @@ kubectl apply --dry-run=server -f <manifest>            # validate without creat
   This copies every profile in `~/.aws/credentials` into the Secret. To
   limit it to the Nautilus keys, first write a file that holds only a
   `[default]` section and pass that file instead.
+
+## Image
+
+`gitlab-registry.nrp-nautilus.io/profx/keck-etcs` is public, so pods need
+no `imagePullSecret`. It is built on the Linux workstation by
+`bash nautilus/build_image.sh [--push]` from `nautilus/Dockerfile` (design
+4.8.2). `--push` refuses a dirty work tree, so every pushed tag maps to a
+keck-etcs commit.
+- **Contents:** PypeIt at the pin, keck_etcs with its data files, and the
+  PypeIt cache in `/opt/cache/pypeit` (MOSFIRE GitHub data and the TellPCA
+  grid, its sha256 checked).
+- **Provenance:** baked in as `KECK_ETCS_GIT_SHAS`.
+- **Registry hangs:** if a push stalls for more than about 10 minutes, on
+  "Waiting" or at the manifest step, interrupt it and push again. Layers
+  already uploaded are skipped.
+
+| tag | PypeIt pin | keck-etcs | digest | size | notes |
+|---|---|---|---|---|---|
+| 0.1.0 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | (at push) | (not pushed yet) | 2.16 GB | dry-run image (S4a). Pin = develop `f3a1f1d` + the `pypeit_cache_github_data` fix; a recorded exception to D31 until it merges into develop |
+
+**Re-pinning.** Edit `nautilus/pypeit_pin.txt` (one full SHA), bump
+`keck_etcs.__version__`, rebuild, push, and add a row here and to
+`CHANGES.md`. `scripts/check_pypeit_pin.py --image <tag>` must pass. It
+requires the image's `KECK_ETCS_GIT_SHAS.pypeit` to equal the pin exactly;
+the local checkout's SHA is only reported.

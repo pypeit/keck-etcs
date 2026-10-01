@@ -15,7 +15,13 @@ from the pin: ``git diff --name-only <pin> HEAD`` plus uncommitted changes
    (offending files are named).
 
 With ``--image TAG`` it also runs the container image and requires its
-``KECK_ETCS_GIT_SHAS`` (JSON) ``pypeit`` entry to equal the pin exactly.
+``KECK_ETCS_GIT_SHAS`` (JSON) ``pypeit`` entry to equal the pin exactly (the
+local checkout's SHA may differ by design and is only reported).
+
+Inside the image (PypeIt pip-installed, no git work tree, and
+``KECK_ETCS_GIT_SHAS`` set) the check runs in *image mode*: it passes if and
+only if ``KECK_ETCS_GIT_SHAS.pypeit`` equals the pin, with an empty file list
+(design 4.8.5).
 
 Writes a JSON result (``pypeit_git_sha``, ``pypeit_pin``, ``pin_check:
 {pass, files, ...}``) for the reduction driver to copy into
@@ -26,6 +32,7 @@ Writes a JSON result (``pypeit_git_sha``, ``pypeit_pin``, ``pin_check:
 import argparse
 import datetime
 import json
+import os
 import re
 import subprocess
 import sys
@@ -111,11 +118,46 @@ def image_pypeit_sha(tag):
     return json.loads(raw).get('pypeit'), raw
 
 
+def write_result(result, json_path):
+    out = Path(json_path) if json_path else None
+    if out is None:
+        from keck_etcs import paths
+        out = paths.data_root() / 'pypeit_pin_check.json'
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result, indent=2) + '\n')
+    print(f'\nWrote {out}')
+
+
+def image_mode(pypeit, pin, args):
+    """Pin check inside the container: the baked PypeIt SHA must equal the pin."""
+    raw = os.environ['KECK_ETCS_GIT_SHAS']
+    sha = json.loads(raw).get('pypeit')
+    passed = sha is not None and (sha == pin or (len(pin) < 40 and sha.startswith(pin)))
+    print(f'pypeit.__version__ : {pypeit.__version__}')
+    print(f'pypeit.__file__    : {pypeit.__file__}')
+    print(f'mode               : image (no git work tree; KECK_ETCS_GIT_SHAS={raw})')
+    print(f'pin                : {pin}')
+    print(f'(1) KECK_ETCS_GIT_SHAS.pypeit == pin : {"PASS" if passed else "FAIL"}')
+    result = {
+        'pypeit_git_sha': sha, 'pypeit_pin': pin, 'pypeit_version': pypeit.__version__,
+        'pypeit_branch': None,
+        'checked': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'pin_check': {'pass': bool(passed), 'files': [], 'ancestor': None, 'offending': [],
+                      'mode': 'image'},
+    }
+    write_result(result, args.json)
+    print(f'\nPIN CHECK: {"PASS" if passed else "FAIL"}')
+    return 0 if passed else 1
+
+
 def main(args):
     import pypeit
 
     checkout = Path(args.checkout) if args.checkout else Path(pypeit.__file__).resolve().parents[1]
     pin = (args.pin or PIN_FILE.read_text().split()[0]).strip()
+    in_git = git(checkout, 'rev-parse', '--git-dir', check=False).returncode == 0
+    if not in_git and not args.checkout and os.environ.get('KECK_ETCS_GIT_SHAS'):
+        return image_mode(pypeit, pin, args)
     try:
         head = git(checkout, 'rev-parse', 'HEAD').stdout.strip()
         branch = git(checkout, 'branch', '--show-current').stdout.strip() or '(detached)'
@@ -181,13 +223,7 @@ def main(args):
     if image is not None:
         result['pin_check']['image'] = image
 
-    out = Path(args.json) if args.json else None
-    if out is None:
-        from keck_etcs import paths
-        out = paths.data_root() / 'pypeit_pin_check.json'
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(result, indent=2) + '\n')
-    print(f'\nWrote {out}')
+    write_result(result, args.json)
     print(f'\nPIN CHECK: {"PASS" if passed else "FAIL"}')
     return 0 if passed else 1
 

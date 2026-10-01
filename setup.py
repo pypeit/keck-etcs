@@ -1,5 +1,5 @@
 # Standard imports
-import glob, os
+import glob, os, re
 from setuptools import setup, find_packages
 
 
@@ -11,7 +11,9 @@ setup_keywords['author'] = 'J. Xavier Prochaska'
 setup_keywords['author_email'] = 'jxp@ucsc.edu'
 setup_keywords['license'] = 'BSD'
 setup_keywords['url'] = 'https://github.com/pypeit/keck-etcs'
-setup_keywords['version'] = '0.0.dev0'
+# Single source of the version: keck_etcs/__init__.py
+with open(os.path.join('keck_etcs', '__init__.py')) as f:
+    setup_keywords['version'] = re.search(r'__version__ = "([^"]+)"', f.read()).group(1)
 # Use README.md as long_description.
 setup_keywords['long_description'] = ''
 if os.path.exists('README.md'):
@@ -27,6 +29,8 @@ setup_keywords['install_requires'] = [
     'pypeit']
 setup_keywords['zip_safe'] = False
 setup_keywords['packages'] = find_packages()
+# Shipped data products (design 5.4); keck_etcs/data/ is not a package, so list it
+setup_keywords['package_data'] = {'keck_etcs': ['data/*.yaml', 'data/*/*', 'data/*/*/*']}
 
 if os.path.isdir('bin'):
     setup_keywords['scripts'] = [fname for fname in glob.glob(os.path.join('bin', '*'))
