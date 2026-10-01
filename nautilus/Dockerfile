@@ -100,4 +100,6 @@ print('KECK_ETCS OK', keck_etcs.__version__, provenance.git_shas())" \
  && python scripts/check_pypeit_pin.py --json /tmp/pin_check.json \
  && python scripts/mosfire/reduce_standard.py --help > /dev/null \
  && python scripts/nautilus/s3_sync.py --help > /dev/null \
+ && python nautilus/gates.py --help > /dev/null && python nautilus/status_row.py --help > /dev/null \
+ && python scripts/mosfire/build_sensfunc.py --help > /dev/null \
  && echo "GUARDS OK"

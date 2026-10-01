@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/nautilus/s3_sync.py ls   PREFIX
-    python scripts/nautilus/s3_sync.py push PREFIX [--dry-run] [--jobs N]
+    python scripts/nautilus/s3_sync.py push PREFIX [--include GLOB ...] [--force] [--dry-run] [--jobs N]
     python scripts/nautilus/s3_sync.py pull PREFIX [--include GLOB ...] [--dry-run] [--jobs N]
 
 PREFIX is a bucket key prefix such as ``mosfire/20220409/raw``; the matching
@@ -14,12 +14,17 @@ two layouts are the same by construction (design 4.2).
   local copy is present and the same size.
 - ``push`` uploads every local file under PREFIX (symlinks are followed)
   whose key is missing from the bucket or has a different size.
-- ``pull`` downloads every object under PREFIX (optionally only those whose
-  key relative to PREFIX matches one of the ``--include`` globs) whose local
-  copy is missing or has a different size.
+- ``pull`` downloads every object under PREFIX whose local copy is missing
+  or has a different size.
+- ``--include GLOB ...`` (push and pull) restricts the transfer to keys
+  whose path relative to PREFIX matches one of the globs (``fnmatch``, so
+  ``redux/*`` includes subdirectories).
 
 Both transfers are idempotent by key and size, so a re-run after an
 interruption only moves what is missing; ``--dry-run`` shows what would move.
+``push --force`` uploads the selected files even when an object of the same
+size exists (a ``REPLACE=1`` re-reduction produces new files of the same
+size, e.g. FITS with new header dates).
 
 Environment:
     ENDPOINT_URL      S3 endpoint (default https://s3-west.nrp-nautilus.io;
@@ -147,10 +152,15 @@ def cmd_ls(client, bucket, root, prefix, args):
     return 0
 
 
+def selected(key, prefix, globs):
+    return not globs or any(fnmatch.fnmatch(key[len(prefix) + 1:], g) for g in globs)
+
+
 def cmd_push(client, bucket, root, prefix, args):
     remote = remote_sizes(client, bucket, prefix)
-    local = local_sizes(root, prefix)
-    todo = [(p, key) for key, (p, size) in sorted(local.items()) if remote.get(key) != size]
+    local = {k: v for k, v in local_sizes(root, prefix).items() if selected(k, prefix, args.include)}
+    todo = [(p, key) for key, (p, size) in sorted(local.items())
+            if args.force or remote.get(key) != size]
     print(f'push {root / prefix} -> s3://{bucket}/{prefix}/  ({ENDPOINT}, {credential_source()})')
     print(f'local files: {len(local)}  in bucket: {len(remote)}  to upload: {len(todo)}  '
           f'current (skipped): {len(local) - len(todo)}')
@@ -170,10 +180,8 @@ def cmd_push(client, bucket, root, prefix, args):
 
 
 def cmd_pull(client, bucket, root, prefix, args):
-    remote = remote_sizes(client, bucket, prefix)
-    if args.include:
-        remote = {k: s for k, s in remote.items()
-                  if any(fnmatch.fnmatch(k[len(prefix) + 1:], g) for g in args.include)}
+    remote = {k: s for k, s in remote_sizes(client, bucket, prefix).items()
+              if selected(k, prefix, args.include)}
     local = local_sizes(root, prefix)
     todo = [(root / key, key) for key, size in sorted(remote.items())
             if key not in local or local[key][1] != size]
@@ -205,7 +213,9 @@ def main(argv=None):
     parser.add_argument('--dry-run', action='store_true', help='show what would be transferred')
     parser.add_argument('--jobs', type=int, default=8, help='parallel transfers (default 8)')
     parser.add_argument('--include', nargs='+', metavar='GLOB',
-                        help='pull only keys (relative to PREFIX) matching these globs')
+                        help='push/pull only keys (relative to PREFIX) matching these globs')
+    parser.add_argument('--force', action='store_true',
+                        help='push: upload even when an object of the same size exists')
     args = parser.parse_args(argv)
 
     prefix = args.prefix.strip('/')

@@ -152,3 +152,76 @@ keck-etcs commit.
 `CHANGES.md`. `scripts/check_pypeit_pin.py --image <tag>` must pass. It
 requires the image's `KECK_ETCS_GIT_SHAS.pypeit` to equal the pin exactly;
 the local checkout's SHA is only reported.
+
+## Operating the reductions (S4b)
+
+**What a night pod does** (`night_job.yaml` and `validate_job.yaml`, which
+share one script block; `python nautilus/validate_manifests.py` checks the
+YAML, `bash -n` and that the two blocks are identical):
+1. Prints a PROVENANCE block: image tag and digest, `KECK_ETCS_GIT_SHAS`,
+   the PypeIt and keck_etcs versions, the pin, and the job, index, pod and
+   node.
+2. Reads its row (`JOB_COMPLETION_INDEX`) of the night manifest mounted from
+   the ConfigMap at `/opt/manifest/nights.csv`. The columns are `night,
+   instrument, s3_prefix, standard, slit, spec2d, notes`.
+3. **Skips** the night if `s3://keck-etcs/<s3_prefix>/run_manifest.json`
+   exists, unless `REPLACE=1`. `REPLACE=1` re-reduces and pushes with
+   `--force`.
+4. Runs `reduce_standard.py <night> --scratch /scratch --s3-pull` (pin
+   check in image mode, setup, patch, `run_pypeit`, QA), then
+   `build_sensfunc.py` (per-frame and coadd sensfunc with the packaged
+   `.sens`), then `gates.py` (with `--reference` when `GATES_REFERENCE` is
+   set), then the harvest (once S6 exists).
+5. Pushes `redux/`, `sens/`, `harvest/`, `run.log`, `pod.log`,
+   `pypeit_pin_check.json` and `gates.json`, then `run_manifest.json`
+   **last**, so a half-pushed night is not skipped later. `spec2d` is pushed
+   only when `SPEC2D=1`.
+6. Writes and pushes a status row,
+   `runs/<job>/status/<index>_<night>.ecsv` (one object per pod), and
+   prints `NIGHT_DONE`.
+
+On any failure the pod pushes `run_manifest.json`, `run.log` and `pod.log`
+for diagnosis, writes the status row and exits 1. The statuses are `no
+calibs`, `setup failed`, `reduce failed`, `no trace`, `sens failed`,
+`gate failed`, `push failed`, `pull failed` and `pin check failed`
+(`nautilus/status_row.py`).
+
+**Dry run** (2022-04-09 against the local reference):
+
+```
+python scripts/nautilus/stage_reference.py 20220409 --push       # s3://keck-etcs/mosfire/20220409/reference/
+kubectl -n pypeit create configmap keck-etcs-nights-dryrun \
+  --from-file=nights.csv=nautilus/manifests/nights_dryrun.csv --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n pypeit delete job keck-etcs-validate --ignore-not-found
+kubectl apply -f nautilus/validate_job.yaml
+kubectl -n pypeit logs -f job/keck-etcs-validate                 # GATES: PASS ... NIGHT_DONE
+python scripts/nautilus/s3_sync.py pull mosfire/20220409         # the pod's products into the mirror
+```
+
+**A batch:**
+
+```
+kubectl -n pypeit create configmap keck-etcs-nights \
+  --from-file=nights.csv=nautilus/manifests/nights_<batch>.csv --dry-run=client -o yaml | kubectl apply -f -
+# edit spec.completions in night_job.yaml to the number of rows, then
+kubectl -n pypeit delete job keck-etcs-nights --ignore-not-found
+kubectl apply -f nautilus/night_job.yaml
+kubectl -n pypeit get pods -l app=keck-etcs,role=night
+kubectl -n pypeit logs <pod>                                     # per night
+python nautilus/night_failures.py keck-etcs-nights               # status.ecsv + sweep manifest of failed nights
+python nautilus/status_table.py                                  # per-night table from run_manifest.json (store-only)
+```
+
+**Retries.**
+- A sweep job is `night_job.yaml` applied with
+  `nautilus/manifests/sweep_<job>.csv` as its ConfigMap.
+- Nights that are already done skip themselves, so re-applying a whole job
+  after a preemption resumes it.
+- A night that fails twice for a data reason (`no calibs`, `no trace`) is
+  not retried. `night_failures.py` lists it instead.
+
+**Resources.** The initial guess (design 4.8.4) is cpu 4, memory 16Gi,
+ephemeral 30Gi request / 60Gi limit, `OMP_NUM_THREADS=4`, and a 6 h
+deadline. The dry run's measured wall-clock, peak memory (cgroup
+`memory.peak`) and scratch use are in each pod's log (`USAGE`), in
+`run_manifest.json` (`pod_usage`) and in the header of `night_job.yaml`.
