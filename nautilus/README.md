@@ -145,7 +145,7 @@ keck-etcs commit.
 
 | tag | PypeIt pin | keck-etcs | digest | size | notes |
 |---|---|---|---|---|---|
-| 0.1.0 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | (at push) | (not pushed yet) | 2.16 GB | dry-run image (S4a). Pin = develop `f3a1f1d` + the `pypeit_cache_github_data` fix; a recorded exception to D31 until it merges into develop |
+| 0.1.0 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | `d4c5871` | `sha256:12793464bc5131985f1289984b7fdb138605861b78abb7e49ecd82400fec7866` | 2.16 GB | dry-run image (S4a). Pin = develop `f3a1f1d` + the `pypeit_cache_github_data` fix; a recorded exception to D31 until it merges into develop |
 
 **Re-pinning.** Edit `nautilus/pypeit_pin.txt` (one full SHA), bump
 `keck_etcs.__version__`, rebuild, push, and add a row here and to

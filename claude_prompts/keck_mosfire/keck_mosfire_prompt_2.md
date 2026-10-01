@@ -709,3 +709,29 @@ pushes are confirmed with the user. After that:
 `bash nautilus/build_image.sh --push` rebuilds layer 4 with the clean SHA,
 pushes `0.1.0` and `latest`, runs `docker manifest inspect`, and the digest
 goes into the README table and here.
+
+### 2026-09-30 (Prompt #5 / S4a, completed: 0.1.0 pushed)
+
+The user committed the S4a files (keck-etcs `d4c5871`, clean tree) and
+approved the push. `bash nautilus/build_image.sh --push`:
+- **Rebuild:** only layer 4 and the guards were rebuilt.
+  `KECK_ETCS_GIT_SHAS = {"pypeit": "275a012dfcb708d4f0eaeebd56d2513083244b24",
+  "keck_etcs": "d4c5871"}`, with no `-dirty`; the same JSON is in the image
+  label `org.opencontainers.image.revision`.
+- **Checks:** `GUARDS OK`, and the in-image pin check passes.
+- **Push:** `0.1.0` and `latest` were pushed without a registry hang.
+  `docker manifest inspect` succeeds.
+- **Image:**
+  - **tag** `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.0` (and
+    `:latest`);
+  - **digest**
+    `sha256:12793464bc5131985f1289984b7fdb138605861b78abb7e49ecd82400fec7866`;
+  - **pin** `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`); PypeIt
+    `2.0.2.dev1217+g275a012df`; size 2.16 GB.
+- **Public:** `docker manifest inspect` with an empty `DOCKER_CONFIG` (no
+  credentials) succeeds, so pods can pull without an `imagePullSecret`. The
+  in-cluster pull test belongs to S4b (prompt 6).
+- **Recorded:** the digest is in the `nautilus/README.md` table.
+- **To do at 0.2.0:**
+  - add the `import keck_etcs.calib.harvest` guard once S6 exists;
+  - re-pin to develop once the `etc-fixes` fix merges.
