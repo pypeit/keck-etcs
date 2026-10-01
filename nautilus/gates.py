@@ -27,11 +27,24 @@ With ``--reference REF`` (a local night-like directory, or
    PypeIt SHA and the reference's ``pin_check.pass`` is true. If not, the
    comparisons below are not made (FAIL). The reference's own
    ``pypeit_git_sha`` is expected to differ and is only reported (D35);
-6. ``zp_agree``: zero points agree to 1 percent over 1.117-1.260 um. The
-   statistic is the throughput ratio 10**(0.4 dZP): its median and its 5-95
-   percentile range must lie within 1 +- 0.01;
-7. ``s2n_agree``: every object's ``S2N`` agrees with the reference's (matched
+6. ``spec1d_agree``: reduction fidelity. For every frame, the median ratio
+   of ``OPT_COUNTS`` (this run / reference) over 1.17-1.24 um is within
+   0.1 percent;
+7. ``zp_agree``: band-level zero-point agreement over 1.117-1.260 um. The
+   throughput ratio 10**(0.4 dZP) must have its median within 2 percent of
+   1 and its per-pixel 5-95 percentile range within 1 +- 0.05;
+8. ``s2n_agree``: every object's ``S2N`` agrees with the reference's (matched
    by frame) to 5 percent.
+
+The zero-point tolerances follow the S4b diagnosis (user decision,
+2026-10-01). The IR telluric fit (``differential_evolution``, seed 777) is
+deterministic for a given input, and the image and local stacks give
+bit-identical fits on the same spec1d. But it is chaotic in its input:
+perturbing the counts by 1e-5 moves the per-pixel zero point by up to
+about 5 percent (5-95 percent range) and the band median by up to about 1
+percent (``scripts/mosfire/sensfunc_perturbation_test.py``). A 1 percent
+per-pixel gate would therefore test bitwise identity, not fidelity; the
+spec1d gate tests fidelity directly.
 
 ``--update-manifest`` writes the results into ``run_manifest.json`` (key
 ``gates``) and adds the sha256 of the sens products. Exit status 0 when all
@@ -55,7 +68,10 @@ from keck_etcs import paths, provenance  # noqa: E402
 
 INSTRUMENT = 'mosfire'
 THRU_RANGE = inspect_sensfunc.THRU_RANGE
-ZP_TOL = 0.01
+ZP_MEDIAN_TOL = 0.02          # median pod/reference throughput ratio
+ZP_PIXEL_TOL = 0.05           # its 5-95 percentile range
+COUNTS_TOL = 0.001            # median OPT_COUNTS ratio per frame
+COUNTS_WINDOW = (11700.0, 12400.0)
 S2N_TOL = 0.05
 
 
@@ -85,6 +101,29 @@ def resolve_reference(ref):
     if rc != 0:
         raise SystemExit(f's3_sync.py pull {prefix} failed (exit {rc})')
     return paths.data_root() / prefix
+
+
+def spec1d_agree(night, rdir, m):
+    """Median OPT_COUNTS ratio per frame, this run / reference."""
+    from pypeit.specobjs import SpecObjs
+    rows, bad = [], []
+    for o in m['objects']:
+        mine = Path(night) / 'redux' / 'Science' / o['spec1d']
+        ref = Path(rdir) / 'redux' / 'Science' / o['spec1d']
+        if not (mine.exists() and ref.exists()):
+            bad.append(f"{o['frame']} (missing {'reference' if mine.exists() else 'spec1d'})")
+            continue
+        a = SpecObjs.from_fitsfile(str(mine), chk_version=False)[0]
+        b = SpecObjs.from_fitsfile(str(ref), chk_version=False)[0]
+        sel = (a['OPT_WAVE'] > COUNTS_WINDOW[0]) & (a['OPT_WAVE'] < COUNTS_WINDOW[1])
+        r = float(np.median(a['OPT_COUNTS'][sel]) /
+                  np.median(np.interp(a['OPT_WAVE'][sel], b['OPT_WAVE'], b['OPT_COUNTS'])))
+        rows.append(f"{o['frame']} {r:.6f}")
+        if abs(r - 1) >= COUNTS_TOL:
+            bad.append(o['frame'])
+    return gate('spec1d_agree', not bad and bool(rows),
+                'median OPT_COUNTS ratio ' + '; '.join(rows) + f' (tolerance {COUNTS_TOL})'
+                + (f'; FAIL {bad}' if bad else ''))
 
 
 def sens_file(night_dir, standard, date):
@@ -150,9 +189,10 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
         results.append(gate('ref_pin', ok, f"reference pin {ref_pin} (pin_check.pass={ref_pass}) vs "
                             f"this run's PypeIt {my_sha}; reference ran at {rm.get('pypeit_git_sha')}"))
         if not ok:
-            results.append(gate('zp_agree', False, 'not compared: reference pin mismatch'))
-            results.append(gate('s2n_agree', False, 'not compared: reference pin mismatch'))
+            for name in ('spec1d_agree', 'zp_agree', 's2n_agree'):
+                results.append(gate(name, False, 'not compared: reference pin mismatch'))
         else:
+            results.append(spec1d_agree(night, rdir, m))
             rsens = sens_file(rdir, standard, date)
             if pod is None or not rsens.exists():
                 results.append(gate('zp_agree', False, f'missing {sens if pod is None else rsens}'))
@@ -160,12 +200,12 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
                 a = inspect_sensfunc.load(sens)
                 b = inspect_sensfunc.load(rsens)
                 c = inspect_sensfunc.compare(a, b)
-                ok = (abs(c['median_ratio'] - 1) < ZP_TOL and abs(c['p05'] - 1) < ZP_TOL
-                      and abs(c['p95'] - 1) < ZP_TOL)
+                ok = (abs(c['median_ratio'] - 1) < ZP_MEDIAN_TOL and abs(c['p05'] - 1) < ZP_PIXEL_TOL
+                      and abs(c['p95'] - 1) < ZP_PIXEL_TOL)
                 results.append(gate('zp_agree', ok,
-                                    f"pod/reference throughput ratio: median {c['median_ratio']:.5f}, "
-                                    f"5-95% {c['p05']:.5f}-{c['p95']:.5f}, max |dev| "
-                                    f"{c['max_abs_dev']:.5f} (tolerance {ZP_TOL})"))
+                                    f"pod/reference throughput ratio: median {c['median_ratio']:.5f} "
+                                    f"(tolerance {ZP_MEDIAN_TOL}), 5-95% {c['p05']:.5f}-{c['p95']:.5f} "
+                                    f"(tolerance {ZP_PIXEL_TOL}), max |dev| {c['max_abs_dev']:.5f}"))
                 ref_info['zp_comparison'] = c
             robj = {o['frame']: o for o in rm.get('objects', [])}
             rows, bad = [], []

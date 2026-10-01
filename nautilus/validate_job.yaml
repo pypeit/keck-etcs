@@ -1,5 +1,5 @@
 # keck-etcs dry run on Nautilus (S4b, design 4.8.7): reduce 2022-04-09 in one
-# pod with image 0.1.1 and gate it against the local S4 reference
+# pod with image 0.1.2 and gate it against the local S4 reference
 # (s3://keck-etcs/mosfire/20220409/reference/): spec1d for both LDS749B traces
 # and the four J0841 frames, wavelength RMS, zero point finite, median
 # throughput 0.15-0.45, reference pin == the pod's PypeIt SHA, zero points to
@@ -35,8 +35,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: validate
-        # image 0.1.1; digest TBD (filled in after the push)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.1
+        # image 0.1.2, digest TBD (filled in after the push)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.2
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -44,7 +44,7 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.1"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.2"}
         - {name: KECK_ETCS_IMAGE_DIGEST, value: "TBD"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "1"}
@@ -71,8 +71,10 @@ spec:
               log "FAILED [$1]: $2"
               echo "wall_clock_s=$(( $(date +%s) - T0 ))"
               if [ -n "${NIGHT_DIR:-}" ] && [ -f "$NIGHT_DIR/run_manifest.json" ]; then
+                # push what exists, for diagnosis; the manifest's status is not success,
+                # so the skip check of a later run retries this night
                 cp "$KECK_ETCS_DATA/pod.log" "$NIGHT_DIR/pod.log"
-                python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include run.log pod.log pypeit_pin_check.json gates.json run_manifest.json --force
+                python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include 'redux/*' 'sens/*' 'harvest/*' run.log pod.log pypeit_pin_check.json gates.json run_manifest.json --force
               fi
               status "$1" "$2" "$3"
               exit 1
@@ -94,15 +96,20 @@ spec:
             FORCE=""; [ "$REPLACE" = 1 ] && FORCE="--force"
             echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
             log SKIP_CHECK
+            # done = run_manifest.json on the bucket with status success and passed gates;
+            # a night that failed (its manifest records the failure) is retried
             LS=$(python $SRC/scripts/nautilus/s3_sync.py ls "$S3_PREFIX") || fail "pull failed" "s3_sync.py ls $S3_PREFIX failed" 16
             if echo "$LS" | grep -q " $S3_PREFIX/run_manifest.json "; then
-              if [ "$REPLACE" != 1 ]; then
-                log "SKIP: $S3_PREFIX/run_manifest.json exists on the bucket (REPLACE=1 redoes the night)"
-                status skipped "run_manifest.json exists" 0
+              python $SRC/scripts/nautilus/s3_sync.py pull "$S3_PREFIX" --include run_manifest.json > /dev/null || fail "pull failed" "run_manifest.json pull failed" 16
+              PREV=$(python -c "import json, sys; m = json.load(open(sys.argv[1])); g = m.get('gates') or {}; print('done' if m.get('status') == 'success' and g.get('pass') else 'status=%s gates=%s' % (m.get('status'), g.get('failed')))" "$NIGHT_DIR/run_manifest.json")
+              if [ "$PREV" = done ] && [ "$REPLACE" != 1 ]; then
+                log "SKIP: $S3_PREFIX is done on the bucket (REPLACE=1 redoes the night)"
+                status skipped "run_manifest.json records success" 0
                 log NIGHT_DONE
                 exit 0
               fi
-              log "REPLACE=1: re-reducing over the existing products"
+              log "previous run: $PREV; REPLACE=$REPLACE: reducing"
+              rm -f "$NIGHT_DIR/run_manifest.json"
             fi
             log REDUCE
             python $SRC/scripts/mosfire/reduce_standard.py "$NIGHT" --scratch "$KECK_ETCS_DATA" --s3-pull

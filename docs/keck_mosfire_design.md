@@ -485,7 +485,19 @@ median throughput 0.15-0.45; and, given the local reference products from
 step S4 (`--reference` pointing at a synced-back copy), first that the
 reference's recorded `pypeit_pin` equals the image's PypeIt SHA and its
 `pin_check` passed (else FAIL before any comparison; D35), then zero-point
-agreement to 1 percent and `S2N` agreement to 5 percent. The same gates run
+agreement and `S2N` agreement to 5 percent. *Revised 2026-10-01 (user, after
+the S4b dry run):* the zero-point gate is band-level. The median pod/reference
+throughput ratio over 1.117-1.260 um must be within 2 percent, and its
+per-pixel 5-95 percentile range within ±5 percent. A reduction-fidelity gate
+is added: the median `OPT_COUNTS` ratio per frame must be within 0.1 percent.
+The reason: the IR telluric fit (`differential_evolution`, seed 777) is
+deterministic and gives bit-identical results in the image and locally on
+the same input, but it is chaotic in its input. A 1e-5 perturbation of the
+counts moves the per-pixel zero point by up to ~5 percent and the band median
+by up to ~1 percent (`scripts/mosfire/sensfunc_perturbation_test.py`). The
+first dry run gave a median of 0.990 and a 5-95 percent range of 0.975-0.998,
+with S2N within 0.01 percent. This scatter also bounds what a single
+standard's per-pixel zero point means (relevant to S10). The same gates run
 inside every
 production pod (without `--reference`). The pilot after the dry run is a
 3-5 night batch (the first wide-slit standards) before the full manifest.
