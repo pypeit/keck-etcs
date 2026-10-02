@@ -15,7 +15,7 @@ pypeit/spectrographs/*.py
 !pypeit/spectrographs/__init__.py
 
 # The GitHub-data cache script: populates the cache, cannot change a reduction
-# (fixed on the PypeIt branch etc-fixes, 275a012, 2026-09-30)
+# (fixed on the PypeIt branch etc-fixes, 275a012, 2026-09-30; pin now 8017f47)
 pypeit/scripts/cache_github_data.py
 
 # Documentation

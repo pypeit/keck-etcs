@@ -21,9 +21,11 @@ TAG=${TAG:-$VERSION}
 STAGE=${STAGE:-/tmp/keck_etcs_build_ctx}
 PYPEIT_REPO=${PYPEIT_REPO:-https://github.com/pypeit/PypeIt.git}
 # PypeIt branches whose history may contain the pin. Design D31 says develop
-# only; etc-fixes is a recorded exception (2026-09-30, pin 275a012 = develop
-# f3a1f1d + the pypeit_cache_github_data fix) until that fix merges into
-# develop, when the pin moves to the merge commit and this goes back to develop.
+# only; etc-fixes is a recorded exception (since 2026-09-30) until its fixes
+# merge into develop: pin 275a012 = develop f3a1f1d + the
+# pypeit_cache_github_data fix; pin 8017f47 (2026-10-02) adds the refine_trace
+# extraction parameter, off for MOSFIRE. Then the pin moves to the merge
+# commit and this goes back to develop.
 PIN_BRANCHES=${PIN_BRANCHES:-"develop etc-fixes"}
 PUSH=0
 [[ "${1:-}" == "--push" ]] && PUSH=1

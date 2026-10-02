@@ -405,8 +405,13 @@ argument. The user fixed it on the PypeIt branch `etc-fixes`
 (`275a012dfcb708d4f0eaeebd56d2513083244b24`, one commit on top of
 `f3a1f1d`). Image 0.1.0 pins that commit, and `build_image.sh` accepts a pin
 on `develop` *or* `etc-fixes` (`PIN_BRANCHES`).
-`pypeit/scripts/cache_github_data.py` is on the pin allow-list (D35). When the
-fix merges into `develop`, the pin moves to the merge commit, `PIN_BRANCHES`
+`pypeit/scripts/cache_github_data.py` is on the pin allow-list (D35).
+*Re-pinned 2026-10-02 (S4b)* to `etc-fixes`
+`8017f47997d6417d797be6d0a0358d7acb8918b5`. That commit adds the extraction
+parameter `refine_trace` (default True) and sets it False for `keck_mosfire`:
+the iterative trace refinement in `local_skysub_extract` walked the trace of
+m220409_0037 off the star (log of part 2, prompt #6). Image 0.1.3 and later
+carry it. When the fixes merge into `develop`, the pin moves to the merge commit, `PIN_BRANCHES`
 returns to `develop`, and the image tag is bumped. Layer order as built: the
 cache (3) sits *before* `COPY` of keck-etcs and its `pip install`, because it
 depends only on PypeIt and the grid checksum. `KECK_ETCS_GIT_SHAS` is

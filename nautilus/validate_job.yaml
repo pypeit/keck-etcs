@@ -1,5 +1,5 @@
 # keck-etcs dry run on Nautilus (S4b, design 4.8.7): reduce 2022-04-09 in one
-# pod with image 0.1.2 and gate it against the local S4 reference
+# pod with image 0.1.3 and gate it against the local S4 reference
 # (s3://keck-etcs/mosfire/20220409/reference/): spec1d for both LDS749B traces
 # and the four J0841 frames, wavelength RMS, zero point finite, median
 # throughput 0.15-0.45, reference pin == the pod's PypeIt SHA, zero points to
@@ -35,8 +35,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: validate
-        # image 0.1.2, digest TBD (filled in after the push)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.2
+        # image 0.1.3, digest TBD (filled in after the push)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.3
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -44,7 +44,7 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.2"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.3"}
         - {name: KECK_ETCS_IMAGE_DIGEST, value: "TBD"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "1"}
@@ -73,6 +73,7 @@ spec:
               if [ -n "${NIGHT_DIR:-}" ] && [ -f "$NIGHT_DIR/run_manifest.json" ]; then
                 # push what exists, for diagnosis; the manifest's status is not success,
                 # so the skip check of a later run retries this night
+                python -c "import json, sys; p = sys.argv[1]; m = json.load(open(p)); m['status'] = sys.argv[2]; m['error'] = sys.argv[3]; open(p, 'w').write(json.dumps(m, indent=2) + '\n')" "$NIGHT_DIR/run_manifest.json" "$1" "$2"
                 cp "$KECK_ETCS_DATA/pod.log" "$NIGHT_DIR/pod.log"
                 python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include 'redux/*' 'sens/*' 'harvest/*' run.log pod.log pypeit_pin_check.json gates.json run_manifest.json --force
               fi
