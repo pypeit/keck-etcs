@@ -145,7 +145,16 @@ keck-etcs commit.
 
 | tag | PypeIt pin | keck-etcs | digest | size | notes |
 |---|---|---|---|---|---|
+| 0.1.3 | `8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes`) | `d9f6d5f` | `sha256:2635e79f811b77b486fd9cf6243fcd7697d520af169cca52597b60a751ee4e64` | 2.16 GB | adds PypeIt `refine_trace` (off for MOSFIRE); fixes the 0037 extraction walk |
 | 0.1.0 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | `d4c5871` | `sha256:12793464bc5131985f1289984b7fdb138605861b78abb7e49ecd82400fec7866` | 2.16 GB | dry-run image (S4a). Pin = develop `f3a1f1d` + the `pypeit_cache_github_data` fix; a recorded exception to D31 until it merges into develop |
+
+**Registry login.** `--push` logs in through its own Docker config
+directory, `PUSH_DOCKER_CONFIG` (default `~/.docker-keck-etcs`). A deploy
+token is per project, and one Docker config holds one login per registry
+host, so a login for PAB in `~/.docker` used to overwrite the keck-etcs one
+(push `denied`, 2026-10-02). One-time setup, by the user:
+`mkdir -p ~/.docker-keck-etcs && printf '%s' '<token>' | DOCKER_CONFIG=~/.docker-keck-etcs docker login gitlab-registry.nrp-nautilus.io -u 'gitlab+deploy-token-1383' --password-stdin`.
+PAB can do the same with `~/.docker-pab`.
 
 **Re-pinning.** Edit `nautilus/pypeit_pin.txt` (one full SHA), bump
 `keck_etcs.__version__`, rebuild, push, and add a row here and to

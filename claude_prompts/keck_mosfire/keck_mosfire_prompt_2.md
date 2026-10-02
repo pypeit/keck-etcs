@@ -1108,3 +1108,97 @@ the fix.
 - **Prepared:** `keck_etcs` 0.1.3; both job YAMLs point at
   `profx/keck-etcs:0.1.3` with the digest TBD; MANIFESTS OK. Waiting for
   the user's commit before the build and push.
+
+### 2026-10-02 (Prompt #6 / S4b: image 0.1.3, dry run: extraction fixed, ZP gate fails narrowly; the telluric PCA is the cause)
+
+**Registry login.** The first 0.1.3 push was `denied`. `~/.docker/config.json`
+had been rewritten on 10-01 at 10:46 with `gitlab+deploy-token-1384`
+(another project); the keck-etcs token is `-1383`. On advice, the user ran
+a one-time login into a separate config directory, `~/.docker-keck-etcs`
+(user `gitlab+deploy-token-1383`). The push then ran as
+`DOCKER_CONFIG=~/.docker-keck-etcs bash nautilus/build_image.sh --push`
+with the committed script, so the tree was clean.
+
+**Image 0.1.3:** keck-etcs `d9f6d5f`, PypeIt pin `8017f47`
+(`2.0.2.dev1218+g8017f4799`), digest
+`sha256:2635e79f811b77b486fd9cf6243fcd7697d520af169cca52597b60a751ee4e64`,
+2.16 GB, `GUARDS OK`.
+
+Then, uncommitted:
+- `build_image.sh` now pushes and inspects with
+  `PUSH_DOCKER_CONFIG` (default `~/.docker-keck-etcs`), and before building
+  it fails if that config has no login for the registry. The one-time setup
+  is in its header.
+- `nautilus/README.md`: a "Registry login" note and the 0.1.3 row of the
+  tag table.
+- Both job YAMLs carry the 0.1.3 digest.
+
+**Dry run (0.1.3, node `k8s-haosu-11.sdsc.optiputer.net`, 990 s).**
+- The skip check retried the night: the previous run had status `gate
+  failed`.
+- **`spec1d_agree` PASS:** every frame within 1.1e-4, 0037 at 0.999987.
+  The trace fix works in the pod.
+- **`s2n_agree` PASS:** +0.00% on every frame.
+- spec1d, wave_rms (0.092), zp_finite, thru_median (0.1821) and ref_pin:
+  PASS.
+- **`zp_agree` FAIL:** median 1.0159 (within 2%) but 5-95%
+  0.998-**1.057**, past the ±5% band.
+- The extraction is identical, so this is purely the telluric-fit
+  instability. The pod pushed 105 objects with status `gate failed`.
+
+**Diagnosis: the 5-component PCA telluric model, not the optimizer
+tolerance.** `sensfunc_perturbation_test.py` on the new reference coadd,
+1e-5 input noise, 5 realizations per variant (`.sens` variants in
+`~/Projects/PypeIt/keck-etcs-data-tests/sensfunc_stability/`):
+
+| variant | worst 5-95% / median deviation | median throughput range |
+|---|---|---|
+| default (`tell_npca 5`, `tol 1e-3`, `popsize 30`), earlier test | 1.5-4.8% | 0.179-0.182 |
+| `tol = 1e-6` | 7.9% | 0.179-0.182 |
+| `popsize = 60`, `tol = 1e-5` | 5.1% (three of 5 runs about 1.4% low) | 0.179-0.183 |
+| **`tell_npca = 3`** | **0.64%** (3 of 5 within 1e-4) | 0.1803-0.1810 |
+
+**Fit quality, `tell_npca` 3 against 5 on the same coadd.**
+- chi2 1154.9 against 1172.5: lower with fewer components, so the
+  5-component fit lands in poorer local minima.
+- Telluric residual near 1.13 um: -2.3% against -2.1%.
+- The red-edge 5 nm residual pattern is identical, within 0.4%.
+- PWV estimate 1.66 against 1.32 mm. Median throughput 0.1803 against
+  0.1788.
+- ZP ratio (3/5): median 1.010, 5-95% 0.9985-1.047.
+- **Conclusion:** over the narrow J2 window the 5-component PCA is
+  degenerate, and the differential-evolution fit wanders among
+  near-equivalent solutions. 3 components fit at least as well and are
+  stable.
+
+**Open (needs the user):** whether to set `tell_npca = 3` in
+`keck_etcs/data/pypeit_par/keck_mosfire_J.sens`. That is a sensfunc setting
+in the repo's own parameter file (design 4.3), not a PypeIt defect. If yes:
+re-make the reference sensfunc (about 1 min) and re-stage it, build 0.1.4
+(the `.sens` file ships in the image), and re-run the dry run, the skip test
+and REPLACE.
+
+### 2026-10-02 (Prompt #6 / S4b: tell_npca = 3 adopted, reference sensfunc re-made; 0.1.4 prepared)
+
+- **User decision:** `tell_npca = 3`. Set in
+  `keck_etcs/data/pypeit_par/keck_mosfire_J.sens`, with the reason in its
+  header, and in design 4.3.
+- **Reference sensfuncs re-made** (`build_sensfunc.py`; the reduction is
+  unchanged). A first attempt ran the environment's Python directly, without
+  `conda run`, so `pypeit_sensfunc` was not on PATH and nothing was
+  re-fitted; it was redone through `conda run`.
+  - Coadd: `sensfunc.par` shows `tell_npca = 3`; chi2 1154.9; PCA
+    coefficients (-78.85, 0.479, 1.046); R 2743; median throughput
+    **0.1803**; ZP 19.636 at 1.20 um and 18.597 at 1.25 um; telluric
+    residual near 1.13 um -2.3%; PWV about 1.7 mm; all checks pass.
+  - Per-frame: the 0218/0219 ratio median is 0.886 with std **0.009**
+    (0.026 with 5 components). The 12% frame-to-frame difference in the data
+    is unchanged.
+- **Re-staged and force-pushed** `mosfire/20220409/reference/`: 17
+  objects. The bucket's coadd sensfunc sha256 equals the local one
+  (3d72a31b...). The gates self-check passes.
+- **Prepared:** `keck_etcs` 0.1.4; YAMLs on `:0.1.4` with the digest TBD;
+  MANIFESTS OK.
+- **To commit (user):** `.sens`, design, `__init__`, the YAMLs,
+  `build_image.sh` (per-project Docker config), `nautilus/README.md`, this
+  log.

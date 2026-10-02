@@ -1,6 +1,11 @@
 # pypeit_sensfunc parameters for Keck/MOSFIRE J-band standards (design 4.3).
-# Ships inside the Nautilus image; used by scripts/mosfire/reduce_standard.py --sens.
-# Differs from the PypeIt MOSFIRE default only in polyorder (13 -> 6, design D8).
+# Ships inside the Nautilus image; used by scripts/mosfire/build_sensfunc.py
+# (and reduce_standard.py --sens). Differs from the PypeIt MOSFIRE defaults in
+# polyorder (13 -> 6, design D8) and tell_npca (5 -> 3): over the narrow J2
+# window the 5-component telluric PCA is degenerate and the fit wanders between
+# near-equivalent solutions (per-pixel zero point unstable by up to ~5% under
+# 1e-5 input changes); 3 components are stable to <1% with a lower chi^2
+# (S4b, 2026-10-02; scripts/mosfire/sensfunc_perturbation_test.py).
 [sensfunc]
   algorithm = IR
   polyorder = 6
@@ -9,3 +14,4 @@
   [[IR]]
     telgridfile = TellPCA_3000_26000_R10000.fits
     maxiter = 2
+    tell_npca = 3

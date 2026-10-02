@@ -248,7 +248,17 @@ PypeIt `IR` algorithm (`pypeit_sensfunc --algorithm IR`) with:
   [[IR]]
     telgridfile = TellPCA_3000_26000_R10000.fits
     maxiter = 2
+    tell_npca = 3        # PypeIt default 5; see below
 ```
+
+*`tell_npca = 3` (user, 2026-10-02, S4b).* Over the J2 window the default
+5-component telluric PCA is degenerate. The differential-evolution fit
+(seed 777) is deterministic, but 1e-5 input changes move the per-pixel zero
+point by up to ~5% (5-95 percent range). 3 components are stable to <1%,
+with a lower chi^2 (1155 against 1173 on the 2022-04-09 coadd) and the same
+telluric residual near 1.13 um and red-edge pattern
+(`scripts/mosfire/sensfunc_perturbation_test.py`; log of part 2,
+prompt #6).
 
 The telluric grid (6 MB) is fetched by PypeIt from its S3 host into the
 astropy cache (`~/.cache/pypeit` on the workstation) on first use. That host
