@@ -5,13 +5,20 @@
 #   bash nautilus/build_image.sh --push     # ... then push :<version> and :latest,
 #                                           #     and inspect the manifest
 #
-# Runs on the Linux workstation. --push needs `docker login
-# gitlab-registry.nrp-nautilus.io` (the keck-etcs deploy token) and a clean,
-# committed work tree, so the tag always maps to a commit. The image is PUBLIC:
-# the script refuses to build if a credentials file is in the build context.
+# Runs on the Linux workstation. --push needs a clean, committed work tree,
+# so the tag always maps to a commit, and the keck-etcs deploy token logged
+# in to its OWN Docker config directory, PUSH_DOCKER_CONFIG (default
+# ~/.docker-keck-etcs), so that logins for other projects on the same
+# registry host (e.g. PAB) never overwrite it. One-time setup:
+#   mkdir -p ~/.docker-keck-etcs && printf '%s' '<token>' | \
+#     DOCKER_CONFIG=~/.docker-keck-etcs docker login gitlab-registry.nrp-nautilus.io \
+#     -u 'gitlab+deploy-token-1383' --password-stdin
+# Only the push and manifest steps use that config; the build uses the default.
+# The image is PUBLIC: the script refuses to build if a credentials file is
+# in the build context.
 #
 # Environment overrides: IMAGE, TAG (default: keck_etcs.__version__),
-# STAGE (default /tmp/keck_etcs_build_ctx), PYPEIT_REPO.
+# STAGE (default /tmp/keck_etcs_build_ctx), PYPEIT_REPO, PUSH_DOCKER_CONFIG.
 set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -21,12 +28,21 @@ TAG=${TAG:-$VERSION}
 STAGE=${STAGE:-/tmp/keck_etcs_build_ctx}
 PYPEIT_REPO=${PYPEIT_REPO:-https://github.com/pypeit/PypeIt.git}
 # PypeIt branches whose history may contain the pin. Design D31 says develop
-# only; etc-fixes is a recorded exception (2026-09-30, pin 275a012 = develop
-# f3a1f1d + the pypeit_cache_github_data fix) until that fix merges into
-# develop, when the pin moves to the merge commit and this goes back to develop.
+# only; etc-fixes is a recorded exception (since 2026-09-30) until its fixes
+# merge into develop: pin 275a012 = develop f3a1f1d + the
+# pypeit_cache_github_data fix; pin 8017f47 (2026-10-02) adds the refine_trace
+# extraction parameter, off for MOSFIRE. Then the pin moves to the merge
+# commit and this goes back to develop.
 PIN_BRANCHES=${PIN_BRANCHES:-"develop etc-fixes"}
+PUSH_DOCKER_CONFIG=${PUSH_DOCKER_CONFIG:-$HOME/.docker-keck-etcs}
 PUSH=0
 [[ "${1:-}" == "--push" ]] && PUSH=1
+if [[ $PUSH -eq 1 ]]; then
+  # fail now, not after a 5-minute build, if this project's login is missing
+  python3 -c "import json, sys; a = json.load(open(sys.argv[1])).get('auths', {}); sys.exit(0 if sys.argv[2] in a else 1)" \
+      "$PUSH_DOCKER_CONFIG/config.json" "${IMAGE%%/*}" 2>/dev/null \
+    || { echo "FATAL: no login for ${IMAGE%%/*} in $PUSH_DOCKER_CONFIG (see the one-time setup in this script's header)"; exit 1; }
+fi
 
 PIN=$(head -1 "$REPO/nautilus/pypeit_pin.txt" | tr -d '[:space:]')
 [[ ${#PIN} -eq 40 ]] || { echo "FATAL: nautilus/pypeit_pin.txt must hold one full SHA"; exit 1; }
@@ -108,8 +124,9 @@ docker run --rm "$IMAGE:$TAG" pip list 2>/dev/null | grep -i -E '^(torch|nvidia|
 # --- 5. push
 if [[ $PUSH -eq 1 ]]; then
   echo "== pushing (if a push stalls >10 min on 'Waiting' or the manifest, interrupt and re-run)"
-  docker push "$IMAGE:$TAG"
-  docker push "$IMAGE:latest"
-  docker manifest inspect "$IMAGE:$TAG" > /dev/null && echo "push OK: $IMAGE:$TAG"
+  echo "   using the Docker config $PUSH_DOCKER_CONFIG"
+  DOCKER_CONFIG="$PUSH_DOCKER_CONFIG" docker push "$IMAGE:$TAG"
+  DOCKER_CONFIG="$PUSH_DOCKER_CONFIG" docker push "$IMAGE:latest"
+  DOCKER_CONFIG="$PUSH_DOCKER_CONFIG" docker manifest inspect "$IMAGE:$TAG" > /dev/null && echo "push OK: $IMAGE:$TAG"
   echo "digest: $(docker image inspect --format '{{join .RepoDigests " "}}' "$IMAGE:$TAG")"
 fi

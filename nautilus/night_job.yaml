@@ -1,0 +1,174 @@
+# keck-etcs per-night reduction on Nautilus (design 4.8.4, D33): an Indexed Job,
+# one pod per row of a night manifest CSV (the row is JOB_COMPLETION_INDEX).
+# Each pod, on emptyDir scratch: PROVENANCE; skip the night if
+# s3://keck-etcs/<s3_prefix>/run_manifest.json exists (unless REPLACE=1);
+# reduce_standard.py --s3-pull (pin check, pypeit_setup, patch, run_pypeit,
+# QA); build_sensfunc.py (per-frame + coadd sensfunc with the packaged .sens);
+# gates.py; harvest (once S6 exists); push the products (run_manifest.json
+# last); write and push a status row; NIGHT_DONE. Any failure writes the
+# status row (and pushes run_manifest.json/run.log/pod.log for diagnosis) and
+# exits 1, so the Job reports the failed index.
+#
+# Sizing: initial guess from design 4.8.4 (cpu 4, 16Gi, 30/60Gi scratch, 6 h).
+# MEASURED (S4b dry run, 2022-04-09, 16 raw frames, SPEC2D=1, 2026-10-01):
+#   wall-clock 850 s on hcc-gpengine-shor-c5303 (run_pypeit 12 min) and
+#   1390 s up to the gates on k8s-chase-ci-02 (run_pypeit 20 min): per-node
+#   speed varies by about 1.7x. CPU about 1.0 core throughout (PypeIt is
+#   essentially single-threaded here). Peak memory 5.84 GiB (cgroup
+#   memory.peak). Scratch 1.78 GB (raw 258 MB, redux with spec2d about
+#   1.5 GB, sens 2.4 MB). Push 1.5 GB with spec2d.
+#   => the requests below over-provision CPU (4 -> 1-2) and memory
+#   (16 -> 8 Gi); revisit after the pilot (design 4.8.4) before raising
+#   parallelism.
+#
+# Set spec.completions to the number of rows in the manifest. Usage:
+#   kubectl -n pypeit create configmap keck-etcs-nights \
+#     --from-file=nights.csv=nautilus/manifests/nights_<batch>.csv --dry-run=client -o yaml \
+#     | kubectl apply -f -
+#   kubectl -n pypeit delete job keck-etcs-nights --ignore-not-found
+#   kubectl apply -f nautilus/night_job.yaml
+#   kubectl -n pypeit logs -f job/keck-etcs-nights            # NIGHT_DONE per pod
+# Credentials: the secret named by KECK_ETCS_S3_SECRET (default
+# prp-s3-credentials, verified in S1b); to use another, apply through
+#   sed "s/prp-s3-credentials/$KECK_ETCS_S3_SECRET/" nautilus/night_job.yaml | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keck-etcs-nights
+  namespace: pypeit
+  labels: {app: keck-etcs, role: night}
+spec:
+  completionMode: Indexed
+  completions: 1             # = rows in the manifest CSV
+  parallelism: 4             # raise only after the pilot measures rate and memory
+  backoffLimit: 4            # idempotent: a preempted night is redone or skipped
+  activeDeadlineSeconds: 21600
+  template:
+    metadata:
+      labels: {app: keck-etcs, role: night}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: night
+        # image 0.1.4, digest TBD (filled in after the push)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4
+        imagePullPolicy: Always
+        env:
+        - {name: HOME, value: /root}
+        - {name: BUCKET, value: keck-etcs}
+        - {name: KECK_ETCS_BUCKET, value: keck-etcs}
+        - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
+        - {name: KECK_ETCS_DATA, value: /scratch}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "TBD"}
+        - {name: OMP_NUM_THREADS, value: "4"}
+        - {name: SPEC2D, value: "0"}
+        - {name: REPLACE, value: "0"}
+        - {name: GATES_REFERENCE, value: ""}
+        - {name: MANIFEST, value: /opt/manifest/nights.csv}
+        - name: JOB_NAME
+          valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}
+        - name: POD_NAME
+          valueFrom: {fieldRef: {fieldPath: metadata.name}}
+        - name: NODE_NAME
+          valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+        command: ["/bin/bash", "-lc"]
+        args:
+          - |
+            set -o pipefail
+            SRC=/opt/src/keck-etcs
+            T0=$(date +%s)
+            mkdir -p "$KECK_ETCS_DATA"
+            exec > >(tee -a "$KECK_ETCS_DATA/pod.log") 2>&1
+            log() { echo "=== $1 $(date -Is) ==="; }
+            status() { python $SRC/nautilus/status_row.py --status "$1" --error "$2" --exit-code "$3" && python $SRC/scripts/nautilus/s3_sync.py push "runs/$JOB_NAME/status" --force; }
+            fail() {
+              log "FAILED [$1]: $2"
+              echo "wall_clock_s=$(( $(date +%s) - T0 ))"
+              if [ -n "${NIGHT_DIR:-}" ] && [ -f "$NIGHT_DIR/run_manifest.json" ]; then
+                # push what exists, for diagnosis; the manifest's status is not success,
+                # so the skip check of a later run retries this night
+                python -c "import json, sys; p = sys.argv[1]; m = json.load(open(p)); m['status'] = sys.argv[2]; m['error'] = sys.argv[3]; open(p, 'w').write(json.dumps(m, indent=2) + '\n')" "$NIGHT_DIR/run_manifest.json" "$1" "$2"
+                cp "$KECK_ETCS_DATA/pod.log" "$NIGHT_DIR/pod.log"
+                python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include 'redux/*' 'sens/*' 'harvest/*' run.log pod.log pypeit_pin_check.json gates.json run_manifest.json --force
+              fi
+              status "$1" "$2" "$3"
+              exit 1
+            }
+            log PROVENANCE
+            echo "image=$KECK_ETCS_IMAGE"
+            echo "image_digest=$KECK_ETCS_IMAGE_DIGEST"
+            echo "KECK_ETCS_GIT_SHAS=$KECK_ETCS_GIT_SHAS"
+            python -c "import pypeit, keck_etcs; from keck_etcs import provenance; print('pypeit', pypeit.__version__, '| keck_etcs', keck_etcs.__version__, '|', provenance.git_shas())"
+            echo "pin=$(cat $SRC/nautilus/pypeit_pin.txt)"
+            echo "job=$JOB_NAME index=$JOB_COMPLETION_INDEX pod=$POD_NAME node=$NODE_NAME omp=$OMP_NUM_THREADS replace=$REPLACE spec2d=$SPEC2D"
+            sha256sum "$MANIFEST"
+            log NIGHT
+            SPEC2D_ENV="$SPEC2D"
+            eval "$(python -c "import csv, os, shlex; r = list(csv.DictReader(open(os.environ['MANIFEST'])))[int(os.environ['JOB_COMPLETION_INDEX'])]; print('\n'.join('export %s=%s' % (k.upper(), shlex.quote(v)) for k, v in r.items()))")"
+            [ -n "${NIGHT:-}" ] || fail "setup failed" "no row $JOB_COMPLETION_INDEX in $MANIFEST" 11
+            [ "$SPEC2D_ENV" = 1 ] && export SPEC2D=1
+            NIGHT_DIR="$KECK_ETCS_DATA/$S3_PREFIX"
+            FORCE=""; [ "$REPLACE" = 1 ] && FORCE="--force"
+            echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
+            log SKIP_CHECK
+            # done = run_manifest.json on the bucket with status success and passed gates;
+            # a night that failed (its manifest records the failure) is retried
+            LS=$(python $SRC/scripts/nautilus/s3_sync.py ls "$S3_PREFIX") || fail "pull failed" "s3_sync.py ls $S3_PREFIX failed" 16
+            if echo "$LS" | grep -q " $S3_PREFIX/run_manifest.json "; then
+              python $SRC/scripts/nautilus/s3_sync.py pull "$S3_PREFIX" --include run_manifest.json > /dev/null || fail "pull failed" "run_manifest.json pull failed" 16
+              PREV=$(python -c "import json, sys; m = json.load(open(sys.argv[1])); g = m.get('gates') or {}; print('done' if m.get('status') == 'success' and g.get('pass') else 'status=%s gates=%s' % (m.get('status'), g.get('failed')))" "$NIGHT_DIR/run_manifest.json")
+              if [ "$PREV" = done ] && [ "$REPLACE" != 1 ]; then
+                log "SKIP: $S3_PREFIX is done on the bucket (REPLACE=1 redoes the night)"
+                status skipped "run_manifest.json records success" 0
+                log NIGHT_DONE
+                exit 0
+              fi
+              log "previous run: $PREV; REPLACE=$REPLACE: reducing"
+              rm -f "$NIGHT_DIR/run_manifest.json"
+            fi
+            log REDUCE
+            python $SRC/scripts/mosfire/reduce_standard.py "$NIGHT" --scratch "$KECK_ETCS_DATA" --s3-pull
+            RC=$?
+            if [ $RC -ne 0 ]; then
+              case $RC in 10) S="no calibs";; 11) S="setup failed";; 13) S="no trace";; 14) S="sens failed";; 15) S="pin check failed";; 16) S="pull failed";; *) S="reduce failed";; esac
+              fail "$S" "reduce_standard.py exit $RC" $RC
+            fi
+            log SENSFUNC
+            python $SRC/scripts/mosfire/build_sensfunc.py "$NIGHT" --standard "$STANDARD" || fail "sens failed" "build_sensfunc.py failed" 14
+            log GATES
+            python $SRC/nautilus/gates.py "$NIGHT" --standard "$STANDARD" ${GATES_REFERENCE:+--reference "$GATES_REFERENCE"} --update-manifest --json "$NIGHT_DIR/gates.json" || fail "gate failed" "$(python -c "import json, sys; print('gates failed: ' + ','.join(json.load(open(sys.argv[1]))['failed']))" "$NIGHT_DIR/gates.json" 2>/dev/null)" 1
+            log HARVEST
+            if [ -f $SRC/scripts/mosfire/harvest_sens.py ]; then
+              python $SRC/scripts/mosfire/harvest_sens.py harvest "$NIGHT" --standard "$STANDARD" || fail "sens failed" "harvest_sens.py failed" 14
+            else
+              echo "harvest_sens.py is not in this image (S6 not implemented yet): skipped"
+            fi
+            [ "$SPEC2D" = 1 ] || rm -f "$NIGHT_DIR"/redux/Science/spec2d_*.fits
+            log USAGE
+            WALL=$(( $(date +%s) - T0 ))
+            SCRATCH=$(du -sb "$KECK_ETCS_DATA" | cut -f1)
+            MEMPEAK=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes 2>/dev/null || echo -1)
+            echo "wall_clock_s=$WALL scratch_bytes=$SCRATCH memory_peak_bytes=$MEMPEAK"
+            du -sh "$NIGHT_DIR"/* 2>/dev/null
+            python -c "import json, sys; p = sys.argv[1]; m = json.load(open(p)); m['pod_usage'] = {'wall_clock_s': int(sys.argv[2]), 'scratch_bytes': int(sys.argv[3]), 'memory_peak_bytes': int(sys.argv[4])}; open(p, 'w').write(json.dumps(m, indent=2) + '\n')" "$NIGHT_DIR/run_manifest.json" "$WALL" "$SCRATCH" "$MEMPEAK"
+            log PUSH
+            cp "$KECK_ETCS_DATA/pod.log" "$NIGHT_DIR/pod.log"
+            python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include 'redux/*' 'sens/*' 'harvest/*' run.log pod.log pypeit_pin_check.json gates.json $FORCE || fail "push failed" "product push failed" 17
+            python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include run_manifest.json --force || fail "push failed" "run_manifest.json push failed" 17
+            status success "" 0 || echo "WARNING: status row push failed"
+            echo "wall_clock_s=$(( $(date +%s) - T0 ))"
+            log NIGHT_DONE
+        resources:
+          requests: {cpu: "4", memory: "16Gi", ephemeral-storage: "30Gi"}
+          limits: {cpu: "4", memory: "16Gi", ephemeral-storage: "60Gi"}
+        volumeMounts:
+        - {name: scratch, mountPath: /scratch}
+        - {name: s3-credentials, mountPath: /root/.aws/credentials, subPath: credentials, readOnly: true}
+        - {name: manifest, mountPath: /opt/manifest, readOnly: true}
+      volumes:
+      - {name: scratch, emptyDir: {}}
+      - name: s3-credentials
+        secret: {secretName: prp-s3-credentials}
+      - name: manifest
+        configMap: {name: keck-etcs-nights}

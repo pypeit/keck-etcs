@@ -735,3 +735,470 @@ approved the push. `bash nautilus/build_image.sh --push`:
 - **To do at 0.2.0:**
   - add the `import keck_etcs.calib.harvest` guard once S6 exists;
   - re-pin to develop once the `etc-fixes` fix merges.
+
+### 2026-10-01 (Prompt #6 / S4b: job templates, dry runs on Nautilus; gates pass once, then an extraction instability; decision pending)
+
+**Reference re-reduced at the new pin.** The S4 reference recorded
+`pypeit_pin = f3a1f1d`, so gate 5 would have failed against the 0.1.x image
+pin `275a012`. S4 and S5 were re-run locally:
+- PypeIt HEAD = pin = 275a012, `pin_check.pass`, empty diff.
+- keck-etcs `f949f2a`, clean; 445 s.
+- Results identical to the first S4: same FWHM, S/N and RMS.
+- The local version string still reads `2.0.2.dev1216+gf3a1f1d27`, because
+  the editable install's metadata is stale; the gates compare SHAs.
+
+`scripts/nautilus/stage_reference.py` copied (not linked) 16 products into
+`mosfire/20220409/reference/` with a `MANIFEST.txt` of sha256s, and pushed
+them: 17 objects, 6.8 MB, on `s3://keck-etcs/mosfire/20220409/reference/`.
+
+**New files.**
+- **`nautilus/night_job.yaml`:** Indexed Job (`completions` = manifest
+  rows, `parallelism 4`, `backoffLimit 4`, 6 h); env per the prompt; secret
+  at `/root/.aws/credentials`; emptyDir `/scratch`; manifest ConfigMap at
+  `/opt/manifest/nights.csv`; `JOB_NAME`, `POD_NAME`, `NODE_NAME` from the
+  downward API. The script block does:
+  - PROVENANCE, then the manifest row;
+  - the skip check: a night is done only if its manifest on the bucket has
+    `status == success` and `gates.pass`;
+  - `reduce_standard.py --scratch /scratch --s3-pull`, then
+    `build_sensfunc.py` (the coadd product named like the reference), then
+    `gates.py --update-manifest`, then the harvest (skipped until S6);
+  - spec2d removed unless `SPEC2D=1`;
+  - USAGE (wall-clock, `du -sb`, cgroup `memory.peak`), written into
+    `run_manifest.json.pod_usage`;
+  - the push: products, then `run_manifest.json` **last**;
+  - the status row, then `NIGHT_DONE`.
+  - On failure it records the status and error in the manifest, pushes the
+    products and logs for diagnosis, writes the status row and exits 1.
+  - `REPLACE=1` pushes with `--force`.
+- **`nautilus/validate_job.yaml`:** the same block, kept byte-identical and
+  checked by `validate_manifests.py`; 1 row, `backoffLimit 0`, `SPEC2D=1`,
+  `GATES_REFERENCE=s3://keck-etcs/mosfire/20220409/reference`, 2 h.
+- **`nautilus/gates.py`** (design 4.8.7; the revised tolerances are below):
+  - every night: `spec1d` (all on-sky frames have objects; the standard at
+    nod positions A and B), `wave_rms`, `zp_finite`, `thru_median`;
+  - with `--reference`: `ref_pin` (fails before any comparison),
+    `spec1d_agree`, `zp_agree`, `s2n_agree`.
+  - It pulls an `s3://` reference with `s3_sync`, writes `gates.json`, and
+    with `--update-manifest` records the result and the sens sha256s in the
+    manifest.
+- **`nautilus/status_row.py`:** one ECSV row per pod at
+  `runs/<job>/status/<index>_<night>.ecsv`, so parallel pods never write the
+  same key.
+- **`nautilus/night_failures.py`:** concatenates the rows into
+  `status.ecsv` and writes a sweep manifest. A night with two data-reason
+  failures (`no calibs`, `no trace`) is not retried.
+- **`nautilus/status_table.py`:** a store-only table from the
+  `<instr>/<date>/run_manifest.json` objects.
+- **`nautilus/manifests/nights_dryrun.csv`;** `nautilus/validate_manifests.py`
+  (yaml.safe_load, namespace, `bash -n`, secret mount, emptyDir, env,
+  identical blocks).
+- **`scripts/nautilus/s3_sync.py`:** `push --include` and `push --force`.
+- **Diagnostics:** `scripts/nautilus/compare_sensfunc_stacks.py`,
+  `scripts/mosfire/sensfunc_perturbation_test.py`,
+  `nautilus/compare_spec1d.py [--within]`, `nautilus/compare_spec2d.py`.
+- **Documentation:** the operator section of `nautilus/README.md`.
+
+**Local tests.**
+- `validate_manifests.py`: MANIFESTS OK. `kubectl apply --dry-run=server`
+  passes; it is refused only when a completed Job of the same name exists,
+  because the template is immutable, hence the usage's delete first.
+- `gates.py` against the local reference: all PASS (ratio exactly 1). A
+  fake reference pin `f3a1f1d` gives `ref_pin` FAIL and no comparisons,
+  exit 1.
+- Status rows to a sweep manifest: one retry, plus one night with two
+  data-reason failures that is not retried.
+
+**Images.** Each rebuild only touches layer 4, about 5 min with the push.
+Each was committed by the user first, and the pin is always 275a012.
+
+| tag | keck-etcs | digest | why |
+|---|---|---|---|
+| 0.1.1 | f211d4d | `sha256:44faabcd081e96617ebeed3d05ce3b6d67883dab274c8cc17efa16ed36de09df` | helpers and `s3_sync --include/--force` in the image (no ConfigMap shadowing) |
+| 0.1.2 | 534725e | `sha256:51f39684e765569099d7f6e0b55668179f1f43ee05d4070546ff0e59ce1ab19c` | revised `gates.py` |
+
+The in-cluster anonymous pull works, since the pods started. In every pod,
+PROVENANCE shows both SHAs and the digest, and PypeIt = pin.
+
+**Dry runs** (`keck-etcs-validate`, namespace `pypeit`, ConfigMap
+`keck-etcs-nights-dryrun`):
+1. **0.1.1, node `k8s-chase-ci-02`:** 1390 s up to the gates
+   (`run_pypeit` 20 min on about 1.0 CPU, 3.4 GiB). All gates pass except
+   `zp_agree` at 1 percent: median 0.9902, 5-95% 0.975-0.998, S2N within
+   0.01%.
+   - **Diagnosis (the prompt's Python/BLAS question): not the stack.**
+     `compare_sensfunc_stacks.py` fits the same local coadd twice locally
+     and once in the image (Python 3.14.6/numpy 2.5.0/scipy 1.18.0 against
+     3.12.14/2.5.3/1.18.1). All three are **bit-identical**.
+   - **The telluric fit is chaotic in its input.**
+     `sensfunc_perturbation_test.py` perturbs the counts by 1e-5, 1e-4 and
+     1e-3: the per-pixel zero point moves by up to 4.8% (5-95% range) and
+     the band median by up to 0.9%.
+   - **User decision:** a band-level gate. `zp_agree` requires the median
+     within 2% and the 5-95% range within ±5%; a new `spec1d_agree`
+     requires each frame's median `OPT_COUNTS` within 0.1%. Recorded in
+     design 4.8.7.
+   - Script bugs found and fixed: the failure path had pushed
+     `run_manifest.json`, which would have made the night "done", and no
+     products.
+2. **0.1.2, node `hcc-gpengine-shor-c5303.unl.edu`:** the skip check
+   retried the night (previous gates failed). **All gates PASS:**
+   `spec1d_agree` within 7e-5; `zp_agree` median 1.0011, 5-95%
+   0.9965-1.0032; S2N within 0.01%; median throughput 0.1815.
+   - **Measured:** wall-clock 850 s (`run_pypeit` 12 min); peak memory
+     **5.84 GiB** (cgroup); scratch **1.78 GB** (raw 258 MB, redux with
+     spec2d about 1.5 GB); push 104 objects, 1.5 GB. Written into the
+     `night_job.yaml` header: CPU about 1 core and memory under 6 GiB, so
+     the cpu 4 / 16Gi requests over-provision.
+3. **Re-apply, `REPLACE=0`:** `SKIP: mosfire/20220409 is done`, a `skipped`
+   status row, `NIGHT_DONE` in 4 s. The skip works.
+4. **`REPLACE=1`, same node, same image:** re-reduced, pushed 105 objects
+   with `--force`; the failure status is now recorded in the manifest
+   (fix applied).
+   - **`spec1d_agree` FAILED on frame m220409_0037:** OPT 1.161 and BOX
+     1.162 against the reference; FWHM 4.962 against 4.433; S2N +1.6%.
+     Every other frame agrees to 3e-4, and both standard frames are
+     identical in every run.
+   - `compare_spec2d.py` (pod against local spec2d of 0037): SCIIMG,
+     IVARRAW, TILTS and WAVEIMG agree to numerical noise (median |d|
+     1.7e-5). The divergence is in the extraction mask: 2040 pixels with
+     bit `EXTRACT` (256) differ, in columns 731-832 around the traces at
+     spat 771 and 795; the CR masks differ by 4 pixels (9058 against 9054).
+     The local sky / extraction outlier rejection takes one of two paths.
+   - `compare_spec1d.py --within` (each frame's BOX counts against the
+     median of the 4 J0841 frames): in the **reference** 0037 is
+     **0.82**, an 18% outlier; in the REPLACE pod it is **0.95**,
+     consistent (the others are 1.14, 1.01, 0.99 in both runs).
+   - **So the branch taken by the reference, both local runs and pod runs
+     1-2 over-rejects on-trace pixels and biases 0037 about 16% low. The
+     "failing" pod is the plausible reduction.**
+
+**State on the bucket.** `mosfire/20220409/` now holds run 4's products,
+with status `gate failed`. `reference/` is unchanged. Status rows are under
+`runs/keck-etcs-validate/status/`.
+
+**Open, needs the user before any batch.** How to treat the bistable
+extraction of 0037: investigate the PypeIt local-sky/extraction rejection
+(a candidate PypeIt defect, to be fixed in PypeIt), or scope the gate. The
+`s3_sync.py pull mosfire/20220409` into the data root waits for a passing
+run on the bucket.
+
+No credential value appears in any pod log, local log or file:
+`prp-s3-credentials` is mounted, never printed, and `status_row` and the
+manifests carry no keys.
+
+### 2026-10-01 (Prompt #6 / S4b, continued: investigating the 0037 extraction in PypeIt; paused)
+
+User decision: investigate the bistable extraction of m220409_0037 in
+PypeIt before any batch. If it is a PypeIt defect, fix it on `etc-fixes`,
+re-pin, rebuild, then redo the reference and the dry run.
+
+**Harness: `scripts/mosfire/extraction_stability_test.py DATE [--eps --n --jobs --outdir]`.**
+- Reduces only the night's flats, the standard and the 0036/0037 pair,
+  reusing copies of the local `Calibrations/`, with the pair's raw frames
+  scaled by `1 + eps*N(0,1)`. About 5 min per realization.
+- The **standard must stay in the file.** Without it the image processing is
+  still bit-identical, but the global sky and the extraction differ
+  (0036 S/N 22.96 against 28.87), because PypeIt uses the standard's trace
+  as the tracing crutch for the science objects of the same calib group.
+- With the standard, the unperturbed realization reproduces the reference
+  exactly: 0037 FWHM 4.4326, S/N 27.05.
+
+**Evidence so far.**
+- The `EXTRACT` bit (256) comes from the outlier mask of
+  `skysub.local_skysub_extract` (`extraction.py:813`; `sigrej = 3.5`,
+  profile refit per iteration).
+- In the reference branch, **4576 pixels within ±8 px of the 0037 trace are
+  flagged `EXTRACT`, against 421 for 0036.**
+- Object-finding QA: in 0037 the positive trace (spat about 795) lies
+  24 px (4.3") from the negative trace of its background frame 0036
+  (spat about 771), and that negative is stronger (collapsed S/N about −250
+  against +220). This is a hypothesis to test: the negative trace's
+  masking or wings may interact with the local sky and profile rejection.
+
+**Running when paused.** A 6-realization run at eps = 1e-6 (outdir in this
+session's scratchpad, so it may not survive the logout). To resume:
+
+    conda run -n pypeit14b python scripts/mosfire/extraction_stability_test.py 20220409 \
+        --n 6 --jobs 3 --eps 1e-6 --outdir $KECK_ETCS_DATA/mosfire/20220409/extraction_stability
+
+Then compare the branches' profile fits (FWHMFIT, `pos_*obj_prof` QA, the
+`EXTRACT` map around the trace). Next, test the negative-trace hypothesis,
+e.g. by reducing 0037 against 0039 instead of 0036, or by changing the
+`sigrej`/`no_local_sky` settings in the pair's PypeIt file.
+
+**Bucket state.** `mosfire/20220409/` holds the REPLACE run (status
+`gate failed`), so the data-root pull still waits.
+
+**Uncommitted.**
+- `nautilus/night_job.yaml` and `validate_job.yaml`: digest 0.1.2, the
+  manifest-status fix in the failure path, the measured sizing.
+- `nautilus/compare_spec1d.py`, `nautilus/compare_spec2d.py`,
+  `scripts/mosfire/extraction_stability_test.py`, and this log.
+
+### 2026-10-01/02 (Prompt #6 / S4b, investigation: the 0037 instability is the trace walk inside local_skysub_extract)
+
+The scripts and results below were made on 10-01, 12:14-12:24, after the
+pause, but never logged. This entry records them, plus one check made on
+resuming.
+
+**New scripts** (all diagnostic):
+- `scripts/mosfire/trace_vs_centroid.py`: PypeIt's `TRACE_SPAT` against the
+  object centroid in `SCIIMG - SKYMODEL`, in 51-row blocks.
+- `scripts/mosfire/extract_mask_map.py`: `EXTRACT` fraction and normalized
+  residual against the offset from the trace and along the spectrum.
+- `scripts/mosfire/run_pypeit_fixed_trace.py`: **an experiment, not for
+  production.** It runs `run_pypeit` with `spatialprofile.fit_profile`
+  wrapped to return its *input* trace, so `local_skysub_extract` keeps the
+  object-finding trace through all its iterations.
+
+**1. The bistability reproduces locally**
+(`extraction_stability_test.py --eps 1e-6 --n 6`;
+`$KECK_ETCS_DATA/mosfire/20220409/extraction_stability/summary_eps1e-6.ecsv`).
+- 0036 is stable in all 6 realizations: FWHM 4.974, S/N 28.87, BOX 4602,
+  421 `EXTRACT` pixels within ±8 px.
+- 0037 takes the reference branch in 5 of 6 (FWHM 4.433, S/N 27.05,
+  BOX 3314, 4576 `EXTRACT`). In 1 of 6 (k = 3) it takes the other branch:
+  FWHM 4.962, S/N 27.47, BOX 3834 (+16%), 3868 `EXTRACT`. That is the same
+  branch as the REPLACE pod.
+- So a 1e-6 change to the input flips it, on one machine and one stack.
+  Neither the node nor the image is the cause.
+
+**2. With the trace held fixed, 0037 is stable and consistent**
+(`run_pypeit_fixed_trace.py` in the harness;
+`.../extraction_stability_fixed/summary.ecsv`, realizations 0, 1, 3 at
+eps 1e-6).
+- 0037 is identical in all three: FWHM 5.029, S/N 28.34, BOX 4549, and
+  only **611** `EXTRACT` pixels on the trace (0036: 576).
+- 0037's BOX against 0036 is now **0.99**. In the reference it is 0.72, in
+  the other branch 0.83.
+- 0036 shifts slightly: trace 770.63 against 770.94, S/N 28.95 against
+  28.87.
+
+**3. The walked trace is off the object** (`trace_vs_centroid.py`, run on
+resuming; trace minus centroid per 51-row block):
+
+| run | frame | median | rms | max | blocks > 0.75 px |
+|---|---|---|---|---|---|
+| reference | 0036 | -0.70 px | 0.30 | 1.86 | 9/39 |
+| reference | **0037** | **+1.26 px** | **1.08** | **2.64** | **24/36** |
+| fixed trace | 0037 | +0.04 px | 0.26 | 0.79 | 1/36 |
+
+**Conclusion.**
+- **Mechanism:** the trace refinement inside
+  `skysub.local_skysub_extract`, i.e. the updated trace returned by
+  `spatialprofile.fit_profile` on each iteration, walks 0037's trace
+  1.3 px (up to 2.6 px) off the object. A profile centred on the wrong
+  position misfits the core and wings, and the 3.5σ rejection flags about
+  4000 on-trace pixels (`EXTRACT`). The extracted flux is then 16-28% low,
+  and the fitted FWHM narrower.
+- **Why it is bistable:** where the walk ends depends on 1e-6-level input
+  differences.
+- **With the walk disabled,** the extraction is stable, on the object, and
+  consistent with the sibling frames.
+- **Status:** a PypeIt defect candidate in the trace update of
+  `fit_profile` / `local_skysub_extract`. The 24-px-away negative trace of
+  the background frame may be what pulls it. 0036 is walked too, but only
+  -0.7 px.
+
+**Next (needs the user):** design the fix on PypeIt `etc-fixes`. For
+example, bound or reject a trace update that moves the trace away from the
+data centroid, or keep the object-finding trace when the update does not
+improve chi^2. Then re-pin, rebuild, and re-run the reference and the dry
+run. `run_pypeit_fixed_trace.py` is not a fix and must not be used for
+production.
+
+### 2026-10-02 (Prompt #6 / S4b: PypeIt fix for the trace walk on etc-fixes — uncommitted, awaiting the user)
+
+User decision: a flag plus a MOSFIRE default of off.
+
+**PypeIt changes** (branch `etc-fixes`, uncommitted, 5 files, +54/-4):
+- `pypeit/par/pypeitpar.py`: new `ExtractionPar.refine_trace` (bool,
+  default `True`). Drafted by the unlogged 10-01 session and reviewed here.
+- `pypeit/core/skysub.py`: `local_skysub_extract(..., refine_trace=True)`.
+  When False, the object profile is still refit every iteration, but
+  `TRACE_SPAT` is not replaced by `fit_profile`'s trace (also from the
+  draft).
+- `pypeit/extraction.py`: `MultiSlitExtract` passes the parameter (draft).
+  Echelle extraction is unchanged.
+- `pypeit/spectrographs/keck_mosfire.py`:
+  `par['reduce']['extraction']['refine_trace'] = False`, with a comment on
+  the 0037 case.
+- `doc/releases/2.1.0dev.rst`: the new parameter (Functionality), the
+  MOSFIRE default (Instrument-specific), and the `pypeit_cache_github_data`
+  `quiet` fix of 275a012 (Bug Fixes; it had no entry).
+- **Not included:** a regenerated `doc/pypeit_par.rst`. Running
+  `doc/scripts/build_par_rst.py` locally rewrote 545 lines, mostly
+  table-padding and whitespace from the local formatting library, so the
+  file was restored from a copy. Regenerate it with PypeIt's usual
+  `update_docs` before the PR.
+
+**Root cause, from reading `spatialprofile.fit_profile`.**
+- The trace correction starts at the peak of a non-parametric b-spline
+  profile (`peak_x`) plus three shift iterations. It is accepted when the
+  median |correction| is below `max_trace_corr = 2 px`.
+- `local_skysub_extract` calls `fit_profile` on each of its 4 iterations,
+  starting from the already-shifted trace, with sticky outlier masks.
+- So nothing bounds the cumulative shift. Rejections on one side of the
+  core make the profile asymmetric, the peak moves, and more pixels are
+  rejected.
+
+**Verification.**
+- **Defaults:** MOSFIRE False; the generic default and DEIMOS True.
+- **PypeIt tests:** `test_pypeitpar.py`, `test_spectrographs.py` and
+  `test_skysub.py`: 61 passed.
+- **Harness, flag set in the PypeIt file** (`--no-refine-trace`, new
+  option; `.../extraction_stability_norefine/`): 6 of 6 realizations
+  identical. 0036: trace 770.63, FWHM 4.981, S/N 28.95, BOX 4593, 576
+  `EXTRACT`. 0037: trace 793.30, FWHM 5.03, S/N 28.34, BOX 4549, 611
+  `EXTRACT`. This matches the monkeypatch experiment exactly.
+- **Harness, MOSFIRE default, no flag**
+  (`.../extraction_stability_mosfire_default/`, seeds 0, 1 and 3, where
+  seed 3 had flipped): identical to the above.
+- **Full night with the flag**
+  (`~/Projects/PypeIt/keck-etcs-data-tests/norefine`, `--skip-pin-check`
+  because of the uncommitted PypeIt edits; 652 s):
+  - J0841 BOX counts relative to the target median: 1.06, 1.05, 0.95,
+    0.93. In the reference: 1.14, 0.82, 1.01, 0.99. The first nod pair now
+    sits about 10% above the second, consistently.
+  - LDS749B: OPT -0.6 to -0.8%, BOX +0.5%, S/N 11.0/12.0 against
+    11.2/12.2, FWHM 6.48/6.05 against 6.32/6.00.
+  - Coadd median throughput (1.117-1.260 um) 0.1786 against 0.1809
+    (-1.3%); ZP ratio median 0.980, 5-95% 0.934-0.992.
+  - Wavelength RMS unchanged (0.092 px).
+
+**Next (needs the user).**
+1. Commit and push the PypeIt changes on `etc-fixes`; I run no git.
+2. Re-pin `nautilus/pypeit_pin.txt` to the new commit, which only changes
+   files that matter to MOSFIRE. `cache_github_data.py` stays on the
+   allow-list.
+3. `pip install -e` refresh is optional; the check compares SHAs.
+4. Re-run the local reference (S4 + S5) and re-stage it.
+5. Bump the version and rebuild and push the image (0.1.3).
+6. Re-run the dry run, then the skip and REPLACE tests, then the pull.
+
+The reference's numbers will change: 0037 by +16-37%, the standard by
+about 0.7%, the median throughput by about -1.3%. That is the purpose of
+the fix.
+
+### 2026-10-02 (Prompt #6 / S4b: re-pinned to 8017f47, reference re-made and pushed; 0.1.3 prepared)
+
+- **PypeIt:** the user committed and pushed the fix as
+  `8017f47997d6417d797be6d0a0358d7acb8918b5` on `etc-fixes` ("fixes
+  underway", the 5 files of the previous entry). `develop` is still
+  `f3a1f1d`.
+- **Pin:** `nautilus/pypeit_pin.txt` = 8017f47. The local pin check passes
+  (HEAD = pin, no differing files). The pin references in the
+  `build_image.sh` comment, the allow-list comment and design 4.8.2 now
+  record the re-pin.
+- **Reference re-run** (`reduce_standard.py` + `build_sensfunc.py`, 460 s;
+  the committed PypeIt file re-saved):
+  - 0036: FWHM 4.98, S/N 29.0. 0037: FWHM 5.03, S/N 28.3. 0038: 5.62,
+    25.4. 0039: 5.57, 24.9. LDS749B: 6.48/11.0 and 6.05/12.0.
+  - Wavelength RMS 0.092 px.
+  - Coadd sensfunc: median throughput **0.1788**; ZP 19.624 mag at 1.20 um
+    and 18.599 at 1.25 um; telluric residual near 1.13 um -2.1%; PWV
+    about 1.3 mm.
+  - Manifest: PypeIt SHA = pin = 8017f47, `pin_check.pass`, keck-etcs
+    `534725e` with `dirty = true` (uncommitted diagnostics; the gates do
+    not use it).
+- **Staged and pushed** with `--force`:
+  `s3://keck-etcs/mosfire/20220409/reference/`, 17 objects, 8.0 MB. The
+  local gates self-check passes.
+- **Prepared:** `keck_etcs` 0.1.3; both job YAMLs point at
+  `profx/keck-etcs:0.1.3` with the digest TBD; MANIFESTS OK. Waiting for
+  the user's commit before the build and push.
+
+### 2026-10-02 (Prompt #6 / S4b: image 0.1.3, dry run: extraction fixed, ZP gate fails narrowly; the telluric PCA is the cause)
+
+**Registry login.** The first 0.1.3 push was `denied`. `~/.docker/config.json`
+had been rewritten on 10-01 at 10:46 with `gitlab+deploy-token-1384`
+(another project); the keck-etcs token is `-1383`. On advice, the user ran
+a one-time login into a separate config directory, `~/.docker-keck-etcs`
+(user `gitlab+deploy-token-1383`). The push then ran as
+`DOCKER_CONFIG=~/.docker-keck-etcs bash nautilus/build_image.sh --push`
+with the committed script, so the tree was clean.
+
+**Image 0.1.3:** keck-etcs `d9f6d5f`, PypeIt pin `8017f47`
+(`2.0.2.dev1218+g8017f4799`), digest
+`sha256:2635e79f811b77b486fd9cf6243fcd7697d520af169cca52597b60a751ee4e64`,
+2.16 GB, `GUARDS OK`.
+
+Then, uncommitted:
+- `build_image.sh` now pushes and inspects with
+  `PUSH_DOCKER_CONFIG` (default `~/.docker-keck-etcs`), and before building
+  it fails if that config has no login for the registry. The one-time setup
+  is in its header.
+- `nautilus/README.md`: a "Registry login" note and the 0.1.3 row of the
+  tag table.
+- Both job YAMLs carry the 0.1.3 digest.
+
+**Dry run (0.1.3, node `k8s-haosu-11.sdsc.optiputer.net`, 990 s).**
+- The skip check retried the night: the previous run had status `gate
+  failed`.
+- **`spec1d_agree` PASS:** every frame within 1.1e-4, 0037 at 0.999987.
+  The trace fix works in the pod.
+- **`s2n_agree` PASS:** +0.00% on every frame.
+- spec1d, wave_rms (0.092), zp_finite, thru_median (0.1821) and ref_pin:
+  PASS.
+- **`zp_agree` FAIL:** median 1.0159 (within 2%) but 5-95%
+  0.998-**1.057**, past the ±5% band.
+- The extraction is identical, so this is purely the telluric-fit
+  instability. The pod pushed 105 objects with status `gate failed`.
+
+**Diagnosis: the 5-component PCA telluric model, not the optimizer
+tolerance.** `sensfunc_perturbation_test.py` on the new reference coadd,
+1e-5 input noise, 5 realizations per variant (`.sens` variants in
+`~/Projects/PypeIt/keck-etcs-data-tests/sensfunc_stability/`):
+
+| variant | worst 5-95% / median deviation | median throughput range |
+|---|---|---|
+| default (`tell_npca 5`, `tol 1e-3`, `popsize 30`), earlier test | 1.5-4.8% | 0.179-0.182 |
+| `tol = 1e-6` | 7.9% | 0.179-0.182 |
+| `popsize = 60`, `tol = 1e-5` | 5.1% (three of 5 runs about 1.4% low) | 0.179-0.183 |
+| **`tell_npca = 3`** | **0.64%** (3 of 5 within 1e-4) | 0.1803-0.1810 |
+
+**Fit quality, `tell_npca` 3 against 5 on the same coadd.**
+- chi2 1154.9 against 1172.5: lower with fewer components, so the
+  5-component fit lands in poorer local minima.
+- Telluric residual near 1.13 um: -2.3% against -2.1%.
+- The red-edge 5 nm residual pattern is identical, within 0.4%.
+- PWV estimate 1.66 against 1.32 mm. Median throughput 0.1803 against
+  0.1788.
+- ZP ratio (3/5): median 1.010, 5-95% 0.9985-1.047.
+- **Conclusion:** over the narrow J2 window the 5-component PCA is
+  degenerate, and the differential-evolution fit wanders among
+  near-equivalent solutions. 3 components fit at least as well and are
+  stable.
+
+**Open (needs the user):** whether to set `tell_npca = 3` in
+`keck_etcs/data/pypeit_par/keck_mosfire_J.sens`. That is a sensfunc setting
+in the repo's own parameter file (design 4.3), not a PypeIt defect. If yes:
+re-make the reference sensfunc (about 1 min) and re-stage it, build 0.1.4
+(the `.sens` file ships in the image), and re-run the dry run, the skip test
+and REPLACE.
+
+### 2026-10-02 (Prompt #6 / S4b: tell_npca = 3 adopted, reference sensfunc re-made; 0.1.4 prepared)
+
+- **User decision:** `tell_npca = 3`. Set in
+  `keck_etcs/data/pypeit_par/keck_mosfire_J.sens`, with the reason in its
+  header, and in design 4.3.
+- **Reference sensfuncs re-made** (`build_sensfunc.py`; the reduction is
+  unchanged). A first attempt ran the environment's Python directly, without
+  `conda run`, so `pypeit_sensfunc` was not on PATH and nothing was
+  re-fitted; it was redone through `conda run`.
+  - Coadd: `sensfunc.par` shows `tell_npca = 3`; chi2 1154.9; PCA
+    coefficients (-78.85, 0.479, 1.046); R 2743; median throughput
+    **0.1803**; ZP 19.636 at 1.20 um and 18.597 at 1.25 um; telluric
+    residual near 1.13 um -2.3%; PWV about 1.7 mm; all checks pass.
+  - Per-frame: the 0218/0219 ratio median is 0.886 with std **0.009**
+    (0.026 with 5 components). The 12% frame-to-frame difference in the data
+    is unchanged.
+- **Re-staged and force-pushed** `mosfire/20220409/reference/`: 17
+  objects. The bucket's coadd sensfunc sha256 equals the local one
+  (3d72a31b...). The gates self-check passes.
+- **Prepared:** `keck_etcs` 0.1.4; YAMLs on `:0.1.4` with the digest TBD;
+  MANIFESTS OK.
+- **To commit (user):** `.sens`, design, `__init__`, the YAMLs,
+  `build_image.sh` (per-project Docker config), `nautilus/README.md`, this
+  log.
