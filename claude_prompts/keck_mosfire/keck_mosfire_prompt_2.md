@@ -1293,3 +1293,92 @@ this log.
 
 Next in part 2's run order: prompt 3 (S6, harvest). Prompt 4 (S13, LSF)
 can run in parallel.
+
+### 2026-10-04 (Prompt #3 / S6: harvest module, CLI and merge; LDS749B row in standards.ecsv)
+
+PypeIt checkout back on `etc-fixes` (`8017f47`); local pin check PASS.
+
+**New.**
+- **`keck_etcs/calib/__init__.py` and `keck_etcs/calib/harvest.py`:** file
+  reading, no plotting.
+  - `read_sensfunc` is tolerant: it uses `SensFunc.wave/zeropoint`
+    (PypeIt's extrapolated fit) and the telluric model if present.
+  - `throughput_curve`: the zero point on the common 1 A vacuum grid
+    (integer A from 9000), `thru_raw = zeropoint_to_throughput(...,
+    72.3674 m^2)`, and an optional filter division; without a filter,
+    `filter_trans` and `thru` are masked.
+  - `estimate_pwv` and `gemini_trans` moved here from `inspect_sensfunc.py`,
+    which now calls them (one implementation, same 1.58 mm result).
+  - `harvest(sens, run_manifest, standard, filter_curve, raw_dir)` returns
+    the row with the design 4.4 columns plus the curve with design 5.4
+    `meta` (the row, provenance, pin and pin_check, sens and manifest
+    sha256, telluric grid/npca/R/chi2, PWV method). Inputs: the night's
+    `run_manifest.json` (frames, objects, filter, provenance, version) and
+    `raw/manifest.ecsv` (KOA IDs, SAMPMODE, NUMREADS, MJD), else the raw
+    headers.
+  - `row_table` and `write_outputs`.
+- **`scripts/mosfire/harvest_sens.py`:**
+  - `harvest SENS... --manifest --out [--raw]`, or `harvest DATE
+    --standard NAME`. The DATE form is what `night_job.yaml` already calls;
+    it writes `<night>/harvest/`, which the job pushes.
+  - `--merge DIR...` updates `keck_etcs/data/mosfire/throughput/standards.ecsv`
+    keyed on `(standard, date, koa_id)`: in-pod replaces local, local never
+    replaces in-pod, otherwise the newer harvest wins. It copies the curves
+    to `standards/` and registers the table in `index.yaml`
+    (`calib_version mosfire-J-2026.10-dev`).
+- **`scripts/mosfire/verify_harvest.py`:** the S6 checks, plus
+  `--reharvest`.
+- **`keck_etcs/tests/test_harvest.py`:** 5 passed.
+- **`nautilus/Dockerfile` guards:** `import keck_etcs.calib.harvest` and
+  `harvest_sens.py --help` (the guard deferred in S4a; effective from the
+  next image).
+- **Design 4.4:** the implementation conventions.
+
+**Choices (design 4.4 note):**
+- an extra `thru_median_1117_1250` (S5 red edge);
+- `zp_1300` masked for J2;
+- `pwv_fit` from the Gemini-grid match;
+- `seeing_fwhm_pix` = the median PypeIt FWHM of the standard's objects
+  (this also covers item 1 of prompt #7 in `keck_mosfire_prompts.md`,
+  which is not yet discussed);
+- `koa_id` joined with `+`;
+- `slit_length` in CSU bars;
+- `std_class` WD unless the model is Vega-scaled (A0V).
+
+**Results for LDS749B, 2022-04-09.**
+- **In-pod reduction** (the data root after S4b's forced pull; image
+  0.1.4, `keck-etcs-validate`):
+  - zp 19.634 mag at 1.20 um and 18.597 at 1.25 um; `zp_1300` masked;
+  - `thru_median_1117_1260` **0.1798**; `_1117_1250` **0.1872**;
+  - `pwv_fit` 1.58 mm; `seeing_fwhm_pix` 6.26; airmass 1.578; exptime
+    119.29 s; SAMPMODE 3, NUMREADS 16; slit 5" x 46 bars;
+  - KOA `MF.20220409.55932+MF.20220409.56084` (derived);
+  - `flag nofilter` (no part-3 filter files yet).
+- **Local reference** (`reference/`, `image = local`): zp 19.636 and
+  18.597; `thru_median_1117_1260` 0.1805 (+0.4%, within the telluric-fit
+  spread).
+- **Merge sequence:** local (added), then in-pod (replaced), then local
+  again (kept in-pod). `standards.ecsv` holds the in-pod row; the curve in
+  `standards/` is the in-pod one.
+
+**Verification (`verify_harvest.py --reharvest <pod sens> <pod run_manifest>`):**
+- every column filled except `zp_1300`: PASS;
+- `thru_raw` against `zeropoint_to_throughput` from the stored zero point:
+  max relative difference 0.0, PASS;
+- `pypeit_version` `2.0.2.dev1218+g8017f4799` ends with the pin's short
+  SHA: PASS;
+- curve `meta['row']` equals the table row: PASS;
+- re-harvest of the synced in-pod sens file equals the row to 1e-6: PASS.
+
+**Not yet possible: an in-pod harvest.** The 0.1.x images predate
+`harvest_sens.py`, so no pod has written `harvest/`. The table's in-pod row
+was harvested locally from the pod's synced products, exactly the inputs a
+pod would use. The true in-pod row, and the check that a local re-harvest
+reproduces it (`verify_harvest.py --reharvest`), come with the next image
+(0.2.0, after S8) and a night run.
+
+**Local version string.** The local row's `pypeit_version` is the stale
+editable-install string `2.0.2.dev1216+gf3a1f1d27`; its `pypeit_git_sha` is
+correctly 8017f47. A local row would fail check 3. Refreshing the editable
+install (`pip install -e . --no-deps` in the PypeIt checkout, the user's
+call) fixes it. In-pod rows are unaffected.

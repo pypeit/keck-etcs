@@ -293,6 +293,26 @@ telescope, instrument, filter and QE. Per standard we store, in one ECSV row:
 (the six columns from `image` to `s3_prefix` are the reduction provenance of
 D36; a row harvested from a local reduction carries `image = local`)
 
+*As implemented in S6 (2026-10-04; `keck_etcs.calib.harvest`):*
+- **Extra column `thru_median_1117_1250`,** after `thru_median_1117_1260`:
+  the same median over the window S5 found free of red-edge artefacts.
+- **`zp_*` masked where the zero-point fit does not reach;** for J2 that
+  is `zp_1300`.
+- **`pwv_fit`** is the PWV at which the Gemini grid (N4, at the sensfunc's
+  airmass, smoothed to the fitted resolution) best matches PypeIt's fitted
+  telluric transmission. The PCA telluric model fits no PWV.
+- **`seeing_fwhm_pix`** is the median PypeIt spatial FWHM of the
+  standard's extracted objects.
+- **`koa_id`** joins the KOA IDs of the standard's frames with `+`.
+- **`slit_length`** is in CSU bars (from `LONGSLIT-<bars>x<width>`).
+- **`flag`** is comma-separated: `ok`, `nofilter` (no filter curve
+  divided; the curve's `thru` is masked) or `pwv_extrapolated`.
+- **The per-night harvest writes two files to `harvest/`:**
+  `<standard>_<date>_row.ecsv` and `<standard>_<date>.ecsv`. The curve has
+  columns `wave` (1 A grid, 9000 + k A), `zeropoint`, `thru_raw`,
+  `filter_trans` and `thru`, with the row and the provenance in its
+  `meta`.
+
 and the full `T_sys(lam)` curve on a common 1 A vacuum grid in a per-standard
 ECSV under `keck_etcs/data/mosfire/throughput/standards/`. Filter curves are
 divided out before combining J, J2 and J3 (D5), so the stored curve is

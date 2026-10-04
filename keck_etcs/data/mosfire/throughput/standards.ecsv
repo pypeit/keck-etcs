@@ -1,0 +1,43 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: date, datatype: string}
+# - {name: mjd, unit: d, datatype: float64}
+# - {name: koa_id, datatype: string}
+# - {name: standard, datatype: string}
+# - {name: std_class, datatype: string}
+# - {name: std_model, datatype: string}
+# - {name: filter, datatype: string}
+# - {name: slit_width, unit: arcsec, datatype: float64}
+# - {name: slit_length, datatype: float64}
+# - {name: sampmode, datatype: int64}
+# - {name: numreads, datatype: int64}
+# - {name: exptime, unit: s, datatype: float64}
+# - {name: airmass, datatype: float64}
+# - {name: pwv_fit, unit: mm, datatype: float64}
+# - {name: seeing_fwhm_pix, unit: pix, datatype: float64}
+# - {name: zp_1200, unit: mag, datatype: float64}
+# - {name: zp_1250, unit: mag, datatype: float64}
+# - {name: zp_1300, unit: mag, datatype: string}
+# - {name: thru_median_1117_1260, datatype: float64}
+# - {name: thru_median_1117_1250, datatype: float64}
+# - {name: thru_curve_file, datatype: string}
+# - {name: pypeit_version, datatype: string}
+# - {name: keck_etcs_version, datatype: string}
+# - {name: image, datatype: string}
+# - {name: image_digest, datatype: string}
+# - {name: pypeit_git_sha, datatype: string}
+# - {name: keck_etcs_git_sha, datatype: string}
+# - {name: job_name, datatype: string}
+# - {name: s3_prefix, datatype: string}
+# - {name: flag, datatype: string}
+# meta: !!omap
+# - {description: MOSFIRE per-standard zero points and throughput (design 4.4); one row per standard per night; curves in standards/}
+# - {calib_version: mosfire-J-2026.10-dev}
+# - row_created: {LDS749B|2022-04-09|MF.20220409.55932+MF.20220409.56084: '2026-10-04T14:59:48Z'}
+# - {merged: '2026-10-04T15:00:35Z'}
+# - {script: scripts/mosfire/harvest_sens.py --merge}
+# - {eff_aperture_m2: 72.3674}
+# schema: astropy-2.0
+date mjd koa_id standard std_class std_model filter slit_width slit_length sampmode numreads exptime airmass pwv_fit seeing_fwhm_pix zp_1200 zp_1250 zp_1300 thru_median_1117_1260 thru_median_1117_1250 thru_curve_file pypeit_version keck_etcs_version image image_digest pypeit_git_sha keck_etcs_git_sha job_name s3_prefix flag
+2022-04-09 59678.648240995 MF.20220409.55932+MF.20220409.56084 LDS749B WD lds749b_stisnic_008.fits.gz J2 5.0 46.0 3 16 119.29278 1.57760672 1.5765152253315866 6.264849346645249 19.633638974932914 18.59704721684137 "" 0.17976097008825923 0.18719565942262284 standards/LDS749B_20220409.ecsv 2.0.2.dev1218+g8017f4799 0.1.4 gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4 sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced 8017f47997d6417d797be6d0a0358d7acb8918b5 83ba931 keck-etcs-validate mosfire/20220409 nofilter

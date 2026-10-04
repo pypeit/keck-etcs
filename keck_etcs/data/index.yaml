@@ -10,3 +10,10 @@ files:
     waveref: vacuum
     provenance: Gemini Observatory IR sky background and ATRAN transmission, as redistributed in Keck
       XTcalc v2.3; 12 (airmass, PWV) grids, flux-conserving rebin to 0.05 nm over 950-2450 nm
+  mosfire/throughput/standards.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-04T15:00:35Z'
+    sha256: cf3d00505c50663854703dc0008c9aa7a526ebddae5e383550af35eb4b804379
+    script: scripts/mosfire/harvest_sens.py --merge
+    provenance: 1 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
+      in mosfire/throughput/standards/

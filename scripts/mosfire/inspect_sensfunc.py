@@ -43,14 +43,11 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from astropy.io import fits
-from scipy.ndimage import gaussian_filter1d
 
 from pypeit.core.flux_calib import zeropoint_to_throughput
 from pypeit.sensfunc import SensFunc
 
 REPO = Path(__file__).resolve().parents[2]
-SKYGRID = REPO / 'keck_etcs' / 'data' / 'sky' / 'gemini_mk_sky_grid.fits'
 EFF_APERTURE = 72.3674           # m^2, Keck (decision N1)
 JWIN = (11170.0, 12600.0)        # A, the J2 analysis window (1.117-1.260 um)
 ZP_WAVES = (12000.0, 12500.0, 13000.0)
@@ -77,51 +74,15 @@ def interp_zp(wave, zp, w):
     return float(np.interp(w, wave[g], zp[g]))
 
 
-def gemini_trans(airmass, pwv):
-    """Gemini transmission at (airmass, pwv), linear in airmass and log PWV (N4)."""
-    with fits.open(SKYGRID) as h:
-        wave_nm = h['WAVE'].data.astype(float)
-        trans = h['TRANS'].data.astype(float)
-        grid = h['GRID'].data
-    am, pw = np.asarray(grid['airmass'], float), np.asarray(grid['pwv_mm'], float)
-    ams, pws = np.unique(am), np.unique(pw)
-    a = np.clip(airmass, ams[0], ams[-1])
-    ia = int(np.clip(np.searchsorted(ams, a) - 1, 0, len(ams) - 2))
-    fa = (a - ams[ia]) / (ams[ia + 1] - ams[ia])
-    lp, lpw = np.log(pwv), np.log(pws)
-    ip = int(np.clip(np.searchsorted(lpw, lp) - 1, 0, len(pws) - 2))
-    fp = (lp - lpw[ip]) / (lpw[ip + 1] - lpw[ip])       # extrapolates outside 1-5 mm
-
-    def row(aa, pp):
-        return trans[np.where(np.isclose(am, aa) & np.isclose(pw, pp))[0][0]]
-    t = ((1 - fa) * ((1 - fp) * row(ams[ia], pws[ip]) + fp * row(ams[ia], pws[ip + 1]))
-         + fa * ((1 - fp) * row(ams[ia + 1], pws[ip]) + fp * row(ams[ia + 1], pws[ip + 1])))
-    return wave_nm * 10.0, np.clip(t, 0, 1)
-
-
 def estimate_pwv(sf):
+    """PWV from the fitted telluric model (keck_etcs.calib.harvest.estimate_pwv)."""
+    from keck_etcs.calib.harvest import estimate_pwv as _estimate
     m = sf.telluric.model
-    w = np.asarray(m['WAVE'][0], float)
-    tell = np.asarray(m['TELLURIC'][0], float)
     res = float(m['TELL_RESLN'][0])
-    sel = (w >= JWIN[0]) & (w <= JWIN[1]) & np.isfinite(tell) & (tell > 0)
-    w, tell = w[sel], tell[sel]
-    pwvs = np.exp(np.linspace(np.log(0.5), np.log(10.0), 121))
-    chi2 = []
-    for p in pwvs:
-        gw, gt = gemini_trans(sf.airmass, p)
-        k = (gw > w.min() - 50) & (gw < w.max() + 50)
-        gw, gt = gw[k], gt[k]
-        dlam = np.median(np.diff(gw))
-        sigma_pix = (np.median(w) / res) / 2.3548 / dlam
-        gt_s = gaussian_filter1d(gt, sigma_pix)
-        chi2.append(np.sum((np.interp(w, gw, gt_s) - tell) ** 2))
-    chi2 = np.array(chi2)
-    i = int(np.argmin(chi2))
-    return {'pwv_mm': float(pwvs[i]), 'rms_resid': float(np.sqrt(chi2[i] / len(w))),
-            'extrapolated': bool(pwvs[i] < 1.0 or pwvs[i] > 5.0),
-            'at_search_edge': bool(i in (0, len(pwvs) - 1)), 'airmass': float(sf.airmass),
-            'resolution': res}
+    out = _estimate(np.asarray(m['WAVE'][0], float), np.asarray(m['TELLURIC'][0], float), res,
+                    float(sf.airmass), window=JWIN)
+    out.update({'airmass': float(sf.airmass), 'resolution': res})
+    return out
 
 
 def fluxed(sf):
