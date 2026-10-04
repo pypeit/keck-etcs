@@ -145,6 +145,7 @@ keck-etcs commit.
 
 | tag | PypeIt pin | keck-etcs | digest | size | notes |
 |---|---|---|---|---|---|
+| 0.1.5 | `8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes`) | `8678043` | `sha256:f3da5d0430e0af8c3826e45a702636c3ae818cf47dac0521333db1090e99bb01` | 2.16 GB | adds the in-pod harvest (`keck_etcs.calib.harvest`, guard in the build); S6 closed (2026-10-04) |
 | 0.1.4 | `8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes`) | `83ba931` | `sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced` | 2.16 GB | `tell_npca = 3` in the packaged `.sens`; first image to pass every S4b gate (dry run 2026-10-02) |
 | 0.1.3 | `8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes`) | `d9f6d5f` | `sha256:2635e79f811b77b486fd9cf6243fcd7697d520af169cca52597b60a751ee4e64` | 2.16 GB | adds PypeIt `refine_trace` (off for MOSFIRE); fixes the 0037 extraction walk |
 | 0.1.2 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | `534725e` | `sha256:51f39684e765569099d7f6e0b55668179f1f43ee05d4070546ff0e59ce1ab19c` | 2.16 GB | band-level `zp_agree` and `spec1d_agree` gates |

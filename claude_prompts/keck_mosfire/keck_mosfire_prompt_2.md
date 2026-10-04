@@ -1456,3 +1456,39 @@ most 3.6 px. That strengthens the conclusion.
   text), so S8 reads the measured row first and uses 0.277"/px otherwise.
 - `docs/keck_mosfire_implementation.md` S13's verify text (4.2 px, 2300)
   is left as the historical acceptance test.
+
+### 2026-10-04 (Prompt #3 / S6 closed: in-pod harvest with image 0.1.5; all S6 checks pass)
+
+- **Image 0.1.5:** keck-etcs `8678043`, PypeIt pin `8017f47`, digest
+  `sha256:f3da5d0430e0af8c3826e45a702636c3ae818cf47dac0521333db1090e99bb01`.
+  It is the first image with `keck_etcs.calib.harvest`. The build guards
+  `import keck_etcs.calib.harvest` and `harvest_sens.py --help` pass. The
+  digest is in both YAMLs and the README tag table (uncommitted).
+- **REPLACE=1 dry run** (`keck-etcs-validate`, node exp-19-11.sdsc, 807 s,
+  peak 6.0 GiB):
+  - all gates PASS, including `zp_agree` (median 0.9987, 5-95%
+    0.992-1.000);
+  - the `HARVEST` step ran in the pod
+    (`harvest_sens.py harvest 20220409 --standard LDS749B`) and wrote
+    `harvest/LDS749B_20220409{,_row}.ecsv`;
+  - pushed 106 objects, then `run_manifest.json`, then the status row;
+    `NIGHT_DONE`.
+- **Synced** with `s3_sync.py pull --force` (products, `harvest/`, night
+  files): 124 objects. **21 of 21 products** match the pod manifest's
+  sha256.
+- **Merged** `harvest_sens.py --merge <night>/harvest`: the in-pod (0.1.5)
+  row **replaced** the row harvested locally from the 0.1.4 products, by the
+  newer-in-pod rule. The curve is copied to `standards/`, and the
+  `index.yaml` sha256 is updated.
+- **`verify_harvest.py --reharvest <synced pod sens> <synced
+  run_manifest>`:** checks 1-5 all PASS, including the last open S6 check:
+  the local re-harvest of the synced in-pod sens file reproduces the in-pod
+  row to 1e-6 in every numeric column.
+- **The LDS749B 2022-04-09 row** (image 0.1.5, `keck-etcs-validate`): see
+  `standards.ecsv`. zp(1.20) = 19.635 and zp(1.25) = 18.597 mag;
+  `thru_median_1117_1260` about 0.180, `_1117_1250` about 0.187;
+  `pwv_fit` 1.62 mm; `seeing_fwhm_pix` 6.26; `flag nofilter`.
+- **Part 2 is complete:** all six prompts are done and every verification
+  passes, with the user-approved revisions logged above (band-level ZP
+  gate, `spec1d_agree`, `tell_npca 3`, `refine_trace` off for MOSFIRE in
+  PypeIt, LSF slope 0.277"/px).
