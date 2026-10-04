@@ -347,7 +347,7 @@ def main(args):
         'data_root': str(root), 'command': sys.argv,
         'filter': None, 'par_block': None, 'patch_notes': [],
         'raw_sha256': {}, 'product_sha256': {}, 'pypeit_file': None, 'pypeit_file_text': None,
-        'frames': [], 'wave_qa': [], 'objects': [], 'sensfuncs': [], 'gates': None,
+        'frames': [], 'wave_qa': [], 'objects': [], 'sensfuncs': [], 'gates': None, 'monitor': None,
         'timings_s': timings,
     }
 
@@ -463,6 +463,15 @@ def main(args):
                 manifest['sensfuncs'].append({'spec1d': spec1d, 'sens': out.name, 'exit': rc})
                 if rc != 0 or not out.exists():
                     raise StageError('sens failed', f'pypeit_sensfunc exit {rc} on {spec1d}')
+
+        # 7. calibration monitor (design 4.9): flags only, never fails the night (D47)
+        if args.monitor:
+            stage('monitor')
+            rc = run([sys.executable, REPO / 'scripts' / 'mosfire' / 'harvest_sens.py', 'monitor', date],
+                     log, env=env)
+            manifest['monitor'] = {'exit': rc, 'file': f'harvest/{date}_monitor.ecsv'}
+            if rc != 0:
+                print(f'WARNING: monitor exit {rc}; the night is not failed (D47)')
         return 0
     except StageError as exc:
         status = exc.status
@@ -525,6 +534,8 @@ if __name__ == '__main__':
     parser.add_argument('--save-pypeit', metavar='FILE', help='Also save the patched PypeIt file '
                         '(raw path replaced by PATH_TO_RAW_DATA)')
     parser.add_argument('--setup-only', action='store_true', help='Stop after writing the PypeIt file')
+    parser.add_argument('--monitor', action='store_true',
+                        help='Run the calibration monitor at the end (harvest_sens.py monitor; never fails the night)')
     parser.add_argument('--skip-pin-check', action='store_true',
                         help='Run even if the pin check fails (recorded in run_manifest.json)')
     sys.exit(main(parser.parse_args()))

@@ -699,7 +699,8 @@ only where the night has a sensfunc, and it uses the night's own `T_sys`
 (not the era median) so that a throughput change is not read as a sky
 change. Each row
 carries the frame's MJD/UT, airmass and the night's fitted PWV. One extra
-row per frame holds the summed flux of all clean OH lines in the band. Lamp
+row per frame holds the summed flux of the monitor lines' fixed windows
+(below). Lamp
 lines use the same sum, without object masking, on the lamp frames, and are
 reported as e-/s per pixel row per arcsec of slit width. Line-selection
 rules, applied by `scripts/mosfire/select_monitor_lines.py`:
@@ -707,12 +708,34 @@ rules, applied by `scripts/mosfire/select_monitor_lines.py`:
 1. in PypeIt's line list for that source, and identified on at least
    80 percent of the nights examined;
 2. isolated: no companion of more than 10 percent of its amplitude within
-   3 FWHM of the widest slit in use (5", about 18 px in J);
+   3 FWHM of a sky line in a **1"** slit (about 4.7 A in J2). *Revised
+   2026-10-04 (S6b, user):* the original "3 FWHM of the widest slit in use
+   (5")" left 1 of 74 J2 OH lines, because the J2 OH lines blend into
+   complexes at 5". At 1", 18 lines are identified and isolated;
 3. bright, but below the 1 percent non-linearity limit in a typical frame
    (sky plus line, MCDS-16, the frame's exposure);
 4. at least 100 A inside the band window and away from strong telluric
    absorption (Gemini `TRANS` above 0.9 at airmass 1.5, PWV 1.6 mm);
 5. 4-6 lines per source per band, spread across the window.
+
+**Fixed windows (S6b, user).** Because lines blend in wide slits, each
+monitor line also gets a *fixed* window of ±1.5 x the FWHM of a sky line
+in a 5" slit (about ±35 A in J2), measured identically on every frame
+whatever its slit (`line_flux_window`, e-/s/arcsec^2; `line_flux_above`
+for the same window). `line_flux_sum` is the sum of these windows, so it is
+comparable between narrow-slit (science) and wide-slit (standard) frames:
+this is the 1" against 5" slit-normalisation check. The per-line
+`line_flux` uses the frame's own ±1.5 FWHM and carries `flag = blended` on
+slits wider than 1".
+
+**Twilight (S6b, user, 2026-10-04).** Each OH row records the Sun's altitude
+at mid-exposure (`cards.sun_alt_deg`), and frames with the Sun above -18 deg
+carry `flag = twilight`. On 2022-04-09 the LDS749B frames were taken at
+-9.0 and -8.5 deg: their low-OH J2 sky was 12-18 e-/s/arcsec^2/A, 4-7x the
+dark frames' and rising 50% in 2.5 min. Twilight frames are excluded from
+the 1"/5" slit-normalisation check and from `sky_scale`. That check was
+not testable on 2022-04-09 and is re-run in part 5 on dark-sky wide-slit
+standards.
 
 The script ranks candidates on 2022-04-09 and the S15a pilot nights. Its
 output table, with sha256, is the provenance of the frozen list in the
@@ -729,8 +752,8 @@ string of the instrument's recorded header cards), flag`, plus the D36
 provenance columns and `keck_etcs_version`. `metric` takes the values
 `fwhm_scalar_pix`, `fwhm_scalar_arcsec`, `fwhmfit_pix`, `slitloss_gt1pct`,
 `flat_rate`, `flat_rate_per_arcsec`, `line_fwhm_pix`, `line_fwhm_A`,
-`line_R`, `line_fwhm_slope`, `line_flux`, `line_flux_above`,
-`line_flux_sum`. The per-night file is
+`line_R`, `line_fwhm_slope`, `line_flux`, `line_flux_window`,
+`line_flux_above`, `line_flux_sum`. The per-night file is
 `harvest/<night>_monitor.ecsv`. The merged
 `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` is keyed on (night,
 frame, metric, wave_A, line_id), and a re-harvest replaces its own rows.
@@ -1111,7 +1134,18 @@ not circular. Later, every KOA quasar night adds a validation point.
 - **Sky-model validation:** the Gemini grid's OH-line strengths versus the
   measured J2 sky may require a default `sky_scale` other than 1.
   From v0.4 the OH-flux rows of the monitor (4.9.4) provide this for every
-  night, not only 2022-04-09.
+  night, not only 2022-04-09. *First value (S6b, 2026-10-04):* measured /
+  Gemini = 0.91 for the summed monitor-line windows on the dark 1" J0841
+  frames of 2022-04-09 (per line 0.81-1.20), so no change from 1 yet.
+- **1" against 5" OH slit normalisation (S6b):** not testable on
+  2022-04-09, because its 5" standard frames are in nautical twilight
+  (`flag = twilight`). Re-run `scripts/mosfire/verify_monitor.py` check 6 on
+  a dark-sky wide-slit standard night in part 5.
+- **Answered in S6b:** `pixelflat_waveimg` is filled for MOSFIRE.
+  `pixelflat_raw` is in electrons per frame (lamp-on minus lamp-off mean,
+  gain 2.15). The 5" standard setup uses the night's single merged
+  calibration group, i.e. `WaveCalib_A_1` from the 1" science frames' OH
+  lines.
 - **J2 red edge:** confirm 1.260 um from the fluxed LDS749B spectrum.
 - **A0V model uncertainty:** whether to add a metallicity/rotation-broadened
   A0V model rather than Vega itself; decide after the first A0V standards.

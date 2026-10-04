@@ -7,7 +7,11 @@ Usage:
         [--standard NAME] [--filter FILE] [--raw DIR]
     python scripts/mosfire/harvest_sens.py harvest DATE --standard NAME     # night under $KECK_ETCS_DATA
 
-    # local: fold harvest directories into the committed table
+    # calibration monitor (design 4.9), after the harvest:
+    python scripts/mosfire/harvest_sens.py monitor REDUX --raw RAW --manifest run_manifest.json --out DIR
+    python scripts/mosfire/harvest_sens.py monitor DATE                     # night under $KECK_ETCS_DATA
+
+    # local: fold harvest directories into the committed tables
     python scripts/mosfire/harvest_sens.py --merge DIR [DIR ...]
 
 ``harvest`` writes, per sens file, ``<standard>_<date>_row.ecsv`` (one
@@ -21,6 +25,16 @@ night job pushes.
 ``transmission``, part 3, S8). Without it ``thru`` is masked and
 ``flag = nofilter``.
 
+``monitor`` writes ``<night>_monitor.ecsv`` (the long table of design
+4.9.5, from ``keck_etcs.calib.monitor.monitor_night``) into DIR (default
+``<night>/harvest``). A monitor failure is recorded as rows with ``flag =
+monitor_failed`` and the command still exits 0 (D47).
+
+``--merge`` also merges every ``*_monitor.ecsv`` in the DIRs into
+``keck_etcs/data/mosfire/monitor/calib_monitor.ecsv``: a night's rows replace
+that night's earlier rows, except that local rows (``image = local``) never
+replace in-pod rows. It is registered in ``index.yaml``.
+
 ``--merge`` reads every ``*_row.ecsv`` in the DIRs and appends or replaces
 rows in ``keck_etcs/data/mosfire/throughput/standards.ecsv``, keyed on
 ``(standard, date, koa_id)``. An in-pod row (``image != local``) replaces a
@@ -32,6 +46,7 @@ registered in ``keck_etcs/data/index.yaml``.
 import argparse
 import datetime
 import hashlib
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -42,10 +57,12 @@ from astropy.table import Table, vstack
 
 from keck_etcs import paths
 from keck_etcs.calib import harvest as hv
+from keck_etcs.calib import monitor as mo
 
 REPO = Path(__file__).resolve().parents[2]
 THRU_DIR = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'throughput'
 TABLE = THRU_DIR / 'standards.ecsv'
+MONITOR = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'monitor' / 'calib_monitor.ecsv'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
 CALIB_VERSION = 'mosfire-J-2026.10-dev'
 KEY = ('standard', 'date', 'koa_id')
@@ -94,6 +111,68 @@ def is_pod(row):
     return str(row['image']) not in ('local', '', '--', 'None')
 
 
+def cmd_monitor(args):
+    if len(args.inputs) == 1 and args.inputs[0].isdigit() and len(args.inputs[0]) == 8:
+        night = paths.night_dir('mosfire', args.inputs[0])
+        manifest, raw, outdir = night / 'run_manifest.json', night / 'raw', Path(args.out or night / 'harvest')
+    else:
+        if not (args.raw and args.manifest and args.out):
+            print('monitor REDUX needs --raw, --manifest and --out')
+            return 2
+        night = Path(args.inputs[0]).parent if Path(args.inputs[0]).name == 'redux' else Path(args.inputs[0])
+        manifest, raw, outdir = Path(args.manifest), Path(args.raw), Path(args.out)
+    try:
+        rows = mo.monitor_night(night, manifest, raw, harvest_dir=night / 'harvest')
+    except Exception as exc:  # noqa: BLE001 - D47
+        rows = [mo.row(metric='monitor_error', flag='monitor_failed', cards=f'{type(exc).__name__}: {exc}')]
+    t = mo.monitor_table(rows)
+    m = json.loads(Path(manifest).read_text())
+    t.meta.update({'night': str(m.get('night')), 'script': 'scripts/mosfire/harvest_sens.py monitor',
+                   'keck_etcs_version_harvest': __import__('keck_etcs').__version__,
+                   'created': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')})
+    outdir.mkdir(parents=True, exist_ok=True)
+    out = outdir / f'{m.get("night")}_monitor.ecsv'
+    t.write(out, format='ascii.ecsv', overwrite=True)
+    nfail = int(np.sum(t['flag'] == 'monitor_failed'))
+    print(f'wrote {out}: {len(t)} rows, {len(set(t["metric"]))} metrics, {nfail} monitor_failed')
+    return 0
+
+
+def merge_monitor(dirs):
+    files = [f for d in dirs for f in sorted(Path(d).glob('*_monitor.ecsv'))]
+    if not files:
+        return
+    MONITOR.parent.mkdir(parents=True, exist_ok=True)
+    old = Table.read(MONITOR, format='ascii.ecsv') if MONITOR.exists() else None
+    for f in files:
+        new = Table.read(f, format='ascii.ecsv')
+        nights = set(str(n) for n in new['night'] if str(n))
+        new_pod = any(is_pod({'image': i}) for i in new['image'])
+        if old is not None:
+            mine = np.isin(np.asarray(old['night']).astype(str), list(nights))
+            if np.any(mine) and not new_pod and any(is_pod({'image': i}) for i in old['image'][mine]):
+                print(f'  kept in-pod monitor rows for {sorted(nights)} (local file {f.name} not merged)')
+                continue
+            old = old[~mine]
+            old = vstack([old, new], metadata_conflicts='silent') if len(old) else new
+        else:
+            old = new
+        print(f'  monitor: {len(new)} rows from {f.name} (nights {sorted(nights)})')
+    old.sort(['night', 'metric', 'frame', 'wave_A'])
+    old.meta = {'description': 'MOSFIRE calibration monitor (design 4.9); never read by compute()',
+                'calib_version': CALIB_VERSION, 'script': 'scripts/mosfire/harvest_sens.py --merge',
+                'merged': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+    old.write(MONITOR, format='ascii.ecsv', overwrite=True)
+    print(f'{len(old)} row(s) in {MONITOR.relative_to(REPO)}')
+    idx = yaml.safe_load(INDEX.read_text()) or {}
+    idx.setdefault('files', {})['mosfire/monitor/calib_monitor.ecsv'] = {
+        'calib_version': CALIB_VERSION, 'created': old.meta['merged'], 'sha256': sha256sum(MONITOR),
+        'script': 'scripts/mosfire/harvest_sens.py --merge',
+        'provenance': f'{len(old)} calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)'}
+    head = ''.join(l for l in INDEX.read_text().splitlines(keepends=True) if l.startswith('#'))
+    INDEX.write_text(head + yaml.safe_dump(idx, sort_keys=False, width=100))
+
+
 def cmd_merge(dirs):
     new = []
     for d in dirs:
@@ -101,9 +180,10 @@ def cmd_merge(dirs):
             t = Table.read(rp, format='ascii.ecsv')
             for r in t:
                 new.append((r, rp.parent / Path(str(r['thru_curve_file'])).name, t.meta.get('created', '')))
+    merge_monitor(dirs)
     if not new:
         print(f'no *_row.ecsv in {dirs}')
-        return 1
+        return 0
     THRU_DIR.mkdir(parents=True, exist_ok=True)
     (THRU_DIR / 'standards').mkdir(exist_ok=True)
     table = Table.read(TABLE, format='ascii.ecsv') if TABLE.exists() else None
@@ -156,7 +236,7 @@ def cmd_merge(dirs):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    p.add_argument('command', nargs='?', choices=('harvest',))
+    p.add_argument('command', nargs='?', choices=('harvest', 'monitor'))
     p.add_argument('inputs', nargs='*', help='sens files, or one night YYYYMMDD')
     p.add_argument('--manifest', help='run_manifest.json of the night')
     p.add_argument('--out', help='output directory')
@@ -169,6 +249,8 @@ def main(argv=None):
         return cmd_merge(args.merge)
     if args.command == 'harvest':
         return cmd_harvest(args)
+    if args.command == 'monitor':
+        return cmd_monitor(args)
     p.print_help()
     return 2
 

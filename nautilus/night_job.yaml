@@ -53,8 +53,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: night
-        # image 0.1.5, digest sha256:f3da5d0430e0af8c3826e45a702636c3ae818cf47dac0521333db1090e99bb01 (keck-etcs 8678043, PypeIt pin 8017f47)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.5
+        # image 0.1.6, digest TBD (set after build_image.sh --push; PypeIt pin 8017f47)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -62,7 +62,7 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.5"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6"}
         - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:f3da5d0430e0af8c3826e45a702636c3ae818cf47dac0521333db1090e99bb01"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "0"}
@@ -147,6 +147,9 @@ spec:
             else
               echo "harvest_sens.py is not in this image (S6 not implemented yet): skipped"
             fi
+            log MONITOR
+            # calibration monitor (design 4.9): flags only, never fails the night (D47)
+            python $SRC/scripts/mosfire/harvest_sens.py monitor "$NIGHT" || echo "WARNING: monitor step failed; night continues (D47)"
             [ "$SPEC2D" = 1 ] || rm -f "$NIGHT_DIR"/redux/Science/spec2d_*.fits
             log USAGE
             WALL=$(( $(date +%s) - T0 ))

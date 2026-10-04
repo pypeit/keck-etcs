@@ -35,7 +35,7 @@
 # - {description: MOSFIRE per-standard zero points and throughput (design 4.4); one row per standard per night; curves in standards/}
 # - {calib_version: mosfire-J-2026.10-dev}
 # - row_created: {LDS749B|2022-04-09|MF.20220409.55932+MF.20220409.56084: '2026-10-04T16:22:30Z'}
-# - {merged: '2026-10-04T16:23:14Z'}
+# - {merged: '2026-10-04T22:58:30Z'}
 # - {script: scripts/mosfire/harvest_sens.py --merge}
 # - {eff_aperture_m2: 72.3674}
 # schema: astropy-2.0

@@ -1571,3 +1571,185 @@ most 3.6 px. That strengthens the conclusion.
   passes, with the user-approved revisions logged above (band-level ZP
   gate, `spec1d_agree`, `tell_npca 3`, `refine_trace` off for MOSFIRE in
   PypeIt, LSF slope 0.277"/px).
+
+### 2026-10-04 (Prompt #7 / S6b, in progress: config, object_fwhm and line_widths done)
+
+Started S6b after reading design 4.9 and D40-D47.
+
+**Done so far (uncommitted):**
+- `keck_etcs/calib/monitor_configs.py`: the MOSFIRE block of design 4.9.6.
+  - platescale 0.1798, gain 2.15, nonlinearity limit 26k ADU;
+  - FWHM nodes J2 11500/12000/12500 and J 12000/12500/13000, ±100 A;
+    Moffat beta 3.5;
+  - `flat_kind dome`; flat nodes every 250 A (J2 11250-12500, J
+    11500-13250), ±50 A, central 50% of rows;
+  - lamp cards FLAMP1, FLAMP2, FPOWER, FLATSPEC, DOMEPOSN;
+  - line lists OH_R24000, Ne_IR_MOSFIRE, Ar_IR_MOSFIRE; LSF reference
+    12500 A;
+  - empty provisional monitor-line list (filled by
+    `select_monitor_lines.py`).
+- `keck_etcs/calib/monitor.py`, part 1:
+  - the `ROW_COLUMNS` of 4.9.5 and a `row()` helper;
+  - `moffat_slit_fraction`, the provisional D26 integral, flagged
+    `slitloss=provisional`;
+  - `object_fwhm`: scalar FWHM in px and arcsec, FWHMFIT medians at the
+    nodes, `slitloss_gt1pct` (value 0/1, `err` = loss fraction);
+  - `fit_line_widths`, `width_trend`, `lsf_summary`, `line_widths`: the S13
+    algorithm moved unchanged (the blend window keeps S13's 0.24"/px
+    expected width, so the rows are identical).
+
+**Checks so far:**
+- `lsf_summary` on the 2022-04-09 WaveCalib gives 3.6064 px, 19 lines,
+  R 2676.7: the S13 row exactly.
+- LDS749B scalar FWHM 6.477 and 6.050 px, median 6.264 =
+  `seeing_fwhm_pix` in `standards.ecsv`.
+- FWHMFIT medians exist at 11500, 12000 and 12500 A for all 6 objects
+  (153-155 px each).
+- `slitloss_gt1pct`: LDS749B 5" false (loss 0.6% and 0.5%); J0841 1" true
+  (loss 30.8% for 0036/0037, 33.9% for 0038/0039, FWHM 0.90-1.01").
+
+**Remaining:**
+- `flat_rates`;
+- `line_fluxes`, the hardest piece, built and checked last;
+- `monitor_night`;
+- `select_monitor_lines.py`;
+- the `measure_lsf.py` wrapper;
+- `harvest_sens.py monitor` mode and the `--merge` extension;
+- wiring into `reduce_standard.py` and `night_job.yaml`;
+- the local run with all verifications;
+- image 0.1.6 and a REPLACE=1 pod run (user commit and go-ahead).
+
+**S6b checkpoint 2 (flat_rates done).**
+- **New in `monitor.py`:**
+  - `process_raw`: the spectrograph's own pixel-flat processing, with
+    pixel/illum/spec flats and CR masking off; e- per frame, trimmed, in
+    PypeIt `(spec, spat)` orientation.
+  - `central_rows_mask`: the central 50% of each slit's spatial rows, from
+    `SlitTraceSet.select_edges()`.
+  - `flat_rates`, per design 4.9.2.
+  - `flat_conversion_check`.
+- **Open item answered (design section 8):**
+  - `pixelflat_waveimg` **is filled** for MOSFIRE (HDU `PIXELFLAT_WAVEIMG`,
+    2040x2040).
+  - `pixelflat_raw` is in **electrons per frame**: mean(lamp-on) -
+    mean(lamp-off), gain applied. The median ratio of `pixelflat_raw` to
+    that difference (both from PypeIt raw processing) is **1.0000**
+    (16-84%: 0.995-1.005) over 2.06 M central-slit pixels.
+  - PypeIt's MOSFIRE gain is 2.15 = header `SYSGAIN`; the raw `BUNIT` is
+    "ADU per coadd". So the "x 2.15" verification holds, and dividing by
+    `TRUITIME` gives e-/s.
+- **2022-04-09 dome-flat rates** (1" slit, central rows, ±50 A), in
+  e-/s/pix at 11250, 11500, 11750, 12000, 12250 and 12500 A: **877, 1431,
+  1988, 2492, 2853 and 951**. That rises through J2 and falls on the
+  filter's red edge, as the throughput does.
+  - About 77k pixels per node.
+  - Cards: FLAMP1/2 on, FPOWER 9.0, FLATSPEC 1, DOMEPOSN 140.24,
+    TRUITIME 8.729 s, SAMPMODE 2, NUMREADS 1; 5 lamp-on and 5 lamp-off
+    frames.
+  - Lamp-on peak (99.99th percentile) **13,556 ADU, below 26k**; flag ok.
+- **Remaining:** `line_fluxes` (OH), `monitor_night`,
+  `select_monitor_lines.py`, the `measure_lsf.py` wrapper, the
+  `harvest_sens.py` monitor and merge, the wiring, the local run with the
+  remaining checks, and image 0.1.6 plus the pod run.
+
+**S6b checkpoint 3 (line_fluxes written; rule 2 of design 4.9.4 is infeasible at 5" in J2).**
+- **New code:**
+  - `monitor.line_fluxes`, `_line_sum`, `sky_line_fwhm_A` (interim D25
+    slope 0.277"/px) and `gemini_line_flux` (Gemini `SKYBG` convolved
+    with the LSF, integrated over the same ±1.5 FWHM minus flank continuum).
+  - `scripts/mosfire/select_monitor_lines.py` (rules 1-5, with
+    `--widest-slit`).
+  - Fixed: `process_raw` reads `par['scienceframe']` for science frames;
+    it is not under `calibrations`.
+- **Rule 2 count.** 2022-04-09, J2, OH_R24000 lines at least 100 A inside
+  the band. A line counts if PypeIt identified it and it has no companion
+  above 10% of its amplitude within 3 FWHM of a sky line in slit w:
+  - w = 5": **1 line** (FWHM 23.5 A);
+  - 2": 4;
+  - **1": 18**;
+  - 0.7": 21.
+  - With ±1.5 FWHM instead: 5" gives 1, 3" gives 14, 1" gives 23.
+- **Consequence:** at 5" the J2 OH lines blend into complexes, so the
+  design rule ("3 FWHM of the widest slit in use, 5"") selects nothing.
+- **Open question for the user:** how to change rule 2.
+  - My proposal: apply rule 2 at 1", the science slit width, for the
+    per-line list.
+  - For wide-slit (standard) frames, compare only on identical wavelength
+    windows: the summed flux over fixed windows of the 5" FWHM, measured
+    the same way on 1" and 5" frames. The 20% slit-normalisation check
+    then compares like with like.
+
+**S6b checkpoint 4 (user decision on rule 2; monitor runs end to end; OH 1"/5" check fails because of twilight).**
+- **User decision on rule 2:** "1" lines + fixed windows". Applied in
+  design 4.9.4 and 4.9.5:
+  - rule 2 isolation at 1";
+  - a fixed ±1.5 x FWHM(5") window per monitor line (`line_flux_window`,
+    new metric);
+  - `line_flux_sum` = the sum of the fixed windows;
+  - per-line `line_flux` flagged `blended` on slits wider than 1".
+- **`select_monitor_lines.py 20220409`:** of 74 lines, rule 1 passes 43,
+  rule 2 (1") 20, rule 4 64; **15 pass all three**. All are bright (36-722
+  e-/s/arcsec^2 at 1") and far below 26k ADU (frame 99.9th percentile
+  5.6k). Chosen, the brightest per sub-window: **11591.847, 11788.495,
+  12229.206, 12287.158 A**. The bluest sub-window has no candidate. Written
+  into `monitor_configs.py` as provisional (output sha256 d2da5328...).
+- **`monitor_night`, `monitor_table`, `harvest_sens.py monitor` (DATE or
+  REDUX form) and the `--merge` extension (`calib_monitor.ecsv`)** are
+  written. Local run on 2022-04-09: **136 rows, 14 metrics, 0
+  monitor_failed**, 15 s.
+- **Fixed-window bug found and fixed.** With a flank continuum, ±35 A
+  windows put their flanks on neighbouring OH lines, and the sums went
+  negative (-395 to +285 e-/s/arcsec^2). The Gemini model integrated the
+  same way went negative too, so an interim "sky_scale 3.8" was
+  meaningless. Fixed windows now integrate the **total** flux, data and
+  model alike. Per-line narrow windows keep the flank continuum.
+- **`verify_monitor.py 20220409`** (new):
+  - 1. line widths = S13 exactly (3.6064 px, 19 lines, R 2676.7): PASS.
+  - 2. `pixelflat_raw`/(on - off) = 1.00000 (16-84%: 0.9946-1.0054,
+    2.06 M px): PASS.
+  - 3. peak 13,556 ADU, below 26k.
+  - 4. LDS749B scalar-FWHM median 6.2638 = `seeing_fwhm_pix`; FWHMFIT at
+    11500/12000/12500 for all 6 objects: PASS.
+  - 5. `slitloss_gt1pct` false for LDS749B (0.6%, 0.5%): PASS. J0841 1":
+    true, 30.8% (0036/37) and 33.9% (0038/39).
+  - 6. OH fixed-window sums finite for all 6 frames: PASS. 1" frames,
+    zenith-normalised (van Rhijn, layer at 87 km): 2991-3060
+    e-/s/arcsec^2, scatter 1.5%. **5"/1" ratio 1.95: FAIL.**
+  - 7. **First sky_scale:** measured/Gemini = **0.914** (summed windows,
+    science frames); per line 0.81-1.20 over 16 values.
+- **Diagnosis** (`scripts/mosfire/oh_continuum_check.py`): the LDS749B
+  frames were taken at **solar altitude -9.0 and -8.5 deg (nautical
+  twilight)**.
+  - Sky in the lowest-OH J2 window (12440-12480 A): 12.1 and 18.2
+    e-/s/arcsec^2/A, rising 50% in 2.5 min, against 2.3-3.9 for the dark
+    1" frames (sun at -30 deg).
+  - Subtracting each frame's low-OH level from its fixed windows lowers the
+    5"/1" ratio to **1.34**. The two 5" frames still differ by 33% from each
+    other, so a one-window continuum does not remove twilight (its colour,
+    and blending at 5").
+  - **This night cannot validate the 5" slit normalisation.** The 1"
+    normalisation is supported independently by the absolute OH/Gemini
+    ratio of 0.91.
+- **Checkpoint 5 (code complete; ready for image 0.1.6):**
+  - `scripts/mosfire/measure_lsf.py` is now a thin wrapper over
+    `monitor.fit_line_widths` / `monitor.width_trend`; its output is
+    unchanged (3.606 px, R 2677).
+  - Wired in: a MONITOR step after HARVEST in `nautilus/night_job.yaml` and
+    `nautilus/validate_job.yaml`. It is `|| echo WARNING`, so it never fails
+    a night (D47). `reduce_standard.py --monitor` runs the same step locally
+    and records `manifest['monitor']`.
+  - Unit tests: `keck_etcs/tests/test_monitor.py` covers the Moffat slit
+    fraction, the sky-line FWHM floor, `_line_sum` with and without
+    continuum, `row`/`monitor_table` masks and the MOSFIRE config. 10/10
+    pass.
+  - Dockerfile guard: the build now imports `keck_etcs.calib.monitor` and
+    `monitor_configs`.
+  - Local merge: `harvest_sens.py --merge <night>/harvest` wrote
+    `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` (136 rows, night
+    20220409) and registered it in `index.yaml`. The standards row is
+    unchanged; only its `merged` stamp moved.
+  - `keck_etcs.__version__` is now 0.1.6. Both job YAMLs point at 0.1.6
+    with the digest TBD; `kubectl apply --dry-run=client` passes for both.
+  - Still to do: build and push 0.1.6; run the REPLACE=1 validate job;
+    `pull --force`; `verify_monitor.py 20220409 --compare` on the in-pod
+    monitor file (1e-6); merge the in-pod rows; record the digest.

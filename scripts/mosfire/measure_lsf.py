@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 """Measure the MOSFIRE line-spread function from the OH lines of a WaveCalib file (plan step S13).
 
+Since S6b this is a thin wrapper: the fit lives in
+``keck_etcs.calib.monitor`` (``fit_line_widths``, ``width_trend``; design
+4.9.3), which the calibration monitor runs for every night. This script
+keeps the report, the plot and ``--record`` (``lsf_measurements.ecsv``).
+
 Usage:
     conda run -n pypeit14b python scripts/mosfire/measure_lsf.py DATE [--wavecalib FILE]
         [--slit 1.0] [--record] [--plot]
@@ -42,95 +47,31 @@ from pathlib import Path
 import numpy as np
 import yaml
 from astropy.table import Table
-from scipy.optimize import curve_fit
 
 from keck_etcs import paths
+from keck_etcs.calib import monitor as mo
 
 REPO = Path(__file__).resolve().parents[2]
 TABLE = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'lsf_measurements.ecsv'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
 CALIB_VERSION = 'mosfire-J-2026.10-dev'
-HALF = 8                 # fit window half-width, pixels
-BLEND_FRAC = 0.10        # companion amplitude ratio that counts as a blend
-BLEND_NFWHM = 1.5        # companion distance, in expected FWHMs
 REF_WAVE = 12500.0       # A
 SLOPE_ARCSEC_PER_PIX = 0.24   # design D25 (anamorphic dispersion-direction pixel)
 FLOOR_PIX = 2.2
 R0_SLIT = 3310.0 * 0.7        # design: R = 3310 x 0.7 / slit
 
 
-def gauss(x, a, mu, sig, c0, c1):
-    return a * np.exp(-0.5 * ((x - mu) / sig) ** 2) + c0 + c1 * (x - mu)
-
-
-def sha256sum(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def read_oh_hires():
-    from pypeit import dataPaths
-    t = Table.read(dataPaths.linelist.get_file_path('OH_R24000_lines.dat'),
-                   format='ascii.fixed_width', comment='#')
-    return np.asarray(t['wave'], float), np.asarray(t['amplitude'], float)
-
-
 def measure(wavecalib, slit):
+    """The S13 fit, now in ``keck_etcs.calib.monitor.fit_line_widths`` (design 4.9.3)."""
     from pypeit.wavecalib import WaveCalib
+    wf, lines = mo.fit_line_widths(wavecalib, slit)
     wc = WaveCalib.from_file(str(wavecalib), chk_version=False)
-    wf = wc.wv_fits[0]
-    spec = np.asarray(wf.spec, float)
-    wsol = np.asarray(wf.wave_soln, float)
-    disp = np.gradient(wsol)
-    xpix = np.arange(spec.size, dtype=float)
-    expected_fwhm = max(slit / SLOPE_ARCSEC_PER_PIX, FLOOR_PIX)
-    oh_w, oh_a = read_oh_hires()
-    rows = []
-    for px, wv in zip(np.asarray(wf.pixel_fit, float), np.asarray(wf.wave_fit, float)):
-        i0, i1 = int(round(px)) - HALF, int(round(px)) + HALF + 1
-        if i0 < 0 or i1 > spec.size:
-            continue
-        x, y = xpix[i0:i1], spec[i0:i1]
-        p0 = [y.max() - np.median(y), px, expected_fwhm / 2.3548, np.median(y), 0.0]
-        try:
-            p, cov = curve_fit(gauss, x, y, p0=p0, maxfev=5000)
-        except RuntimeError:
-            continue
-        a, mu, sig = p[0], p[1], abs(p[2])
-        if a <= 0 or not np.isfinite(sig) or abs(mu - px) > 2:
-            continue
-        fwhm_pix = 2.3548 * sig
-        d = float(np.interp(mu, xpix, disp))
-        fwhm_a = fwhm_pix * abs(d)
-        # blend test against the resolved list
-        k = int(np.argmin(np.abs(oh_w - wv)))
-        near = (np.abs(oh_w - oh_w[k]) < BLEND_NFWHM * expected_fwhm * abs(d)) & (np.arange(oh_w.size) != k)
-        blended = bool(np.any(oh_a[near] >= BLEND_FRAC * oh_a[k])) or abs(oh_w[k] - wv) > 2 * abs(d)
-        rows.append({'wave': float(wv), 'pixel': float(mu), 'amplitude': float(a),
-                     'fwhm_pix': float(fwhm_pix),
-                     'fwhm_pix_err': float(2.3548 * np.sqrt(cov[2, 2])) if np.isfinite(cov[2, 2]) else np.nan,
-                     'dispersion': float(abs(d)), 'fwhm_A': float(fwhm_a),
-                     'R': float(wv / fwhm_a), 'blended': blended})
-    lines = Table(rows=rows)
-    lines['wave'].unit = 'Angstrom'
-    lines['fwhm_A'].unit = 'Angstrom'
-    lines['dispersion'].unit = 'Angstrom / pix'
-    return wc, wf, lines, expected_fwhm
+    return wc, wf, lines, max(slit / SLOPE_ARCSEC_PER_PIX, FLOOR_PIX)
 
 
 def trend(lines):
-    """Linear fit of FWHM_pix against wavelength for clean lines, 3-sigma clipped."""
-    clean = lines[~lines['blended']]
-    w, f = np.asarray(clean['wave']), np.asarray(clean['fwhm_pix'])
-    keep = np.ones(w.size, bool)
-    for _ in range(5):
-        c = np.polyfit(w[keep] - REF_WAVE, f[keep], 1)
-        resid = f - np.polyval(c, w - REF_WAVE)
-        s = 1.4826 * np.median(np.abs(resid[keep] - np.median(resid[keep])))
-        new = np.abs(resid) < 3 * s
-        if np.array_equal(new, keep):
-            break
-        keep = new
-    return c, keep, clean, float(s)
+    """Linear FWHM(lambda) fit, now ``keck_etcs.calib.monitor.width_trend``."""
+    return mo.width_trend(lines, REF_WAVE)
 
 
 def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
