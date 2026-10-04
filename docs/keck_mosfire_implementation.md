@@ -1,6 +1,6 @@
 # Keck/MOSFIRE J: implementation plan
 
-*Version 0.3.1, 2026-09-30. Companion to `docs/keck_mosfire_design.md` (v0.3.1);
+*Version 0.4, 2026-10-04. Companion to `docs/keck_mosfire_design.md` (v0.4);
 section numbers below refer to that document. Each step is meant to be one
 working session and to become one numbered prompt under "### Implementation"
 in `claude_prompts/keck_mosfire_prompts.md`.*
@@ -37,6 +37,19 @@ paths), the reference records `pypeit_git_sha`, `pypeit_pin` and
 SHAs (S0, S4, S4a, S4b, S17, risks). Credentials and the registry project,
 deploy token and `docker login` are done (user, 2026-09-30).
 
+*Change note, v0.4 (2026-10-04, Prompt #8):* the calibration monitor of
+design 4.9 (D40-D47; Q40-Q48) is added as the new step **S6b**, which runs
+after S6 and S13, both already done. It covers the module
+`keck_etcs/calib/monitor.py`, the MOSFIRE monitor config, the S13 fit
+refactored into the module, the in-pod harvest writing
+`harvest/<night>_monitor.ecsv`, the merge into
+`keck_etcs/data/mosfire/monitor/calib_monitor.ecsv`, and a re-harvest of
+2022-04-09 locally and in a pod. Steps re-scoped in place: S13 (its fit now
+lives in the module), S14 and S14b (a Ne/Ar lamp-frame census and an
+optional lamp download), S15 (S15a freezes the monitor lines on the pilot;
+S15c merges the monitor rows), S16 (monitor trends and flags), S18 (the
+monitor documented for WMKO), and the risks.
+
 Rules that apply to every step: Python via `conda run -n pypeit14` locally;
 git is the user's (including `checkout`/`switch` in the PypeIt repo);
 calculations are scripts on disk; nothing under `KECK_ETCS_DATA` is
@@ -61,6 +74,7 @@ Phase 1  S4 reference reduction 2022-04-09 (local, PypeIt MOSFIRE-equivalent to 
          S5 LDS749B sensfunc (local reference + in-pod; needs S2, S4/S4b)
          S6 harvest module + local merge (needs S5, S8 filter curves; runs in-pod from image 0.2.0 on)
          S13 LSF from OH lines (local, on synced WaveCalib; needs S4 or S4b)
+         S6b calibration monitor: module, MOSFIRE config, in-pod harvest, merge (needs S6, S13; image rebuild)
 Phase 2  S7 core modules (local; needs S3) ── S9 compute()/CLI/regression (needs S7, S8, S10 or provisional)
          S8 mosfire instrument module + data files (local; parallel with S7)
 Phase 3  S10 throughput v0 (local; needs S6)   S11 J0841 validation (local; needs S4b sync, S9, S10)   S12 XTcalc (needs S9)
@@ -71,8 +85,8 @@ Phase 5  S17 PypeIt ronoise branch off develop (local; needs S8)   S18 docs/READ
 ```
 
 Parallel groups: {S0, S1, S2, S14}; {S1b, S3, S4}; {S4a, S7, S8}; {S4b, S5};
-{S11, S12, S13}; {S14b, S10}; {S17, S18 draft}. The image (S4a) is rebuilt
-and re-tagged whenever `keck_etcs.calib`, the `.sens` file or the PypeIt pin
+{S11, S12, S13}; {S6b, S7, S8}; {S14b, S10}; {S17, S18 draft}. The image (S4a) is rebuilt
+and re-tagged whenever `keck_etcs.calib` (now including `monitor.py`), the `.sens` file or the PypeIt pin
 changes; S15 always runs on a tagged image recorded in the log with its
 digest and pin.
 
@@ -381,6 +395,81 @@ digest and pin.
   may differ on `develop` from what was read on 2026-09-29; keep the reader
   tolerant and log the version.
 
+### S6b. Calibration monitor *(module runs in-pod; merge local; design 4.9, D40-D47)*
+- **Goal:** a per-night calibration-monitor table (spatial FWHM,
+  flat-lamp brightness, calibration-line widths and brightness), computed
+  in the pod beside the harvest and merged locally, so that every S15
+  night gets it at no extra cost.
+- **Inputs:** a night's `redux/` (spec1d, `Calibrations/Flat_*`,
+  `WaveCalib_*`, `Tilts_*`, `Slits_*`), its `raw/` frames and
+  `run_manifest.json`; the sens files for `line_flux_above`; locally the
+  synced 2022-04-09 products (`s3_sync.py pull mosfire/20220409 --calibs`,
+  plus raw).
+- **Outputs:**
+  - `keck_etcs/calib/monitor.py` (PypeIt imported inside functions only).
+    Functions `object_fwhm(spec1d_files, cfg)` (4.9.1),
+    `flat_rates(flat_file, cfg, raw_on, raw_off)` (4.9.2),
+    `line_widths(wavecalib_file, cfg, source)` (4.9.3; the S13 fit moved
+    here unchanged), `line_fluxes(raw_frames, calib_group, cfg, traces,
+    sens=None)` (4.9.4) and `monitor_night(redux_dir, raw_dir, manifest,
+    cfg) -> astropy.table.Table` in the 4.9.5 format.
+  - `keck_etcs/calib/monitor_configs.py` with the MOSFIRE J/J2 block of
+    4.9.6: FWHM nodes, flat nodes every 250 A, ±50 A boxes, central 50
+    percent of rows, `flat_kind = dome`, the lamp cards `FLAMP1`, `FLAMP2`,
+    `FPOWER`, `FLATSPEC` and `DOMEPOSN`, line lists, and a provisional OH
+    list until S15a. It moves to `instruments/mosfire.py` once S8 exists.
+  - `scripts/mosfire/measure_lsf.py` reduced to a wrapper around
+    `monitor.line_widths`, keeping `--record`.
+  - `scripts/mosfire/harvest_sens.py` gains `monitor REDUX --raw RAW
+    --manifest run_manifest.json --out DIR` (what the pod runs after
+    `harvest`), and `--merge` also folds `*_monitor.ecsv` into
+    `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` (keyed per 4.9.5),
+    registered in `index.yaml`.
+  - `reduce_standard.py`, `night_job.yaml` and `gates.py`: run the monitor
+    step after the harvest. A monitor exception writes `flag =
+    monitor_failed` into the row file and does not fail the night (D47).
+  - `scripts/mosfire/select_monitor_lines.py`, which ranks OH (and, when
+    present, Ne/Ar) candidates by the five rules of 4.9.4. Its first run is
+    on 2022-04-09 to give the provisional list; the freeze happens in
+    S15a.
+  - Image rebuild with the module, then a pod re-run of 2022-04-09 with
+    `REPLACE=1`, on a tag confirmed with the user.
+- **Verify:**
+  - `line_widths` on the 2022-04-09 1" `WaveCalib` reproduces the S13 row in
+    `lsf_measurements.ecsv` exactly: 3.61 px, 19 lines, R 2677.
+  - `pixelflat_raw` units: the median of (lamp-on mean minus lamp-off mean)
+    x 2.15 from the raw frames over the same pixels agrees with
+    `pixelflat_raw` within 1 percent. If not, the conversion is fixed in
+    the module and the finding logged (design 8).
+  - The flat stack's peak raw ADU is reported against 26k ADU.
+  - The scalar FWHM rows for LDS749B match `seeing_fwhm_pix` in
+    `standards.ecsv`.
+  - `FWHMFIT` medians exist at the three J2 nodes for every object.
+  - `slitloss_gt1pct` is false for LDS749B on the 5" slit and evaluated for
+    the J0841 frames on the 1" slit.
+  - OH fluxes are finite for all six on-sky frames, and the 1" frames' OH
+    flux per arcsec^2 is within 20 percent of the 5" frames' after
+    correcting for airmass. A larger difference means the slit-width
+    normalisation is wrong.
+  - `line_flux_above` for J0841 against the Gemini model at the frame's
+    airmass and fitted PWV gives a first `sky_scale`, which is logged.
+  - The in-pod monitor file equals the local one to 1e-6 in every numeric
+    column.
+  - `git status` shows only code, the merged ECSV, `index.yaml` and the
+    config.
+- **Depends on:** S6, S13, S4a/S4b (image and job templates). S8 is optional:
+  until it exists, use the local config and the provisional slit-loss
+  integral (design 4.9.1).
+- **Risks:**
+  - `pixelflat_waveimg` may be empty for MOSFIRE; build the wave image from
+    `WaveCalib` and `Tilts`.
+  - On a night where a wide-slit standard is the only on-sky frame of its
+    setup, which `WaveCalib` serves that setup has to be checked (design 8).
+  - Raw-frame processing must use PypeIt's own steps, so that the gain and
+    the bad-pixel mask match the reduction.
+  - On nod-differenced reductions the spec1d sky is residual, so the OH
+    fluxes must come from the single processed frames, as specified.
+
 ### S13. LSF from OH lines *(local, on synced WaveCalib)*
 - **Goal:** replace the XTcalc LSF constants (2.2 pix floor, 0.24"/pix slope).
 - **Inputs:** `Calibrations/WaveCalib*.fits` of the 1" slit from S4 (local)
@@ -395,6 +484,11 @@ digest and pin.
 - **Verify:** for the 1" slit, FWHM_pix within 20 percent of 1.0/0.24 = 4.2
   pix; R at 1.25 um within 15 percent of 3310 x 0.7 / 1.0 = 2300.
 - **Depends on:** S4 or S4b; more slit widths need S15.
+- **v0.4:** done on 2026-10-04. In S6b its fit moves into
+  `keck_etcs.calib.monitor.line_widths`, and from then on it runs in-pod
+  for every night and slit (D44). `measure_lsf.py --record` stays the way
+  `lsf_measurements.ecsv` is written. More slit widths come from the S15c
+  merge of the monitor rows, not from separate S13 runs.
 
 ## Phase 2: ETC core *(all local; unchanged from v0.1)*
 
@@ -459,6 +553,12 @@ digest and pin.
   by `scripts/koa/make_night_manifest.py` (columns of design 4.8.4; the
   batch order of the koa doc: wide-slit standards, then Hennawi/Yang/Wang
   nights).
+- **v0.4 (D44):** the census also counts Ne/Ar lamp frames per candidate
+  night: frames with `PWSTATA7`/`PWSTATA8` = 1 (Neon/Argon on, per
+  `PWLOCA7`/`PWLOCA8`), matched to the standard's `MASKNAME` and filter, or
+  any `long2pos_specphot` arcs. It adds the columns `n_lamp_arcs` and
+  `lamp_arcs_match`, and reports the fraction of candidate nights that have
+  matching lamp arcs. That fraction decides whether S14b downloads them.
 - **Verify:** as v0.1; the dry-run night appears in a one-row manifest whose
   columns match `night_job.yaml`'s expectations.
 - **Depends on:** S1 for the local layout; otherwise independent. **Risk:**
@@ -483,6 +583,11 @@ digest and pin.
   2` out of politeness to KOA, small resources, `activeDeadlineSeconds`, the
   credentials secret mounted); a per-night `download_status.ecsv` under
   `runs/<job_name>/`.
+- **v0.4 (D44):** if the S14 census shows matching lamp arcs on a useful
+  fraction of nights (the user decides after seeing the number), add
+  `--lamp-arcs` to the download script so it fetches them with frame type
+  `lamp_arc` in `raw/manifest.ecsv`. The reduction still ignores them
+  outside `long2pos_specphot`; only the monitor reads them.
 - **Verify:** the reachability result is logged before any batch; every
   downloaded night has flats and a standard in its manifest; `s3_sync.py
   ls` sizes match the manifest; total bytes reported; re-applying downloads
@@ -505,7 +610,13 @@ digest and pin.
   - **S15a** *(local code, then a Nautilus pilot):* A0V support in
     `keck_etcs/calib/standards.py` (Vega + 2MASS J, N3) wired into
     `reduce_standard.py` and the image; `long2pos` handling; the pilot batch
-    of 3-5 wide-slit nights as one Indexed Job.
+    of 3-5 wide-slit nights as one Indexed Job. **v0.4:** after the pilot,
+    `select_monitor_lines.py` is run on 2022-04-09 plus the pilot nights,
+    and the frozen OH (and Ne/Ar, if any) lists are written into the
+    monitor config with the script output and its sha256 as provenance
+    (D45). The image is rebuilt with the frozen lists, and the pilot nights
+    are re-harvested (monitor step only) before S15b, so that every
+    production row uses the frozen lists.
   - **S15b** *(Nautilus, several sessions):* the remaining manifests, one Job
     per batch (by year or by program), `parallelism` raised only as far as
     the pilot's measured memory allows; after each batch, `night_failures.py`
@@ -517,7 +628,9 @@ digest and pin.
     and bytes logged.
   - **S15c** *(local):* `s3_sync.py pull` of `harvest/`, `sens/` and
     `Calibrations/WaveCalib*` for every `success` night; `harvest_sens.py
-    --merge`; `status_table.py` output copied into the prompt-doc log.
+    --merge`, which also merges `harvest/*_monitor.ecsv` into
+    `calib_monitor.ecsv` (S6b); `status_table.py` output copied into the
+    prompt-doc log.
 - **Outputs:** `s3://keck-etcs/mosfire/<YYYYMMDD>/{redux,sens,harvest}` per
   night with `run_manifest.json`; `runs/<job_name>/status.ecsv`; rows
   appended to `standards.ecsv` and curve files; `scripts/nautilus/backup_products.py`
@@ -530,7 +643,8 @@ digest and pin.
   `success` night has `sens_*.fits`, a harvest row and a `run_manifest.json`
   whose `image_digest` and `pypeit_git_sha` match the batch's recorded
   values; the count of `success` nights equals the number of new rows in
-  `standards.ecsv`; narrow-slit standards land in the slit-loss sample with
+  `standards.ecsv`; every `success` night has a monitor file, and the
+  number of nights with `flag = monitor_failed` is reported; narrow-slit standards land in the slit-loss sample with
   their `FWHM` and `flag = narrow`; no pod ran past `activeDeadlineSeconds`;
   a failed night re-applied via the sweep manifest either succeeds or carries
   a data reason; after each batch `rclone check --one-way` with the same
@@ -557,7 +671,14 @@ digest and pin.
   the release's inputs are frozen (D39). **Verify** as v0.1 plus: every row
   that enters an era median has a non-empty `image_digest` and
   `pypeit_git_sha`, `CHANGES.md` lists each distinct pair, and `rclone check
-  --one-way` reports the release backup complete. **Depends on:** S15.
+  --one-way` reports the release backup complete. **v0.4 (D47):**
+  `trend.py` also computes per-era medians, MADs and 3-MAD flags for every
+  monitor metric (design 4.6). `plot_monitor_trends.py` plots FWHM, the
+  dome-flat rate at each node, the line widths against slit width (which
+  refits the D25 slope and floor), and the OH-flux / Gemini ratio
+  (`sky_scale`) against date. The dome-flat rate at 1.20/1.25 um is
+  correlated with `zp_1250`. Any change to the default `sky_scale` or to
+  the LSF constants is proposed to the user, not applied silently. **Depends on:** S15.
 
 ## Phase 5: wrap-up
 
@@ -590,7 +711,10 @@ digest and pin.
   that `keck_etcs.core`/`etc` need neither PypeIt, Nautilus nor S3 access,
   and that all calibration products are in the package (git), the S3 bucket
   being private working storage. An optional, later item is noted (not a
-  deliverable): widening bucket access for collaborators. **Verify:** README
+  deliverable): widening bucket access for collaborators. **v0.4:** the
+  README and the WMKO note describe `calib_monitor.ecsv` (columns and
+  metrics, design 4.9.5), say that `compute()` does not read it, and
+  explain how a new instrument adds a monitor config (4.9.6). **Verify:** README
   examples run as written; `index.yaml`, `CHANGES.md` and
   `nautilus/README.md` agree on the image tags and pins behind the current
   calibration; the WMKO note lists every schema field. **Depends on:** S9,
@@ -646,5 +770,13 @@ digest and pin.
 - **Run time and sizing.** Per-night wall-clock and memory are unmeasured
   until S4b; size the batch Jobs from the pilot (S15a), never from the first
   pod, and keep `activeDeadlineSeconds` on every Job.
+- **Calibration monitor (S6b).** Three things are inferred from the
+  datamodel and not yet checked on data: the units of `pixelflat_raw`, the
+  wave image, and the OH-flux slit normalisation. S6b checks each one.
+  Dome-flat rates also depend on dome position and the screen, so they are
+  a trend, never a calibration. Changing the line lists after S15a would
+  break the series, so lines are only ever added. A monitor failure must
+  not cost a night's sensfunc, which is why the monitor sets flags and
+  never gates a night.
 - **Regression churn.** Every calibration release changes numbers; the
   fixtures are regenerated only in S16-type steps, with a `CHANGES.md` line.

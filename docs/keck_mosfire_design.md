@@ -1,8 +1,9 @@
 # Keck/MOSFIRE J-band: sensitivity analysis and exposure-time calculator design
 
-*Version 0.3.1, 2026-09-30. Decisions come from the Q&A in
-`claude_prompts/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed; round
-(d) on Nautilus, Q27-Q39, answered 2026-09-30). Readers: the PypeIt/keck-etcs
+*Version 0.4, 2026-10-04. Decisions come from the Q&A in
+`claude_prompts/keck_mosfire/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed; round
+(d) on Nautilus, Q27-Q39, answered 2026-09-30; Calibrations, Q40-Q48,
+answered 2026-10-04). Readers: the PypeIt/keck-etcs
 developers, future implementation sessions, and WMKO staff who will host the
 web front end.*
 
@@ -38,6 +39,20 @@ irrelevant to MOSFIRE J reductions"; the reference reduction records both
 SHAs and the check result, and the S4b gate compares pins, not SHAs. The
 registry project, deploy token, `docker login` and the S3 credentials are
 confirmed done by the user (section 8). D31, D32, D39 unchanged.
+
+*Change note, v0.4 (2026-10-04, Prompt #7/#8):* a **calibration monitor**
+is added. Per night it records the spatial FWHM of the standard stars and
+science objects, the brightness of the flat lamps at fixed wavelengths, and
+the width and brightness of the calibration lines. The decisions come from
+the user's answers to Q40-Q48 (all recommendations accepted) and are D40-D47.
+The detail is in the new section 4.9. Also touched: 4.2 (layout), 4.4 (the
+FWHM columns), 4.6 (monitor trends), 4.8.9 (the backup set already covers
+the new file), 5.1 (package layout), 7 (definition of done, item 7) and 8
+(open items). Two points matter for the design. MOSFIRE has no internal
+flats, so its *dome* flats stand in for them. Its J band is
+wavelength-calibrated on OH sky lines, not lamps, so the OH lines act as
+the "arc" for widths and serve as a sky monitor for brightness. The Ne/Ar
+lamp lines are an instrument monitor, but only on nights with lamp frames.
 
 ## 1. Purpose and scope
 
@@ -104,6 +119,14 @@ masks, imaging, and the other Keck instruments (which will reuse
 | D37 | KOA raw-frame downloads run as a Nautilus Job writing to `mosfire/<night>/raw/` on S3 with a manifest; the KOA metadata search stays local; fallback is a local download and `s3_sync.py push` if pods cannot reach KOA anonymously (checked first in plan step S14b). The 2022-04-09 dev-suite frames are pushed from the workstation. | Q33. |
 | D38 | Stays local, in `pypeit14`, on synced products: `keck_etcs.core`, `etc.compute`, the schemas, tests, the Gemini grid build, combine, trend, the J0841 validation, the XTcalc comparison, the KOA metadata search, the PypeIt `ronoise` branch (off `develop`) and the documentation. Pods never call `compute()`; the core keeps its no-I/O rule. | Q39. |
 | D39 | Backup (Nautilus is not backed up): only the high-level products needed for the sensitivity analysis and the ETC are copied from `s3://keck-etcs` to the Google shared drive `AIOcean:keck-etcs/` with `rclone`, after each successful batch of plan step S15 and again, under the calibration tag, at each release (S16). The set is defined in 4.8.9: `sens/`, `harvest/`, `run_manifest.json`, `run.log`, the pypeit file, `Science/spec1d_*`, `manifests/`, `runs/`. Excluded: raw frames (re-downloadable from KOA), `spec2d_*`, `Calibrations/`, PypeIt `QA/`. | Q32. The excluded items are large and re-derivable by re-running a night; the included ones are what the analysis reads and what a re-run would have to reproduce. |
+| D40 | A **calibration monitor**: the instrument-agnostic module `keck_etcs/calib/monitor.py` (PypeIt imported only inside functions, like `harvest.py`) takes a night's PypeIt products (`Flat`, `WaveCalib`, `Tilts`, spec1d) and raw frames plus a per-instrument monitor config (wavelength nodes, lines, spatial region) and returns rows. The MOSFIRE J config is implemented now; LRIS gets its own config when LRIS starts. Section 4.9. | Q40. The four items apply to every Keck spectrograph; LRIS is next. |
+| D41 | **Spatial FWHM** per extracted object and frame (standards and science objects): PypeIt's scalar `FWHM` in pixels and arcsec (x 0.1798), and the median of `FWHMFIT` within ±100 A of the zero-point nodes (J2: 1.15, 1.20, 1.25 um; J: 1.20, 1.25, 1.30 um), plus a `slitloss_gt1pct` flag where the D26 Moffat model predicts more than 1 percent slit loss at the frame's slit width. `seeing_fwhm_pix` in the standard row stays the median scalar FWHM. | Q41. Tests the lambda^-0.2 scaling (D26) and the "no slit loss at >= 3 arcsec" assumption (D4) on data; S11 needs the science FWHM anyway. |
+| D42 | **Flat brightness.** Instruments without internal flats use their dome flats, tagged `flat_kind = dome` and read as a trend only. Metric: the lamp-on minus lamp-off rate in e-/s/pix, i.e. the median of `pixelflat_raw` divided by the per-frame exposure time, over the central 50 percent of the slit length, in ±50 A boxes at fixed vacuum wavelengths; also given per arcsec of slit width. Recorded with it: the lamp cards (MOSFIRE: `FLAMP1`, `FLAMP2`, `FPOWER`, `FLATSPEC`), `TRUITIME`, `SAMPMODE`, `NUMREADS`, slit width, filter, and the peak raw ADU of the lamp-on frames against the 1 percent non-linearity limit. | Q42. Dome-flat light passes through the telescope, so it is a throughput proxy that also carries lamp ageing. |
+| D43 | Flat wavelength nodes are listed explicitly in each instrument's monitor config. MOSFIRE: every 250 A (J2: 1.125-1.250 um, 6 nodes; J: 1.150-1.325 um, 8 nodes). Generic default for the optical instruments: every 500 A. | Q43. 500 A gives J2 only two or three points. |
+| D44 | **Calibration-line widths.** For MOSFIRE the OH lines in each night's `WaveCalib` are the "arc". The S13 fit (`measure_lsf.py`) moves into `keck_etcs.calib.monitor` and runs in-pod for every night and every slit with a wavelength solution, recording per (night, slit) the median Gaussian FWHM in pixels and A, its scatter, the slope with wavelength, the number of clean lines and `arc_source = OH`. Where Ne/Ar lamp frames exist (all `long2pos_specphot` nights, and afternoon arcs on a mask and filter that also has a wavelength image that night), the same fit runs on the lamp lines with `arc_source = lamp`. Lamp frames are downloaded from KOA only if the S14 census shows they are common for the relevant masks. | Q44. Wide-slit nights mostly measure the slit width, but that constrains the D25 slope and floor at other widths. |
+| D45 | **Calibration-line brightness**, two metrics. (a) OH lines on every on-sky frame are a **sky monitor**: line flux in e-/s/arcsec^2, and in photons/s/arcsec^2/m^2 above the instrument (divided by that night's throughput where a sensfunc exists; the Gemini model's unit), with the frame's UT, airmass and the night's fitted PWV, plus the summed flux of all clean OH lines in the band. (b) Ne/Ar lines on lamp nights are an **instrument monitor**: line flux in e-/s per arcsec of slit width. Lines are chosen by explicit rules (4.9.4) by `scripts/mosfire/select_monitor_lines.py` on 2022-04-09 and the S15a pilot nights, then frozen in the monitor config with the script output as provenance. Lines may be added but are never removed. | Q45. OH varies about 2x through a night, so it does not measure the instrument, but it is the measurement D14 needs. |
+| D46 | Monitor rows go to `harvest/<night>_monitor.ecsv`, written by the in-pod harvest. The file is part of the D39 backup set through `harvest/**`, which matters because `Calibrations/` is not backed up. `harvest_sens.py --merge` builds the committed `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` with the D36 provenance columns, registered in `index.yaml` and covered by the calibration-release rule (D28). `compute()` never reads it; only the LSF rows feed the instrument module, through `lsf_measurements.ecsv` as now. | Q46. Inside the package keeps it under `index.yaml` and D28. |
+| D47 | Monitor metrics produce **flags, not gates**. In S16 each metric gets a per-era median and MAD, and nights beyond 3 MAD are flagged in the table, not failed. The only existing gate that touches calibrations, wavelength RMS, is kept. The flat-brightness trend is plotted beside the throughput trend with a correlation test. | Q47. If the dome-flat rate falls but the standards' throughput does not, the lamps are the cause; if both fall, the optics or the coatings are. |
 
 Decisions made while writing this document (not in the Q&A; flagged for
 review):
@@ -201,6 +224,7 @@ s3://keck-etcs/
   mosfire/<YYYYMMDD>/redux/QA/                      # PypeIt QA PNGs
   mosfire/<YYYYMMDD>/sens/sens_*.fits, *_QA.png     # pypeit_sensfunc output and telluric QA
   mosfire/<YYYYMMDD>/harvest/<standard>_<date>.ecsv # per-standard row + curve (D34)
+  mosfire/<YYYYMMDD>/harvest/<night>_monitor.ecsv   # calibration-monitor rows (D46, 4.9)
   mosfire/<YYYYMMDD>/run_manifest.json, run.log     # provenance and the tee'd pod log (D36)
   manifests/nights_<batch>.csv                      # night manifests that drive the Indexed Jobs
   runs/<job_name>/status.ecsv                       # per-night status written by the job
@@ -302,7 +326,9 @@ D36; a row harvested from a local reduction carries `image = local`)
   airmass, smoothed to the fitted resolution) best matches PypeIt's fitted
   telluric transmission. The PCA telluric model fits no PWV.
 - **`seeing_fwhm_pix`** is the median PypeIt spatial FWHM of the
-  standard's extracted objects.
+  standard's extracted objects. *From v0.4 (D41)*, the per-frame scalar
+  FWHM, the `FWHMFIT` medians at the zero-point nodes and the slit-loss
+  flag go in the monitor table (4.9.1), not in this row.
 - **`koa_id`** joins the KOA IDs of the standard's frames with `+`.
 - **`slit_length`** is in CSU bars (from `LONGSLIT-<bars>x<width>`).
 - **`flag`** is comma-separated: `ok`, `nofilter` (no filter curve
@@ -335,7 +361,13 @@ Plot `zp_1250` and `thru_median_1117_1260` against date with the era
 boundaries marked; per era report the median, MAD, and a linear slope in
 percent per year with its uncertainty; test for correlation with airmass, PWV
 and slit width (a residual airmass trend means the telluric division is
-incomplete; a slit-width trend at >= 3" would contradict D4). Compare the
+incomplete; a slit-width trend at >= 3" would contradict D4). *From v0.4 (D47):* the same per-era
+statistics are computed for every monitor metric of 4.9 (FWHM, dome-flat
+rate at each node, line widths, lamp-line fluxes, OH fluxes). The dome-flat
+rate at 1.20 and 1.25 um is plotted beside `zp_1250` with a correlation test,
+and nights beyond 3 MAD are flagged, not excluded. The OH-flux series,
+divided by the Gemini model at the frame's airmass and PWV, gives the
+empirical `sky_scale` distribution (D14, 8). Compare the
 2012-2016 era median with XTcalc's 2012 curve as a sanity check of the whole
 chain (they should agree at the 10 percent level once the 75 vs 72.4 m^2
 aperture is accounted for).
@@ -552,7 +584,7 @@ night under `mosfire/<YYYYMMDD>/`:
 | Included (copied to `AIOcean:keck-etcs/`) | Excluded (re-derivable or re-downloadable) |
 |---|---|
 | `sens/sens_*.fits` and the telluric QA PNGs | `raw/*.fits` (KOA) |
-| `harvest/*.ecsv` (row and curve) | `redux/Science/spec2d_*.fits` |
+| `harvest/*.ecsv` (row, curve and, from v0.4, `<night>_monitor.ecsv`) | `redux/Science/spec2d_*.fits` |
 | `run_manifest.json`, `run.log`, `redux/<night>.pypeit` | `redux/Calibrations/` (incl. `WaveCalib*`; S13 commits its measurements to `lsf_measurements.ecsv`) |
 | `redux/Science/spec1d_*.fits` (standards and validation science frames) | `redux/QA/` |
 | `manifests/`, `runs/<job>/status.ecsv`, `raw/manifest.ecsv` | |
@@ -572,6 +604,144 @@ re-reduction regenerates).
 **4.8.10 Residual verification items** are listed in section 8 (credentials
 secret, registry project and token, local PypeIt checkout on `develop`, KOA
 reachability from pods).
+
+### 4.9 Calibration monitor (v0.4; D40-D47)
+
+The throughput series (4.4-4.6) says *whether* the system changed. The
+monitor helps say *where*: seeing and guiding (FWHM), lamps versus optics
+(dome-flat rate against standard throughput), focus and slit (line widths),
+and the sky (OH fluxes, D14). Each metric is one or more rows of a long
+table, written per night by the in-pod harvest (D46). None of them gates a
+night (D47).
+
+**4.9.1 Spatial FWHM (D41).** For every extracted object in every spec1d of
+the night, standards and science alike, the monitor records:
+
+- the scalar `FWHM` (pixels, from object finding) and the same value in
+  arcsec (x 0.1798);
+- `FWHMFIT` (per spectral pixel, from the profile fit), as a median within
+  ±100 A of each zero-point node (J2: 11500, 12000, 12500 A; J: 12000,
+  12500, 13000 A), so a chromatic slope can be fitted and compared with
+  lambda^-0.2 (D26);
+- `slitloss_gt1pct`, true where the D26 Moffat (beta 3.5) at the scalar
+  FWHM loses more than 1 percent at the frame's slit width. This is
+  computed with the same slit-loss function as `keck_etcs.core.slitloss`
+  once S7 exists, and with a local copy of the integral until then, flagged
+  `slitloss = provisional`.
+
+Only spec1d fields are used, so this works for any PypeIt spectrograph.
+
+**4.9.2 Flat brightness (D42, D43).** Per calibration group with a `Flat`
+file:
+
+```
+rate(lam_k) = median over { pixels in the slit's central 50% of rows, |lam - lam_k| <= 50 A }
+              of pixelflat_raw / t_frame                                    [e-/s/pix]
+rate_per_arcsec(lam_k) = rate(lam_k) / slit_width                           [e-/s/pix/arcsec]
+```
+
+Here `pixelflat_raw` is PypeIt's mean-combined, gain-applied, lamp-off
+subtracted pixel-flat stack (units to be confirmed in S6b, section 8), and
+`t_frame` is the lamp-on frames' `TRUITIME`. The wavelengths come from
+`pixelflat_waveimg` or, if it is empty, from `WaveCalib.build_waveimg(Tilts,
+Slits)`. The rows are a slit's middle half, away from the CSU bar ends.
+Bad-pixel-masked pixels are dropped. The MOSFIRE nodes are every 250 A
+(J2: 11250-12500 A, 6 nodes; J: 11500-13250 A, 8 nodes). The generic
+optical default is every 500 A. Recorded per group: `flat_kind` (`dome` for
+MOSFIRE, `internal` where an instrument has one), the lamp header cards
+(MOSFIRE: `FLAMP1`, `FLAMP2`, `FPOWER`, `FLATSPEC`; checked on 2022-04-09,
+where the headers carry no lamp voltage or current), `TRUITIME`, `SAMPMODE`,
+`NUMREADS`, the number of lamp-on and lamp-off frames, slit width, filter,
+`DOMEPOSN`, and the peak raw ADU of the lamp-on frames. A peak above the
+1 percent non-linearity limit (26k ADU) sets `flag = nonlinear`. Dome flats
+also depend on dome position and screen illumination, so the series is
+read as a trend (D42).
+
+**4.9.3 Calibration-line widths (D44).** This is the S13 algorithm, moved
+from `scripts/mosfire/measure_lsf.py` into `keck_etcs.calib.monitor`.
+`measure_lsf.py` becomes a thin wrapper that keeps its `--record` behaviour
+for `lsf_measurements.ecsv`. For every line PypeIt identified in the arc
+spectrum (`pixel_fit`, `wave_fit`), it fits a Gaussian plus a linear
+baseline within ±8 px. A line is rejected as a blend if a companion with at
+least 10 percent of its amplitude, from the resolved line list
+(`OH_R24000_lines.dat` for OH; `Ne_IR_MOSFIRE_lines.dat` and
+`Ar_IR_MOSFIRE_lines.dat` for lamps), lies within 1.5 expected FWHM. Then a
+clipped line is fitted to FWHM against wavelength. Per (night, slit, source)
+it records the median FWHM in pixels and A, the scatter, FWHM and R at the
+reference wavelength (12500 A for J and J2), the slope in px per 1000 A,
+`n_lines`, and `arc_source` (`OH` from the `WaveCalib` of on-sky frames;
+`lamp` from Ne/Ar frames). Lamp frames are not used by PypeIt's wavelength
+solution except on `long2pos_specphot` masks. On other masks the monitor
+measures them directly: it builds a central-rows spectrum from the raw lamp
+frame with the wave image of a calibration group with the same `MASKNAME`
+and filter that night, and identifies lines against the lamp list with the
+wavelength solution held fixed. A lamp frame with no matching group is
+skipped and counted.
+
+**4.9.4 Calibration-line brightness (D45).** On-sky frames that PypeIt
+reduced as A-B pairs have only residual sky in spec1d, so the OH fluxes are
+measured on the processed single frames instead. Each raw on-sky frame
+(science and standard) is processed by PypeIt's raw-image steps with the
+gain applied, divided by `TRUITIME`, and divided by `pixelflat_norm`. For
+each monitor line, the flux is summed over ±1.5 FWHM in the wave image
+minus a linear continuum from flanking windows, per spatial row. The median
+over the slit's central rows, with every object trace masked to ±3 FWHM,
+is divided by `platescale x slit_width`:
+
+```
+F_OH(line)       [e-/s/arcsec^2, integrated over the line]
+F_OH_above(line) = F_OH / (T_sys(lam_line) * A_m2)    [photons/s/arcsec^2/m^2, integrated over the line]
+```
+
+`F_OH_above` is compared with the Gemini `SKYBG` (photons/s/arcsec^2/nm/m^2)
+integrated over the same window after LSF convolution (5.3.8). It is filled
+only where the night has a sensfunc, and it uses the night's own `T_sys`
+(not the era median) so that a throughput change is not read as a sky
+change. Each row
+carries the frame's MJD/UT, airmass and the night's fitted PWV. One extra
+row per frame holds the summed flux of all clean OH lines in the band. Lamp
+lines use the same sum, without object masking, on the lamp frames, and are
+reported as e-/s per pixel row per arcsec of slit width. Line-selection
+rules, applied by `scripts/mosfire/select_monitor_lines.py`:
+
+1. in PypeIt's line list for that source, and identified on at least
+   80 percent of the nights examined;
+2. isolated: no companion of more than 10 percent of its amplitude within
+   3 FWHM of the widest slit in use (5", about 18 px in J);
+3. bright, but below the 1 percent non-linearity limit in a typical frame
+   (sky plus line, MCDS-16, the frame's exposure);
+4. at least 100 A inside the band window and away from strong telluric
+   absorption (Gemini `TRANS` above 0.9 at airmass 1.5, PWV 1.6 mm);
+5. 4-6 lines per source per band, spread across the window.
+
+The script ranks candidates on 2022-04-09 and the S15a pilot nights. Its
+output table, with sha256, is the provenance of the frozen list in the
+MOSFIRE monitor config. Lines may be added later but are never removed, so
+every series stays continuous. Before the freeze, OH rows carry
+`lines = provisional`.
+
+**4.9.5 Table format (D46).** One row per (night, frame or calibration
+group, metric, wavelength or line), with columns `night, mjd, instrument,
+metric, source (object|dome|internal|OH|Ne|Ar), frame (file, or
+`group:<calib_key>` for stacks), target, decker, slit_width, filter,
+wave_A, line_id, value, unit, err, n, airmass, pwv_fit, cards (a JSON
+string of the instrument's recorded header cards), flag`, plus the D36
+provenance columns and `keck_etcs_version`. `metric` takes the values
+`fwhm_scalar_pix`, `fwhm_scalar_arcsec`, `fwhmfit_pix`, `slitloss_gt1pct`,
+`flat_rate`, `flat_rate_per_arcsec`, `line_fwhm_pix`, `line_fwhm_A`,
+`line_R`, `line_fwhm_slope`, `line_flux`, `line_flux_above`,
+`line_flux_sum`. The per-night file is
+`harvest/<night>_monitor.ecsv`. The merged
+`keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` is keyed on (night,
+frame, metric, wave_A, line_id), and a re-harvest replaces its own rows.
+
+**4.9.6 Instrument configs.** `keck_etcs/instruments/<inst>.py` (from S8)
+gains a `monitor` block: the FWHM nodes, the flat nodes and box half-width,
+the slit-row fraction, `flat_kind`, the lamp header cards to record, the
+line lists per source and the frozen monitor lines. Until S8 exists, the
+MOSFIRE block lives in `keck_etcs/calib/monitor_configs.py` and moves later
+without changing the rows. LRIS will set `flat_kind = internal` if it uses
+its internal halogen, and lamp sources from its arc lists.
 
 ## 5. ETC design (B)
 
@@ -599,12 +769,14 @@ keck_etcs/
     harvest.py                # sens_*.fits -> per-standard ECSV rows and curves
     combine.py                # per-era medians (4.5)
     trend.py                  # trend statistics (4.6)
+    monitor.py                # calibration monitor (4.9, D40): FWHM, flat rates, line widths and fluxes
   data/
     index.yaml                # product registry with versions
     sky/gemini_mk_sky_grid.fits
     mosfire/filters/*.ecsv
     mosfire/detector.ecsv     # RN table, linearity, gain, dark
     mosfire/throughput/...    # per-era curves and per-standard archive
+    mosfire/monitor/calib_monitor.ecsv  # merged monitor table (D46); not read by compute()
     pypeit_par/*.sens
   tests/
 scripts/                      # one-off analyses and reduction drivers
@@ -921,6 +1093,8 @@ not circular. Later, every KOA quasar night adds a validation point.
 5. PypeIt branch with `ronoise` from `NUMREADS`/`SAMPMODE` filed for review.
 6. A one-page API note for WMKO (inputs, outputs, versions, how to refresh
    calibrations).
+7. A calibration-monitor table (4.9) for every reduced night, with the
+   monitor trends of 4.6 (D40).
 
 ## 8. Open items and TBDs
 
@@ -936,9 +1110,22 @@ not circular. Later, every KOA quasar night adds a validation point.
   measurements at other slit widths (part 5).
 - **Sky-model validation:** the Gemini grid's OH-line strengths versus the
   measured J2 sky may require a default `sky_scale` other than 1.
+  From v0.4 the OH-flux rows of the monitor (4.9.4) provide this for every
+  night, not only 2022-04-09.
 - **J2 red edge:** confirm 1.260 um from the fluxed LDS749B spectrum.
 - **A0V model uncertainty:** whether to add a metallicity/rotation-broadened
   A0V model rather than Vega itself; decide after the first A0V standards.
+- **Calibration monitor (4.9), to verify in plan step S6b:** that
+  `pixelflat_raw` is in e- per frame (mean-combined, gain applied, lamp-off
+  subtracted), by comparing it with (lamp-on minus lamp-off) x gain from the
+  raw frames; whether `pixelflat_waveimg` is filled for MOSFIRE or the wave
+  image must be built from `WaveCalib` and `Tilts`; which `WaveCalib` serves
+  a wide-slit standard setup on a night where the standard is the only
+  on-sky frame for that slit.
+- **Monitor line lists:** the OH and Ne/Ar lines are frozen after the S15a
+  pilot (D45). Until then the OH-flux columns carry `lines = provisional`.
+- **Lamp arcs in KOA:** whether Ne/Ar frames exist on the standards' masks
+  and filters often enough to download them (S14 census; D44).
 - **Gemini grid provenance:** we hold the grids only via XTcalc's IDL save
   files (comment "From Gemini: mk_skybg_zm_16_10.dat"); record the Gemini
   page URL and, if it becomes reachable, verify against the original ASCII.

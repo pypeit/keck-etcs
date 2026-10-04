@@ -7,12 +7,15 @@ build the container image and the Nautilus job templates, reproduce the
 reduction in a pod and gate it against the reference, build the LDS749B
 sensitivity function with the `IR` (telluric) algorithm, harvest its zero
 point and throughput into the per-standard table (in the pod, merged
-locally), and measure the line-spread function from OH lines. These are
-steps S4, S4a, S4b, S5, S6 and S13 of the plan (v0.3).
+locally), measure the line-spread function from OH lines, and add the
+calibration monitor (spatial FWHM, flat-lamp brightness, calibration-line
+widths and brightness). These are steps S4, S4a, S4b, S5, S6, S13 and S6b of
+the plan (v0.4).
 
 Run order: after part 1 (S0 check, S1, S1b, S2). Prompts 1 (S4) -> 5 (S4a)
 -> 6 (S4b) -> 2 (S5) -> 3 (S6); prompt 4 (S13) needs only S4 or S4b and can
-run in parallel with 2 or 3. Prompts 5 and 6 were added in v0.3 and carry
+run in parallel with 2 or 3. Prompt 7 (S6b, added in v0.4) runs after
+3 and 4. Prompts 5 and 6 were added in v0.3 and carry
 the numbers 5 and 6 so that the original prompt numbers 1-4 keep their
 meaning; the run order above is the one to follow. S6 also needs the filter
 curves from part 3 step S8; if part 3 has not run yet, do S6 without the
@@ -28,9 +31,10 @@ sessions.
   and telluric settings), 4.4 (metrics and the per-standard table columns,
   now including the six provenance columns), 4.8 (image, storage, jobs,
   provenance, failure handling, dry run and gates), 5.3.6 (LSF model), 8
-  (residual verification items).
-- Plan: `docs/keck_mosfire_implementation.md` (v0.3), steps S4, S4a, S4b,
-  S5, S6, S13 and the risks section.
+  (residual verification items); for prompt 7, D40-D47 and section 4.9
+  (calibration monitor).
+- Plan: `docs/keck_mosfire_implementation.md` (v0.4), steps S4, S4a, S4b,
+  S5, S6, S13, S6b and the risks section.
 - Data root `KECK_ETCS_DATA` (default
   `/Users/xavier/Projects/PypeIt/keck-etcs-data`), the local mirror of the
   private bucket `s3://keck-etcs`: raw frames in `mosfire/20220409/raw/`
@@ -316,6 +320,81 @@ sessions.
    spec1d differences) and put the decision to the user before any batch.
    Log your work, with the timings, the gate results and the image
    tag/digest/pin used.
+
+7. **S6b: calibration monitor (module in the pod, merge locally).** Read
+   design 4.9 and D40-D47 first. The user's answers are Q40-Q48 under
+   Q&A/Calibrations in `keck_mosfire_prompts.md`.
+   - **Module.** Implement `keck_etcs/calib/monitor.py`, instrument-agnostic
+     with PypeIt imported only inside functions, containing:
+     - `object_fwhm`: per object and frame, the scalar `FWHM` in px and
+       arcsec, `FWHMFIT` medians within ±100 A of the zero-point nodes, and
+       `slitloss_gt1pct`. Use a local Moffat beta 3.5 slit integral flagged
+       `slitloss = provisional` until part 3's `core.slitloss` exists.
+     - `flat_rates`: from the `Flat` file, the median of `pixelflat_raw /
+       TRUITIME` over the central 50 percent of slit rows in ±50 A boxes at
+       the config's nodes, also per arcsec of slit width, with the lamp
+       cards, the frame counts and the lamp-on peak raw ADU (`flag =
+       nonlinear` above 26k ADU).
+     - `line_widths`: the S13 fit from `scripts/mosfire/measure_lsf.py`,
+       moved without change. Add `arc_source` and the lamp path of design
+       4.9.3.
+     - `line_fluxes`: per raw on-sky frame processed with PypeIt's own
+       raw-image steps (gain, bad-pixel mask), divided by `TRUITIME` and
+       `pixelflat_norm`. Sum each line over ±1.5 FWHM minus a linear
+       continuum, per row, take the median over the central rows with the
+       object traces masked to ±3 FWHM, and divide by platescale x slit
+       width. Add `line_flux_above` where a sensfunc exists, and a summed
+       row per frame.
+     - `monitor_night`, which returns the long table of design 4.9.5.
+   - **Config.** Write the MOSFIRE J/J2 block in
+     `keck_etcs/calib/monitor_configs.py` (design 4.9.6): flat nodes every
+     250 A; lamp cards `FLAMP1`, `FLAMP2`, `FPOWER`, `FLATSPEC`,
+     `DOMEPOSN`; line lists `OH_R24000_lines.dat`,
+     `Ne_IR_MOSFIRE_lines.dat`, `Ar_IR_MOSFIRE_lines.dat`.
+   - **Line selection.** Write `scripts/mosfire/select_monitor_lines.py`,
+     which ranks OH candidates on 2022-04-09 by the five rules of design
+     4.9.4, and put its output in the config as a provisional list (`lines
+     = provisional`). The freeze is part 5's job, after the pilot.
+   - **Scripts.** Reduce `measure_lsf.py` to a wrapper that keeps
+     `--record`. Add a `monitor` mode to `scripts/mosfire/harvest_sens.py`
+     (`monitor REDUX --raw RAW --manifest run_manifest.json --out DIR`,
+     writing `<night>_monitor.ecsv`) and extend `--merge` to build
+     `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` with the D36
+     provenance columns, registered in `index.yaml`.
+   - **Wiring.** Call the monitor after the harvest in `reduce_standard.py`
+     and `night_job.yaml`. An exception there writes `flag =
+     monitor_failed` and must not fail the night: no new gate (D47).
+   - **Run.** Run it locally on the synced 2022-04-09 products (`s3_sync.py
+     pull mosfire/20220409 --calibs`, plus raw), then ask the user to
+     rebuild and push the image (prompt 5's `build_image.sh --push`, next
+     patch tag) and re-run the night in a pod with `REPLACE=1`, with the
+     user's go-ahead.
+
+   Verify:
+   - `line_widths` reproduces the S13 row exactly (3.61 px, 19 lines, R
+     2677 at 1.25 um).
+   - `pixelflat_raw` agrees within 1 percent with (lamp-on mean minus
+     lamp-off mean) x 2.15 from the raw frames over the same pixels. If it
+     does not, fix the conversion and say so.
+   - The flat stack's peak ADU is reported against 26k.
+   - The LDS749B scalar-FWHM rows match `seeing_fwhm_pix` in
+     `standards.ecsv`, and `FWHMFIT` medians exist at 11500, 12000 and
+     12500 A for every object.
+   - `slitloss_gt1pct` is false for LDS749B on the 5" slit, and its value
+     for the J0841 frames is reported.
+   - OH fluxes are finite for all six on-sky frames, and the 1"
+     and 5" frames agree per arcsec^2 within 20 percent after an airmass
+     correction (otherwise the slit normalisation is wrong).
+   - A first `sky_scale` (J0841 `line_flux_above` against the Gemini
+     model at the frame's airmass and the fitted PWV) is logged.
+   - The in-pod and local monitor files agree to 1e-6 in every numeric
+     column.
+   - `git status` shows only code, the config, the merged ECSV and
+     `index.yaml`.
+
+   Also record, as answers to the open items in design section 8: whether
+   `pixelflat_waveimg` is filled for MOSFIRE, and which `WaveCalib` the 5"
+   setup used. Log your work, with the image tag, digest and pin.
 
 ## Q&A
 

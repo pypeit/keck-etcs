@@ -104,7 +104,13 @@ batches; until then in-pod harvest rows carry `flag = nofilter`.
    Risk: the Keck ASCII files may be imaging curves or in air wavelengths;
    record which. Note in the log that the `0.2.0` image (part 2 prompt 5)
    must be rebuilt after this step so the in-pod harvest can divide out the
-   filter. Log your work.
+   filter. *v0.4:* if part 2 prompt 7 (S6b) has run, move the MOSFIRE
+   monitor block from `keck_etcs/calib/monitor_configs.py` into
+   `instruments/mosfire.py` (design 4.9.6). Leave a re-export behind so
+   `monitor.py` keeps working, and check that the monitor rows for
+   2022-04-09 do not change. In S7, `core.slitloss` should expose the slit
+   integral that `monitor.object_fwhm` will switch to from its provisional
+   copy. Log your work.
 
 3. **S9: `compute()`, CLI and regression fixtures.** Implement
    `keck_etcs/etc.py` with `validate(inputs)` (schema check, defaults filled,

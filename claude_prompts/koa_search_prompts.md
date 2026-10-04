@@ -91,7 +91,14 @@ by `keck_mosfire_prompt_5.md`.
    query, write the `SAMPMODE` and `NUMREADS` histogram of all MOSFIRE
    science frames (not just standards) to
    `keck_etcs/data/mosfire/koa_sampmode_census.ecsv`; this decides whether
-   the ETC needs UTR (design D13). Also write
+   the ETC needs UTR (design D13). Also count Ne/Ar lamp frames per
+   candidate night (design D44; the calibration monitor of 4.9): MOSFIRE
+   frames with `PWSTATA7` or `PWSTATA8` = 1 (the Neon and Argon outlets,
+   named in `PWLOCA7`/`PWLOCA8`), matched to the standard's `MASKNAME` and
+   filter, plus any `long2pos_specphot` arcs. Add the columns
+   `n_lamp_arcs` and `lamp_arcs_match` to the candidate table, and report
+   the fraction of candidate nights with matching lamp arcs. The user
+   decides from that number whether prompt 2 downloads them. Also write
    `scripts/koa/make_night_manifest.py` that turns a selection of candidate
    nights into `nautilus/manifests/nights_<batch>.csv` with the columns of
    design 4.8.4 (`night, instrument, s3_prefix, standard, slit, spec2d,
@@ -117,7 +124,10 @@ by `keck_mosfire_prompt_5.md`.
    frames, the science frames of interest (for the quasar-program nights)
    and the night's dome flats, writes `raw/manifest.ecsv` (koaid, file,
    frame type, target, slit, `SAMPMODE`, `NUMREADS`, exptime, airmass,
-   sha256), and with `--to-s3` pushes to `s3://keck-etcs/mosfire/<YYYYMMDD>/raw/`
+   sha256). With `--lamp-arcs`, added only if the user chose it after the
+   prompt 1 census, it also fetches the matching Ne/Ar frames as frame type
+   `lamp_arc`; only the calibration monitor reads them. With `--to-s3` it
+   pushes to `s3://keck-etcs/mosfire/<YYYYMMDD>/raw/`
    through `scripts/nautilus/s3_sync.py`, skipping frames already on S3
    with the same size; without `--to-s3` it writes to
    `$KECK_ETCS_DATA/mosfire/<YYYYMMDD>/raw/`. Write

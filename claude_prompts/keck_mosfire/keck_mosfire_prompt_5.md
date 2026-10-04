@@ -5,7 +5,9 @@
 Reduce the KOA standard-star nights in batch on Nautilus as Indexed Jobs,
 back up the high-level products after each batch, harvest their zero points,
 run the throughput trend analysis across the instrument eras, and cut the
-first calibration release. These are steps S15 and S16 of the plan (v0.3).
+first calibration release. Every night also gets its calibration-monitor
+table (design 4.9), and the monitor trends join the throughput trends.
+These are steps S15 and S16 of the plan (v0.4).
 The KOA search (S14) and the in-cluster download Job (S14b) are in their own
 prompt doc, `claude_prompts/koa_search_prompts.md`, which must have produced
 the candidate table, the night manifests and the first raw frames on S3
@@ -24,7 +26,9 @@ Part 6 step S18 needs S16.
   S3 layout), 4.4 (per-standard table), 4.5 (per-era combination), 4.6
   (trend analysis), 4.7 (uncertainties), 4.8.4-4.8.7 (jobs, provenance,
   failure handling, gates), 4.8.9 (backup set and timing), 5.5 (calibration
-  releases), 7 (definition of done: >= 10 standards over >= 2 eras).
+  releases), 7 (definition of done: >= 10 standards over >= 2 eras, and
+  item 7, a monitor table for every night), and from v0.4 D40-D47 and 4.9
+  (calibration monitor).
 - Plan: `docs/keck_mosfire_implementation.md` (v0.3), steps S15 (a, b, c),
   S16 and the risks section.
 - Inputs: `keck_etcs/data/mosfire/koa_standards_candidates.ecsv` and
@@ -68,6 +72,14 @@ Part 6 step S18 needs S16.
   pin only in `keck_hires.py`, so this holds at the pin), so a J-scaled
   model needs either a V-equivalent magnitude or a direct hook). PypeIt
   masks Paschen lines automatically.
+- Calibration monitor (design 4.9; part 2 prompt 7, S6b): every pod writes
+  `harvest/<night>_monitor.ecsv` after the harvest. A monitor failure sets
+  `flag = monitor_failed` and never fails a night (D47). The OH line list
+  is provisional until the S15a freeze. `harvest_sens.py --merge` builds
+  `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv`. If the KOA doc
+  downloaded Ne/Ar lamp frames (`lamp_arc` in `raw/manifest.ecsv`), the
+  monitor measures them directly. PypeIt still ignores them outside
+  `long2pos_specphot`.
 - Eras (design D6): 2012-04-04 to 2016-09-15; 2017-02-13 to 2025-02-11;
   2025-04-29 onward.
 - Rules (CLAUDE.md): the user runs git; `conda run -n pypeit14`; scripts on
@@ -99,9 +111,23 @@ Part 6 step S18 needs S16.
    point at 1.25 um is within 20 percent of a WD night in the same era (or
    the difference is explained); the per-night wall-clock and peak memory
    are recorded and the `night_job.yaml` header sizing is updated from them.
+   Then freeze the monitor lines (design D45, 4.9.4). Run
+   `scripts/mosfire/select_monitor_lines.py` on 2022-04-09 plus the
+   `success` pilot nights, write the frozen OH list (and Ne/Ar lists, if
+   lamp frames exist) into the monitor config with the script output and
+   its sha256 as provenance, and drop `lines = provisional`. Ask the user to
+   rebuild the image, then re-run the monitor step only (`harvest_sens.py
+   monitor`, in a pod or locally on the synced night) for the pilot nights,
+   so that every production row uses the frozen list. Verify, in addition:
+   - every pilot night has a monitor file;
+   - the frozen list meets the five rules, with each line identified on at
+     least 80 percent of the nights examined;
+   - the per-night dome-flat rates and OH fluxes are listed in the log.
+
    Risks: PypeIt `develop`'s hook for custom standards; run time; nights
    with the standard at a different slit position than the flats. Log your
-   work, with the status table and the image tag/digest/pin.
+   work, with the status table, the frozen line list and the image
+   tag/digest/pin.
 
 2. **S15b: remaining batches, sweeps and per-batch backup.** Write
    `scripts/nautilus/backup_products.py` as described in Context (a thin
@@ -124,14 +150,16 @@ Part 6 step S18 needs S16.
    `s3_sync.py pull mosfire/<night>` (sens, harvest, spec1d) and `--calibs`
    for the `WaveCalib*` files (needed by part 2's S13 for more slit widths
    and not in the backup set); then `scripts/mosfire/harvest_sens.py --merge`
-   over all synced `harvest/` directories; narrow-slit standards get
+   over all synced `harvest/` directories (it also merges the
+   `*_monitor.ecsv` files into `calib_monitor.ecsv`); narrow-slit standards get
    `flag = narrow` and keep their `seeing_fwhm_pix` for the slit-loss sample.
    Verify: the number of `success` nights equals the number of new rows in
    `keck_etcs/data/mosfire/throughput/standards.ecsv`; every row has the six
    provenance columns filled; the count of wide-slit rows and their spread
    over eras is reported against the milestone target (>= 10 standards over
    >= 2 eras); every processed night is either a row or a recorded failure;
-   `git status` shows only the ECSV files. Log your work.
+   every `success` night has monitor rows, and the `monitor_failed` count
+   is reported; `git status` shows only the ECSV files. Log your work.
 
 4. **S16: trend analysis, first calibration release and release backup.**
    Implement `keck_etcs/calib/trend.py` (per-era median, MAD, linear slope
@@ -156,6 +184,21 @@ Part 6 step S18 needs S16.
    non-empty `image_digest` and `pypeit_git_sha` and `CHANGES.md` lists each
    distinct pair; the release backup check passes; the release diff touches
    only `keck_etcs/data/`, `CHANGES.md`, the fixtures and the design doc.
+
+   Monitor trends (design 4.6, D47): extend `trend.py` with per-era
+   medians, MADs and 3-MAD flags for every monitor metric, written into
+   `calib_monitor.ecsv`'s `flag` column. Write
+   `scripts/mosfire/plot_monitor_trends.py` with four figures in
+   `docs/figures/`:
+   - FWHM against date;
+   - the dome-flat rate at each node against date, with era boundaries;
+   - line FWHM against slit width, which refits the D25 slope and floor;
+   - the OH-flux to Gemini ratio (an empirical `sky_scale`) against date
+     and airmass.
+
+   Report the correlation of the dome-flat rate at 12000/12500 A with
+   `zp_1250`. Propose to the user, without applying, any change to the LSF
+   constants (D25) or to the default `sky_scale` (D14) that these imply.
    Log your work.
 
 ## Q&A

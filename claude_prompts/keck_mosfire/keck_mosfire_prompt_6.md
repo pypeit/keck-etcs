@@ -120,7 +120,11 @@ part 5 (S16) for the final version.
    units and defaults, the version fields, error and warning behaviour, the
    calibration refresh cycle, and the dependency footprint of
    `keck_etcs.core`/`etc` (no PypeIt, no Nautilus, no S3 access; all
-   calibration products ship in the package). Verify: the README examples
+   calibration products ship in the package). The README and the WMKO note
+   also describe the calibration monitor (design 4.9): what
+   `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` holds (columns and
+   metrics of 4.9.5), that `compute()` never reads it, and how a new
+   instrument (LRIS next) adds its monitor config (4.9.6). Verify: the README examples
    run as written in `pypeit14`; `index.yaml`, `CHANGES.md`,
    `nautilus/README.md` and the output `meta.calib_version` agree, including
    the image tags and pins behind the current calibration; the WMKO note

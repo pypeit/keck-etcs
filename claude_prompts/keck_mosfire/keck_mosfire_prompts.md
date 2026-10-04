@@ -54,6 +54,9 @@ Before modifying the docs, have a conversation with me about these items.
 Put your questions under Q&A/Calibrations.
 Use Fable if you can.  Log your work.
 
+8. I have answered your questions about the new items to add to the design, plan, and prompt docs.  Please read the answers and make updates to the docs.
+If you have any additional questions put them under Q&A/Calibrations.
+Use Fable if you can.  Log your work.
 
 ## Registry
 
@@ -136,6 +139,179 @@ image, so pods in namespace `pypeit` pull it without an `imagePullSecret`.
 ## Q&A
 
 ### Calibrations
+
+*2026-10-04, from Prompt #7. Same format as before: each question ends with
+my recommended default, so "agree" is a complete answer. No design, plan or
+prompt doc has been changed yet.*
+
+**What we already have, and what MOSFIRE actually does.** Before the
+questions, here is where the four items stand. Some of them are partly
+built, and two of them don't map onto MOSFIRE J as worded.
+
+- **Standard-star FWHM: partly done.** `reduce_standard.py` already puts
+  PypeIt's scalar `FWHM` (pixels, from object finding) and `fwhm_arcsec`
+  for every object into `run_manifest.json`. The harvest stores the median
+  over the standard's objects as `seeing_fwhm_pix` (design 4.4). Two things
+  are not recorded: `FWHMFIT`, PypeIt's per-spectral-pixel FWHM from the
+  profile fit, and any per-frame value.
+- **Flats: MOSFIRE has no internal flats.** Its flats are *dome* flats.
+  The target is `DOME FLATS`, the dome lamps are on (`FLAMP1`/`FLAMP2`)
+  or off, and on 2022-04-09 the exposures were 8.7 s CDS, 5 lamp-on plus 5
+  lamp-off frames. Light from the dome screen passes through the telescope,
+  so the count rate tracks lamp output × screen × primary/secondary ×
+  spectrograph × QE. That makes it a throughput proxy, but a noisier one
+  than an internal lamp would be. PypeIt's `Flat_*.fits` already holds what
+  we need: `pixelflat_raw` (the lamp-off-subtracted stack) and
+  `pixelflat_waveimg` (a wavelength per pixel).
+- **Arcs: MOSFIRE J is calibrated on OH sky lines, not lamps.** PypeIt
+  uses `OH_MOSFIRE_J` with `full_template`. The Ne/Ar lamps
+  (`Ar_IR_MOSFIRE`, `Ne_IR_MOSFIRE`) are its default only for
+  `long2pos_specphot` masks. The 2022-04-09 night has no lamp arcs. The
+  "arc" in its `WaveCalib` is the OH sky of the four J0841 frames. S13
+  (`measure_lsf.py`) already fits Gaussian widths to the clean OH lines and
+  records one row per (night, slit) in `lsf_measurements.ecsv`. Today that
+  is 3.61 px at 1", with 0.07 px scatter over 19 lines.
+- **Arc brightness is two different things on MOSFIRE.** OH line fluxes
+  vary by about 2x through a night, so they don't measure the instrument.
+  They do measure the *sky*, which is exactly what D14 needs to validate
+  the Gemini model and set `sky_scale`. Ne/Ar lamp line fluxes would
+  measure lamp × instrument, but only on nights where lamp arcs were taken.
+- **Timing is good.** No S15 batch has run (part 5 has no logs), and S15a
+  rebuilds the image anyway. Anything we add to the in-pod harvest costs
+  one re-harvest of 2022-04-09 and nothing else.
+
+**Q40. Scope: generic or MOSFIRE-only?** You wrote "for instruments that
+use internal flats / an arc lamp", which reads as a cross-instrument
+calibration monitor that LRIS will use next. *Recommended:* a generic,
+instrument-agnostic module `keck_etcs/calib/monitor.py`, with no PypeIt
+import at module level, the same rule as `harvest.py`. It takes a PypeIt
+`Flat`/`WaveCalib`/spec1d file plus an instrument config: which
+wavelengths, which lines, which spatial region. It returns rows. The
+MOSFIRE J config is implemented now, and the LRIS config is filled in when
+LRIS starts. The MOSFIRE milestone's definition of done (design section 7)
+gains one item: "calibration-monitor table for every reduced night."
+>A.  Use your recommendation
+
+**Q41. Standard FWHM: what exactly to record.** *Recommended*, per
+standard frame (not just the per-standard median):
+(a) PypeIt's scalar `FWHM` in pixels and arcsec (×0.1798);
+(b) the median of `FWHMFIT` over ±100 A at 1.15, 1.20 and 1.25 um for J2,
+and at 1.20, 1.25 and 1.30 um for J, the same nodes as the zero points
+(D5). That gives the chromatic slope, so we can test the lambda^-0.2
+scaling of D26 on real data;
+(c) a flag where the predicted Moffat slit loss at the standard's slit
+width is above 1 percent, which tests D4 instead of assuming it.
+`seeing_fwhm_pix` stays in the standard row as the median of (a). Per-frame
+values go in the new monitor table (Q46). Should the J0841 *science*
+objects get the same treatment? *Recommended:* yes. It costs nothing, and
+S11's validation already needs their FWHM.
+>A.  Use your recommendations
+
+**Q42. Do MOSFIRE dome flats count as "internal flats"?** *Recommended:*
+yes, but tagged `flat_kind = dome` and read as a trend, not as an absolute
+number. The metric: lamp-on minus lamp-off count rate in e-/s/pix. That is
+the median of `pixelflat_raw` divided by the per-frame exposure time, over
+the central 50 percent of the slit length (away from CSU bar edges), in
+±50 A boxes at fixed vacuum wavelengths. We record the lamp header cards
+with it (`FLAMP1`, `FLAMP2`, plus any lamp voltage or current cards; I
+still have to check which exist), `TRUITIME`, `SAMPMODE`/`NUMREADS`, slit
+width, and filter. The count rate scales with slit width, so the stored
+value is also given per arcsec of slit width. I will check in S4 that the
+flat stack is below the 1 percent non-linearity limit (26k ADU), because
+PypeIt notes that MOSFIRE flats "are usually higher".
+>A.  Use your recommendation
+
+**Q43. Flat wavelength spacing.** Every 500 A gives MOSFIRE J2
+(1.117-1.260 um) only 1.15 and 1.20 um, plus 1.25 at the red edge, and J
+three points. *Recommended:* 250 A spacing for MOSFIRE (J2: 1.125, 1.150,
+..., 1.250 um, which is 6 points; J: 1.150-1.325 um, 8 points). Keep 500 A
+as the generic default for the optical instruments. Each config lists its
+wavelengths explicitly, so any spacing is a one-line change. Alternatively:
+the same nodes as the zero points, 1.20/1.25/1.30 um, for direct
+comparison with the throughput.
+>A.  Use your recommendation
+
+**Q44. Arc-line widths on MOSFIRE.** *Recommended:* treat the OH-line
+widths in each night's `WaveCalib` as the MOSFIRE "arc width". Run
+`measure_lsf.py`'s fitting in-pod for **every** night and every slit with a
+wavelength solution. It moves into `keck_etcs.calib.monitor`, and the
+script becomes a thin wrapper. Per (night, slit) we record the median
+Gaussian FWHM in pixels and A, its scatter, the slope with wavelength, and
+the number of clean lines. Wide-slit standard nights mostly measure the
+slit width, not focus or optics. They are still useful, because they pin
+down the D25 slope and floor at widths other than 1" (an open item in
+design section 8). On nights with Ne/Ar lamp arcs (all `long2pos_specphot`
+nights, and any afternoon arcs on the night's mask), the same fit runs on
+the lamp lines and records `arc_source = lamp`. Should we also widen the
+KOA download (S14/S14b) to fetch Ne/Ar arc frames on standard nights,
+which PypeIt would otherwise ignore? *Recommended:* yes, if the S14 census
+shows they are common for the relevant masks. The frames are small and add
+a cleaner width and the only lamp-brightness metric. Otherwise, no.
+>A.  Use your recommendation
+
+**Q45. Arc-line brightness: what and which lines.** Two separate metrics.
+- **OH (every night): a sky monitor, not an instrument monitor.** The line
+  flux in e-/s/arcsec^2, and also in photons/s/arcsec^2/m^2 after dividing
+  by that night's throughput when a sensfunc exists, which is the Gemini
+  model's unit. It is stored with the frame's UT, airmass and the PWV fit.
+  This is the measurement D14 and the open item "sky-model validation"
+  (section 8) have been waiting for.
+- **Ne/Ar (lamp nights only): an instrument monitor.** The line flux in
+  e-/s per arcsec of slit width.
+
+The selection rules are the same for both: (1) in PypeIt's line list for
+that source with a solid ID on most nights; (2) isolated, with no
+companion of more than 10 percent of its amplitude within 3 FWHM *of the
+widest slit we use* (5", about 18 px), the `BLEND_FRAC` logic of
+`measure_lsf.py` with a wider window; (3) bright but below the 1 percent
+non-linearity limit in a typical frame; (4) away from the band edges and
+from strong telluric absorption; (5) 4-6 lines spread across the band.
+*Recommended procedure:* choose the lines empirically from 2022-04-09 plus
+the S15a pilot nights with a script
+(`scripts/mosfire/select_monitor_lines.py`) that ranks candidates by those
+rules. Freeze the list in the instrument config with the script's output
+as provenance, and add lines but never remove them, so the time series
+stays continuous. For OH lines, also record the summed flux of all clean
+lines in the band, which is less noisy than any one line.
+>A.  Use your recommendation
+
+**Q46. Where the numbers live.** *Recommended:* the in-pod harvest (D34)
+writes `harvest/<night>_monitor.ecsv`, one row per (night, frame or slit,
+metric, wavelength or line). That file is part of the backup set (D39),
+which matters because `Calibrations/` is not backed up. The local
+`harvest_sens.py --merge` builds `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv`
+with the D36 provenance columns. It is committed, but `compute()` never
+reads it, and only the LSF rows feed the instrument module, as now.
+Alternatively, put it outside the package (`products/mosfire/`) so the web
+service doesn't ship it. I lean to inside, because then `index.yaml` and
+the calibration-release rule (D28) cover it.
+>A.  Use your recommendation
+
+**Q47. Gates or flags?** *Recommended:* flags only, no new hard gates.
+Each metric gets an era median and MAD in S16, and a night more than 3 MAD
+away is flagged in the table, not failed. One exception, which is already
+there: the wavelength-RMS gate. The flat-brightness trend is plotted next
+to the throughput trend in S16, with a correlation test. If the dome-flat
+rate falls while the standards' throughput doesn't, that points at the
+lamps. If both fall, it points at the optics or the coatings.
+>A.  Use your recommendation
+
+**Q48. Which plan steps and prompts change.** *Recommended:* the module and
+the MOSFIRE config are added to S6 (harvest, part 2), and S13's fitting is
+refactored into it. 2022-04-09 is re-harvested locally and in the next dry
+run. S14/S14b (part 5) get the optional arc-frame download (Q44), S15a
+rebuilds the image with the module, S16 adds the monitor trends, and S18
+documents the table for WMKO. Part 2 already has its S6 and S13 prompts
+logged as done, so the new work goes in as a new prompt there (#7: "S6b:
+calibration monitor"), not as edits to finished prompts.
+>A.  Use your recommendation
+
+*2026-10-04, Prompt #8: answers applied (design v0.4, D40-D47 and section
+4.9; plan v0.4, step S6b; part 2 prompt 7, edits to parts 3, 5 and 6 and to
+`koa_search_prompts.md`). No new questions. The two decisions left open are
+already scheduled where the data will exist: whether to download Ne/Ar lamp
+frames, which you decide from the S14 census fraction, and the frozen
+monitor line list, which is chosen after the S15a pilot.*
 
 ### Design
 
@@ -1129,3 +1305,109 @@ provenance is unaffected: pods run the pin exactly, so for them
 grown two entries ("Registry instructions", "Registry set up") after the
 Prompt #6 entry; this entry was first inserted before them by anchoring on
 the Prompt #6 text and was moved here so the log stays chronological.
+
+### 2026-10-04 (Prompt #7: calibration-monitor questions posed as Q40-Q48)
+
+Started the conversation on the four new calibration items: standard-star
+spatial FWHM, internal-flat brightness at set wavelengths, arc-line widths,
+and arc-line brightness. Wrote nine questions with recommended defaults
+under Q&A/Calibrations. No design, plan or prompt doc was edited, as the
+prompt asked, and no git commands were run.
+
+What I learned about the repository and the instrument:
+- **Standard FWHM is half there.** `reduce_standard.py` already records
+  PypeIt's scalar `FWHM` and `fwhm_arcsec` per object in
+  `run_manifest.json`, and `keck_etcs.calib.harvest` stores the median as
+  `seeing_fwhm_pix`. PypeIt's per-pixel `FWHMFIT` is not used yet.
+- **MOSFIRE has no internal flats.** Its flats are dome flats (`DOME
+  FLATS`, `FLAMP1/2`, lamp on/off), so they go through the telescope.
+  PypeIt's `Flat_*.fits` carries `pixelflat_raw` and `pixelflat_waveimg`,
+  which is enough for count rates at fixed wavelengths with no extra
+  calibration.
+- **MOSFIRE J is wavelength-calibrated on OH lines.** PypeIt uses
+  `OH_MOSFIRE_J` with `full_template`, and Ne/Ar lamps only for
+  `long2pos_specphot`. 2022-04-09 has no lamp arcs. S13's
+  `measure_lsf.py` already does the line-width fit on the OH "arc". OH
+  brightness is a sky monitor that serves D14, not an instrument monitor.
+- **Timing.** Part 5 (S15) has not started, so the new metrics cost one
+  re-harvest of 2022-04-09 and ride on the S15a image rebuild.
+
+### 2026-10-04 (Prompt #8: calibration monitor folded into design, plan and prompts)
+
+Applied the answers to Q40-Q48 (all "use your recommendation"). There were
+no new questions, and a note saying so is under Q&A/Calibrations. No git
+commands were run other than `git diff --stat`.
+
+Facts checked before writing (read-only, from the 2022-04-09 raw headers and
+PypeIt at the local checkout):
+- The MOSFIRE dome-flat cards are `FLAMP1`/`FLAMP2` (on/off), `FPOWER`
+  (9.0), `FLATSPEC` (1) and `DOMEPOSN`. There is no lamp voltage or current
+  card.
+- The Ne and Ar arc lamps are on the instrument power strip (`PWLOCA7` =
+  Neon, `PWLOCA8` = Argon; `PWSTATA7/8` = 0 on the flats). That is the
+  census key for lamp frames in KOA.
+- PypeIt subtracts the lamp-off stack from the pixel flat
+  (`calibrations.py`, `pixel_flat.sub(lampoff_flat)`) before `FlatField`,
+  so `pixelflat_raw` is lamp-on minus lamp-off.
+- `pixelflat_waveimg` is in the `FlatImages` datamodel, and
+  `WaveCalib.build_waveimg(tilts, slits)` is the fallback.
+- The lamp line lists `Ne_IR_MOSFIRE_lines.dat` and
+  `Ar_IR_MOSFIRE_lines.dat` exist.
+
+Changes:
+- **`docs/keck_mosfire_design.md` (now v0.4):** change note; decisions
+  D40-D47 (Q48 is plan-level, so it has no D number); the new section
+  4.9, "Calibration monitor":
+  - 4.9.1 spatial FWHM;
+  - 4.9.2 dome-flat rate, with its formula and recorded cards;
+  - 4.9.3 line widths, i.e. the S13 fit generalised, plus a lamp path;
+  - 4.9.4 line brightness, with the OH sky monitor in e-/s/arcsec^2 and
+    above-instrument units, the lamp monitor, and the five line-selection
+    rules;
+  - 4.9.5 the long-table format and metric names;
+  - 4.9.6 per-instrument monitor configs.
+
+  Also edited: 4.2 layout (`harvest/<night>_monitor.ecsv`), the 4.4 note
+  on `seeing_fwhm_pix`, 4.6 monitor trends, the 4.8.9 backup table, the 5.1
+  package layout (`calib/monitor.py`,
+  `data/mosfire/monitor/calib_monitor.ecsv`), definition of done item 7,
+  and section 8 (verification items for S6b, the line-list freeze, the
+  lamp-arc census, and the sky-model item pointing at the OH rows).
+- **`docs/keck_mosfire_implementation.md` (now v0.4):** change note;
+  dependency map and parallel groups; the new step S6b with
+  goal/inputs/outputs/verify/depends/risks; notes on S13 (the fit moves
+  into the module), S14 (lamp-frame census), S14b (optional
+  `--lamp-arcs`), S15a (line freeze and pilot re-harvest), S15c (monitor
+  merge), the S15 verify, S16 (monitor trends, flags, proposals for D25
+  and D14), S18 (WMKO documentation); one new risk item.
+- **`keck_mosfire_prompt_2.md`:** Goals, run order and Context updated;
+  new prompt 7, "S6b: calibration monitor".
+- **`keck_mosfire_prompt_3.md`:** S8 moves the monitor config into
+  `instruments/mosfire.py`; S7's slit integral replaces the provisional
+  one.
+- **`keck_mosfire_prompt_5.md`:** Goals and Context; S15a freezes the
+  lines and re-harvests the pilot; S15c merges the monitor rows and checks
+  them; S16 adds the monitor trends and four figures.
+- **`keck_mosfire_prompt_6.md`:** S18 documents the monitor table.
+- **`koa_search_prompts.md`:** prompt 1 adds the lamp census columns;
+  prompt 2 adds the optional `--lamp-arcs`.
+
+Judgment calls:
+- **OH fluxes are measured on single processed raw frames, not from the
+  spec1d sky.** Nod-paired reductions (`comb_id`/`bkg_id`) leave only
+  residual sky in spec1d.
+- **`line_flux_above` uses the night's own sensfunc, not the era median,**
+  so that a throughput change is not read as a sky change.
+- **Lamp frames on non-`long2pos_specphot` masks are measured by the
+  monitor directly,** using a same-mask wave image, rather than by changing
+  PypeIt's frame typing.
+- **A monitor failure flags the night and never fails it (D47).**
+- **The MOSFIRE config sits in `calib/monitor_configs.py` until part 3's
+  S8 exists,** then moves.
+
+What I learned: S6 and S13 are done (part 2 logs, 2026-10-04; in-pod
+harvest on image 0.1.5), and part 3, part 5 and the KOA doc have not
+started. So the monitor costs one image rebuild and a re-run of 2022-04-09,
+and every S15 night gets it for free. The lamp census is cheap because the
+Ne/Ar state is in the standard power-strip cards of every MOSFIRE frame.
+
