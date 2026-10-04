@@ -1202,3 +1202,94 @@ and REPLACE.
 - **To commit (user):** `.sens`, design, `__init__`, the YAMLs,
   `build_image.sh` (per-project Docker config), `nautilus/README.md`, this
   log.
+
+### 2026-10-02 (Prompt #6 / S4b: 0.1.4 pushed, dry run applied; session paused)
+
+- **Image 0.1.4:** keck-etcs `83ba931`, PypeIt pin `8017f47`, `tell_npca 3`,
+  digest
+  `sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced`.
+  Pushed through `~/.docker-keck-etcs`; the new `PUSH_DOCKER_CONFIG` path
+  works. The digest is in both YAMLs (uncommitted).
+- **`keck-etcs-validate` applied with 0.1.4** at about 16:15 UTC; it keeps
+  running on Nautilus.
+- **To resume:**
+  - check `kubectl -n pypeit logs job/keck-etcs-validate`, or `pod.log` and
+    `gates.json` under `s3://keck-etcs/mosfire/20220409/`;
+  - then the skip test (re-apply), then REPLACE=1
+    (`sed 's|REPLACE, value: "0"|REPLACE, value: "1"|' nautilus/validate_job.yaml | kubectl apply -f -`,
+    after deleting the Job);
+  - then `s3_sync.py pull mosfire/20220409`, the README 0.1.4 row, and the
+    final S4b log.
+
+### 2026-10-04 (Prompt #6 / S4b COMPLETE: image 0.1.4 passes every gate, twice; skip and REPLACE verified; night pulled)
+
+**Image used:** `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4`,
+digest
+`sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced`,
+keck-etcs `83ba931`, PypeIt pin
+`8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes` = develop
+`f3a1f1d` + the `pypeit_cache_github_data` fix + `refine_trace`, off for
+MOSFIRE), `tell_npca = 3` in the packaged `.sens`. In every pod the
+PROVENANCE block shows both SHAs and the digest, and PypeIt = pin.
+
+**Runs** (`keck-etcs-validate`, gates against
+`s3://keck-etcs/mosfire/20220409/reference/`, which was re-made at 8017f47
+with `tell_npca 3`):
+
+| run | node | wall | result |
+|---|---|---|---|
+| dry run, 10-02 | gpu-14.nrp.mghpcc.org | 1682 s | **all gates PASS**: spec1d_agree within 3e-5 (0037 1.000022); zp_agree median 0.9996, 5-95% 0.9964-1.0005, max 0.9%; s2n_agree 0.00%; throughput 0.1803 |
+| re-apply, 10-04 | — | 2 s | `SKIP: mosfire/20220409 is done`, status `skipped` |
+| REPLACE=1, 10-04 | exp-19-11.sdsc.optiputer.net | 800 s | **all gates PASS**: spec1d_agree within 3e-4; zp_agree median 0.9976, 5-95% 0.985-1.001, max 1.9%; throughput 0.1797; pushed 104 objects with `--force` |
+
+**Measured sizing:** wall-clock 800-1682 s, with `run_pypeit` taking
+10-22 min depending on the node, on about 1 CPU. Peak memory 6.07 GiB
+(cgroup). Scratch 1.78 GB. Push 1.5 GB with spec2d. Written into the
+`night_job.yaml` header: the cpu 4 / 16Gi requests over-provision, so
+revisit after the pilot.
+
+**Push list on the bucket** (design 4.2): 16 raw frames + manifest; the
+pypeit file; 7 Calibrations; 6 spec1d; 6 spec2d (SPEC2D=1); 43 QA; 3 sens;
+`run_manifest.json`, `run.log`, `pod.log`, `gates.json`. `harvest/` waits
+for S6.
+
+**Pull into the data root.**
+- `s3_sync.py pull mosfire/20220409` downloaded 77 objects and skipped 76
+  by size. **19 of 21 products were then still the local S4 versions**,
+  because every spec1d and spec2d of the night has the same size in both
+  reductions, and the pod manifest's `product_sha256` did not match them.
+- Fix: `s3_sync.py pull --force`, mirroring `push --force`. A forced pull
+  of `redux/*`, `sens/*`, `harvest/*` and the night-level files
+  (119 objects, 1.5 GB) gave **21 of 21 products matching the pod
+  manifest's sha256**.
+- `reference/` is untouched (sens sha256 3d72a31b...), and `raw/` stays
+  the dev-suite symlinks.
+- README: the dry-run pull now uses `--force --include ...`, with a
+  "pulling over local products" note.
+
+**Other checks:**
+- A credential scan of 33 files (pod logs, push logs, `run.log`,
+  `nautilus/*`, prompt docs) against the 8 local key values found none.
+- `validate_manifests.py`: MANIFESTS OK.
+
+**PypeIt checkout note (10-04):** the local checkout is now on the user's
+branch `speed_up_qa` (HEAD b8e5f9321). That branch has neither
+`refine_trace` nor the `cache_github_data` fix, so the local pin check
+would fail, correctly. This does not affect the pods (the image carries
+8017f47) or anything run here since. Local reductions need `etc-fixes`.
+
+**Uncommitted:** `scripts/nautilus/s3_sync.py` (`pull --force`),
+`nautilus/README.md` (0.1.1-0.1.4 tag rows, registry login, pull note),
+`nautilus/night_job.yaml` and `validate_job.yaml` (0.1.4 digest, sizing),
+this log.
+
+**What S4b established for the batches:**
+1. The pod reproduces the local reduction to 1e-4 in counts and 0.0% in
+   S/N.
+2. The J2 zero point reproduces to about 1% (5-95%) with `tell_npca 3`.
+3. The skip, REPLACE, failure-status and status-row paths all work.
+4. The remaining PypeIt dependency is `etc-fixes`, until its two fixes
+   merge into develop (then re-pin, as design 4.8.2 describes).
+
+Next in part 2's run order: prompt 3 (S6, harvest). Prompt 4 (S13, LSF)
+can run in parallel.

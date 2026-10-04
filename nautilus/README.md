@@ -145,7 +145,10 @@ keck-etcs commit.
 
 | tag | PypeIt pin | keck-etcs | digest | size | notes |
 |---|---|---|---|---|---|
+| 0.1.4 | `8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes`) | `83ba931` | `sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced` | 2.16 GB | `tell_npca = 3` in the packaged `.sens`; first image to pass every S4b gate (dry run 2026-10-02) |
 | 0.1.3 | `8017f47997d6417d797be6d0a0358d7acb8918b5` (`etc-fixes`) | `d9f6d5f` | `sha256:2635e79f811b77b486fd9cf6243fcd7697d520af169cca52597b60a751ee4e64` | 2.16 GB | adds PypeIt `refine_trace` (off for MOSFIRE); fixes the 0037 extraction walk |
+| 0.1.2 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | `534725e` | `sha256:51f39684e765569099d7f6e0b55668179f1f43ee05d4070546ff0e59ce1ab19c` | 2.16 GB | band-level `zp_agree` and `spec1d_agree` gates |
+| 0.1.1 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | `f211d4d` | `sha256:44faabcd081e96617ebeed3d05ce3b6d67883dab274c8cc17efa16ed36de09df` | 2.16 GB | S4b helpers (`gates.py`, `status_row.py`), `s3_sync --include/--force` |
 | 0.1.0 | `275a012dfcb708d4f0eaeebd56d2513083244b24` (`etc-fixes`) | `d4c5871` | `sha256:12793464bc5131985f1289984b7fdb138605861b78abb7e49ecd82400fec7866` | 2.16 GB | dry-run image (S4a). Pin = develop `f3a1f1d` + the `pypeit_cache_github_data` fix; a recorded exception to D31 until it merges into develop |
 
 **Registry login.** `--push` logs in through its own Docker config
@@ -204,7 +207,8 @@ kubectl -n pypeit create configmap keck-etcs-nights-dryrun \
 kubectl -n pypeit delete job keck-etcs-validate --ignore-not-found
 kubectl apply -f nautilus/validate_job.yaml
 kubectl -n pypeit logs -f job/keck-etcs-validate                 # GATES: PASS ... NIGHT_DONE
-python scripts/nautilus/s3_sync.py pull mosfire/20220409         # the pod's products into the mirror
+python scripts/nautilus/s3_sync.py pull mosfire/20220409 --force --include 'redux/*' 'sens/*' 'harvest/*' \
+    run_manifest.json run.log pod.log pypeit_pin_check.json gates.json   # pod products into the mirror
 ```
 
 **A batch:**
@@ -220,6 +224,13 @@ kubectl -n pypeit logs <pod>                                     # per night
 python nautilus/night_failures.py keck-etcs-nights               # status.ecsv + sweep manifest of failed nights
 python nautilus/status_table.py                                  # per-night table from run_manifest.json (store-only)
 ```
+
+**Pulling over local products.** `s3_sync` is idempotent by key and *size*,
+and a re-reduction of the same night gives different files of the same size
+(every spec1d of 2022-04-09 is 423360 bytes). Use `pull --force` (with
+`--include`, to leave `raw/` and `reference/` alone) when the mirror already
+holds another reduction of the night. Then check that every
+`run_manifest.json` `product_sha256` matches the local file.
 
 **Retries.**
 - A sweep job is `night_job.yaml` applied with

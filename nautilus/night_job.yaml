@@ -17,6 +17,9 @@
 #   essentially single-threaded here). Peak memory 5.84 GiB (cgroup
 #   memory.peak). Scratch 1.78 GB (raw 258 MB, redux with spec2d about
 #   1.5 GB, sens 2.4 MB). Push 1.5 GB with spec2d.
+#   Image 0.1.4 (2026-10-02/04): 1682 s on gpu-14.nrp.mghpcc.org, 800 s on
+#   exp-19-11.sdsc (run_pypeit 10-22 min); peak memory 6.07 GiB; scratch
+#   1.78 GB; push 1.5 GB with spec2d.
 #   => the requests below over-provision CPU (4 -> 1-2) and memory
 #   (16 -> 8 Gi); revisit after the pilot (design 4.8.4) before raising
 #   parallelism.
@@ -50,7 +53,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: night
-        # image 0.1.4, digest TBD (filled in after the push)
+        # image 0.1.4, digest sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced (keck-etcs 83ba931, PypeIt pin 8017f47)
         image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4
         imagePullPolicy: Always
         env:
@@ -60,7 +63,7 @@ spec:
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
         - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "TBD"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "0"}
         - {name: REPLACE, value: "0"}

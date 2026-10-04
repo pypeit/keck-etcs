@@ -22,9 +22,10 @@ two layouts are the same by construction (design 4.2).
 
 Both transfers are idempotent by key and size, so a re-run after an
 interruption only moves what is missing; ``--dry-run`` shows what would move.
-``push --force`` uploads the selected files even when an object of the same
-size exists (a ``REPLACE=1`` re-reduction produces new files of the same
-size, e.g. FITS with new header dates).
+``--force`` transfers the selected files even when the other side has a file
+of the same size: a re-reduction (``REPLACE=1``, or a pod run after a local
+one) produces different files of the *same* size (e.g. every spec1d of a
+night is 423360 bytes), which size-only idempotence cannot tell apart.
 
 Environment:
     ENDPOINT_URL      S3 endpoint (default https://s3-west.nrp-nautilus.io;
@@ -184,7 +185,7 @@ def cmd_pull(client, bucket, root, prefix, args):
               if selected(k, prefix, args.include)}
     local = local_sizes(root, prefix)
     todo = [(root / key, key) for key, size in sorted(remote.items())
-            if key not in local or local[key][1] != size]
+            if args.force or key not in local or local[key][1] != size]
     print(f'pull s3://{bucket}/{prefix}/ -> {root / prefix}  ({ENDPOINT}, {credential_source()})')
     print(f'selected objects: {len(remote)}  to download: {len(todo)}  '
           f'current (skipped): {len(remote) - len(todo)}')
@@ -215,7 +216,7 @@ def main(argv=None):
     parser.add_argument('--include', nargs='+', metavar='GLOB',
                         help='push/pull only keys (relative to PREFIX) matching these globs')
     parser.add_argument('--force', action='store_true',
-                        help='push: upload even when an object of the same size exists')
+                        help='push/pull: transfer even when the other side has a file of the same size')
     args = parser.parse_args(argv)
 
     prefix = args.prefix.strip('/')
