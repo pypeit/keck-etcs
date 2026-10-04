@@ -1,0 +1,31 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: date, datatype: string}
+# - {name: filter, datatype: string}
+# - {name: slit_width, unit: arcsec, datatype: float64}
+# - {name: fwhm_pix, unit: pix, datatype: float64}
+# - {name: fwhm_pix_scatter, unit: pix, datatype: float64}
+# - {name: fwhm_A_1250, unit: Angstrom, datatype: float64}
+# - {name: R_1250, datatype: float64}
+# - {name: dfwhm_dlam_pix_per_1000A, datatype: float64}
+# - {name: n_lines, datatype: int64}
+# - {name: pypeit_arc_fwhm_pix, unit: pix, datatype: float64}
+# - {name: source, datatype: string}
+# - {name: source_sha256, datatype: string}
+# - {name: image, datatype: string}
+# - {name: image_digest, datatype: string}
+# - {name: pypeit_git_sha, datatype: string}
+# - {name: keck_etcs_git_sha, datatype: string}
+# - {name: job_name, datatype: string}
+# - {name: method, datatype: string}
+# meta: !!omap
+# - {description: MOSFIRE LSF measured from OH lines (S13); read by the instrument module (S8)}
+# - {model: 'design D25/5.3.6: FWHM_pix = max(slit / 0.24, 2.2); R = 3310 x 0.7 / slit'}
+# - {ref_wave_A: 12500.0}
+# - {calib_version: mosfire-J-2026.10-dev}
+# - {created: '2026-10-04T15:08:00Z'}
+# - {script: scripts/mosfire/measure_lsf.py --record}
+# schema: astropy-2.0
+date filter slit_width fwhm_pix fwhm_pix_scatter fwhm_A_1250 R_1250 dfwhm_dlam_pix_per_1000A n_lines pypeit_arc_fwhm_pix source source_sha256 image image_digest pypeit_git_sha keck_etcs_git_sha job_name method
+2022-04-09 J2 1.0 3.6064 0.0688 4.67 2676.7 -0.0503 19 3.9469 mosfire/20220409/redux/Calibrations/WaveCalib_A_1_DET01.fits f7d5735d585a5ceb80d07f7dd2049682dba2e25f4bc058a191b43df86267e9ca gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4 sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced 8017f47997d6417d797be6d0a0358d7acb8918b5 83ba931 keck-etcs-validate "Gaussian+linear fits to identified OH lines of the arc (sky) spectrum; blends flagged with OH_R24000; linear FWHM(lambda), 3-sigma clipped"

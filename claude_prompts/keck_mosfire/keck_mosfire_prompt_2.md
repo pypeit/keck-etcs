@@ -1382,3 +1382,77 @@ editable-install string `2.0.2.dev1216+gf3a1f1d27`; its `pypeit_git_sha` is
 correctly 8017f47. A local row would fail check 3. Refreshing the editable
 install (`pip install -e . --no-deps` in the PypeIt checkout, the user's
 call) fixes it. In-pod rows are unaffected.
+
+### 2026-10-04 (Prompt #4 / S13: LSF from OH lines — 1" slit FWHM 3.61 px, R 2677 at 1.25 um)
+
+**Input.** `WaveCalib_A_1_DET01.fits` of 2022-04-09, the synced in-pod copy
+from the 0.1.4 REPLACE run (pulled with `--force` in S4b, sha256
+f7d5735d...). Its arc spectrum is the OH sky of the four J0841 science
+frames: a LONGSLIT-46x1, i.e. 1", uniformly illuminated slit.
+
+**`scripts/mosfire/measure_lsf.py DATE [--wavecalib] [--slit] [--record] [--plot]`.**
+- For each of the 48 lines PypeIt identified (`pixel_fit`, `wave_fit`), it
+  fits a Gaussian plus a linear baseline to the arc spectrum within ±8 px.
+- It flags blends against PypeIt's resolved vacuum `OH_R24000_lines.dat`:
+  a companion within 1.5 expected FWHM with at least 10% of the amplitude,
+  or no list line within 2 px. 25 lines are flagged.
+- It converts FWHM to A with the local dispersion of the wavelength
+  solution, and computes R = lambda / FWHM_A.
+- It fits FWHM_pix against lambda linearly over the clean lines, with
+  3-sigma clipping.
+- Outputs: the per-line table and plot in `<night>/lsf/` (data root), and
+  with `--record` the summary row in
+  `keck_etcs/data/mosfire/lsf_measurements.ecsv`. That row holds `date,
+  filter, slit_width, fwhm_pix, fwhm_pix_scatter, fwhm_A_1250, R_1250,
+  dfwhm_dlam, n_lines, pypeit_arc_fwhm_pix, source, source_sha256`, the
+  provenance (image, digest, PypeIt and keck-etcs SHAs, job) and the
+  method. It is registered in `index.yaml`.
+- Exit status 1 when a design check fails.
+
+**Results** (identical on the local reference copy of the WaveCalib):
+- 19 clean lines, scatter **0.069 px**, almost no trend: -0.05 px per
+  1000 A. The clean lines span 1.13-1.33 um.
+- **At 1.25 um: FWHM 3.606 px = 4.67 A** (dispersion 1.295 A/px), **R = 2677**.
+- PypeIt's own arc FWHM estimate is 3.95 px; it includes the blended
+  lines, which run high.
+
+**Design checks** (D25/5.3.6):
+- FWHM_pix: model max(1.0/0.24, 2.2) = 4.17 px; measured/model = **0.866,
+  within 20%: PASS**.
+- R: model 3310 x 0.7 / 1.0 = 2317; measured/model = **1.155, outside 15%:
+  FAIL** (by 0.5%).
+
+**Which constant is off: the slope, not the floor.**
+- At 1" the LSF is slit-dominated (FWHM 3.6 px against the 2.2 px floor),
+  so the floor is unconstrained here.
+- A slit-limited LSF with slope s gives FWHM = w/s. The measurement implies
+  s = 1.0"/3.606 px = **0.277"/px**, not 0.24"/px: the design overpredicts
+  the 1" width by 15%.
+
+**Proposed revised constants** (not yet applied; the user to decide):
+- **(a) Interim, slope only:** FWHM_pix = max(w / 0.277, 2.2). It
+  reproduces the 1" measurement exactly and predicts R(0.7") of about
+  3820, against the MOSFIRE web page's 3318 (the source of the design's
+  3310 x 0.7).
+- **(b) Quadrature form:** FWHM_pix^2 = (w/s)^2 + f^2, fitted to this
+  measurement plus the web page's 0.7" value (FWHM 2.90 px at 1.25 um),
+  gives s of about 0.33"/px and f of about 2.0 px. It matches both, but
+  the 0.7" point is a published nominal, not a measurement.
+- The two forms differ by about 15% at 0.7". Separating slope and floor
+  needs measured LSFs at other slit widths: the 0.7" and other KOA nights of
+  part 5 (S15). Until then, S8 should use the measured row of
+  `lsf_measurements.ecsv` for 1" and a provisional form for other widths,
+  marked as such.
+
+Caveat: the arc is the combination of 4 frames (nods A and B). Any flexure
+between them would broaden the lines, so the true single-frame LSF is at
+most 3.6 px. That strengthens the conclusion.
+
+**User decision (2026-10-04): interim slope 0.277"/px.**
+- Applied in design D25 and 5.3.6, and in the residual-items list
+  (section 8): `FWHM_pix = max(w / 0.277, 2.2)`; widths other than 1" are
+  provisional until part 5.
+- Applied in part 3's prompt doc (`keck_mosfire_prompt_3.md` Context and S7
+  text), so S8 reads the measured row first and uses 0.277"/px otherwise.
+- `docs/keck_mosfire_implementation.md` S13's verify text (4.2 px, 2300)
+  is left as the historical acceptance test.

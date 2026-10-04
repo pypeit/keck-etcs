@@ -36,9 +36,10 @@ batches; until then in-pod harvest rows carry `flag = nofilter`.
   1.181/0.129 um (center/FWHM), with ASCII curves on
   `https://www2.keck.hawaii.edu/inst/mosfire/filters.html`; J2 clean window
   1.117-1.260 um; era boundaries 2016-09-15 / 2017-02-13 and 2025-02-11 /
-  2025-04-29; LSF constants floor 2.2 pix and slope 0.24"/pix until
-  `keck_etcs/data/mosfire/lsf_measurements.ecsv` (part 2, S13) says
-  otherwise.
+  2025-04-29; LSF constants floor 2.2 pix and slope 0.277"/pix (interim,
+  from part 2 S13, 2026-10-04; it was 0.24"/pix), with the measured rows of
+  `keck_etcs/data/mosfire/lsf_measurements.ecsv` taking precedence for
+  their slit width (1": FWHM 3.61 px, R 2677 at 1.25 um).
 - Vega spectrum for the AB-Vega offsets: PypeIt's
   `pypeit/data/standards/vega_tspectool_vacuum.dat` (vacuum wavelengths). Copy
   it or its synthetic magnitudes into `keck_etcs/data/` so that `core` and
@@ -69,7 +70,7 @@ batches; until then in-pod harvest rows carry `flag = nofilter`.
    PWV and clipping with a warning (N4), sky applied without atmospheric
    transmission (N6), Moffat beta 3.5 slit x aperture integral on a 0.01"
    grid with caching, top-hat extended sources, Gaussian LSF with
-   `FWHM_pix = max(w/0.24, floor)`, RN interpolated in log2 N_reads, dark,
+   `FWHM_pix = max(w/0.277, floor)` (or the measured row for that slit), RN interpolated in log2 N_reads, dark,
    stare and ABBA variances, S/N per pixel and per resolution element, line
    mode, the exposure-time quadratic (N7), and the saturation peak pixel.
    Write `keck_etcs/schema/etc_input.json` and `etc_output.json` (JSON

@@ -89,7 +89,7 @@ masks, imaging, and the other Keck instruments (which will reuse
 | D22 | "Current" throughput = pixel-wise median of the latest era's standards, with MAD; `date` selects an era; `throughput_scale` is a free factor; nights beyond 3 MAD in band median are excluded whole. | Robust to a bad night; era-aware. |
 | D23 | Gemini grid rebinned (flux-conserving) to 0.05 nm over 0.95-2.45 um, one FITS file of ~3 MB committed to git. No git-lfs, no download on first use. | MOSFIRE's narrowest LSF is ~0.36 nm; the native 45 MB is too large for git. |
 | D24 | Data root `KECK_ETCS_DATA` (default `/Users/xavier/Projects/PypeIt/keck-etcs-data`) with `mosfire/<YYYYMMDD>/{raw,redux,sens}`; only harvested tables and combined products are committed. | Raw KOA data and PypeIt outputs are large. |
-| D25 | Gaussian LSF, FWHM = max(slit / 0.24"/pix, 2.2 pix) x dispersion; floor and slope measured from OH lines. | Anamorphic factor 1.48 makes the dispersion-direction pixel 0.24". |
+| D25 | Gaussian LSF, FWHM = max(slit / 0.277"/pix, 2.2 pix) x dispersion; floor and slope measured from OH lines. *Revised 2026-10-04 (S13, user):* the slope was 0.24"/pix (XTcalc); OH lines of the 2022-04-09 1" slit give FWHM 3.61 px, R 2677 at 1.25 um, i.e. 0.277"/px. Interim until other slit widths (part 5) separate slope and floor. | Anamorphic factor 1.48 makes the dispersion-direction pixel 0.24", but the measured slit-limited LSF is 15% narrower than slit / 0.24". |
 | D26 | Moffat beta 3.5; seeing FWHM quoted at the observing band, optional `seeing_wave_um` with lambda^-0.2 scaling; 2-D integral over the slit x aperture rectangle; extended sources are a top-hat convolved with the Moffat. | Standard practice. |
 | D27 | Tests: analytic unit tests, a frozen JSON regression fixture, the XTcalc comparison as a script (not CI), the J0841 validation as a `slow` test. | See section 6. |
 | D28 | Semantic versions for code, date tags for calibration products (`mosfire-J-2026.10`), both echoed in every output with `pypeit_version`; `CHANGES.md`; a calibration release touches only `keck_etcs/data/` and `CHANGES.md`. | WMKO can diff releases. |
@@ -734,14 +734,21 @@ kept for saturation.
 **5.3.6 LSF and resolution.**
 
 ```
-FWHM_pix = max( w / 0.24 , 2.2 )                 [pixels, D25]
+FWHM_pix = max( w / 0.277 , 2.2 )                [pixels, D25; slope revised 2026-10-04]
 FWHM_lsf = FWHM_pix * dlam                        [A]
 R(lam)   = lam / FWHM_lsf
 n_spec   = FWHM_pix                               [pixels per resolution element]
 ```
 
-The floor and the 0.24"/pix slope are instrument-config values to be replaced
-by the OH-line measurement. The LSF is Gaussian; source spectrum, sky,
+The floor and the slope are instrument-config values from the OH-line
+measurement (`keck_etcs/data/mosfire/lsf_measurements.ecsv`, S13). The 1"
+slit measured FWHM 3.61 px (0.07 px scatter over 19 lines, flat across J2),
+R = 2677 at 1.25 um, which sets the interim slope at 0.277"/px. It was
+0.24"/px (XTcalc), which overpredicted the width by 15%. The floor (2.2 px)
+is not constrained by a 1" slit. Widths other than 1" are provisional
+until part 5's KOA nights measure them; the slope-only form predicts R of
+about 3820 at 0.7", against the 3318 published by WMKO. The instrument
+module uses the measured row where one exists for the slit. The LSF is Gaussian; source spectrum, sky,
 transmission and throughput are all convolved with it before sampling on
 `wave_A`. A line's observed FWHM is `sqrt(FWHM_line^2 + FWHM_lsf^2)` with
 `FWHM_line = lam * fwhm_kms / c`.
@@ -924,8 +931,9 @@ not circular. Later, every KOA quasar night adds a validation point.
 - **PypeIt `ronoise` branch:** to be drafted once the Keck RN table is
   confirmed against our own data (e.g. from the difference of two dome flats
   at fixed `NUMREADS`).
-- **LSF parameters:** the 2.2-pixel floor and the 0.24"/pix slope are XTcalc
-  values until the OH-line measurement replaces them.
+- **LSF parameters:** the slope is the interim 0.277"/px measured at 1"
+  (S13, 2026-10-04); the 2.2-pixel floor is still XTcalc's. Both need
+  measurements at other slit widths (part 5).
 - **Sky-model validation:** the Gemini grid's OH-line strengths versus the
   measured J2 sky may require a default `sky_scale` other than 1.
 - **J2 red edge:** confirm 1.260 um from the fluxed LDS749B spectrum.

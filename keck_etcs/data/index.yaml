@@ -17,3 +17,9 @@ files:
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 1 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
       in mosfire/throughput/standards/
+  mosfire/lsf_measurements.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-04T15:08:00Z'
+    sha256: bfe55129454da09f0ea810308efe5810b180581ecc3bd028923665283b23daec
+    script: scripts/mosfire/measure_lsf.py --record
+    provenance: 1 LSF measurement(s) from OH lines in PypeIt WaveCalib arc spectra
