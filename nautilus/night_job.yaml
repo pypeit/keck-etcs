@@ -53,8 +53,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: night
-        # image 0.1.4, digest sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced (keck-etcs 83ba931, PypeIt pin 8017f47)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4
+        # image 0.1.5, digest TBD (filled in after the push)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.5
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -62,8 +62,8 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.5"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "TBD"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "0"}
         - {name: REPLACE, value: "0"}

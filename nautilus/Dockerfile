@@ -82,7 +82,7 @@ WORKDIR /opt/src/keck-etcs
 
 # ---------------------------------------------------------------------------
 # Build guards: any failure fails the build.
-# (import keck_etcs.calib.harvest: added with S6, from image 0.2.0.)
+# (import keck_etcs.calib.harvest: added with S6, from image 0.1.5.)
 # ---------------------------------------------------------------------------
 RUN python -c "import json, os, pypeit; sh = json.loads(os.environ['KECK_ETCS_GIT_SHAS']); \
 assert set(sh) >= {'pypeit', 'keck_etcs'} and 'unknown' not in sh.values(), sh; \
