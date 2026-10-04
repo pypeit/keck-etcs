@@ -45,6 +45,16 @@ Use Fable if you can.  Log your work.
 6. I have answered your questions about Nautilus below.  Please read the answers and make updates to the design, plan, and prompt docs.
 Use Fable if you can.  Log your work.
 
+7. Here are a few items to add to the design, plan, and prompt docs:
+   - Record the FWHM of the spatial profile of the standard stars analyzed by PypeIt.
+   - For instruments that use internal flats record a metric of the brightness at several set wavelengths, e.g. every 500 Ang
+   - For instruments that calibrate with an Arc lamp, record the width of the arc lines.
+   - For instruments that calibrate with an Arc lamp, record the brightness of several arc lines (choosing which ones will be tricky)
+Before modifying the docs, have a conversation with me about these items.
+Put your questions under Q&A/Calibrations.
+Use Fable if you can.  Log your work.
+
+
 ## Registry
 
 *2026-09-30. One-time setup of the container registry for the keck-etcs image
@@ -124,6 +134,8 @@ image, so pods in namespace `pypeit` pull it without an `imagePullSecret`.
   Deploy tokens and repeat steps 2-3. Already-pushed images are unaffected.
 
 ## Q&A
+
+### Calibrations
 
 ### Design
 
