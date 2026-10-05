@@ -224,6 +224,8 @@ Part 6 step S18 needs S16.
    0.2.0 now is possible, since the code is ready, but it can wait until the
    pilot is ready to run.
 
+>A. Use your default
+
 2. **Zero point of the A0V model (N3).**
    - N3 says to scale PypeIt's Vega spectrum so that its *synthetic* 2MASS
      J equals the star's 2MASS J.
@@ -246,6 +248,8 @@ Part 6 step S18 needs S16.
    every A0V sensfunc's `<NAME>_<DATE>_std_model.json`
    (`vega_tmass_j_synthetic`).
 
+>A. Use your default
+
 3. **Night-manifest columns for A0V nights.**
    - The driver and `build_sensfunc.py` read four extra columns:
      `std_class`, `jmag_2mass`, `std_ra` and `std_dec` (degrees). The night
@@ -256,6 +260,8 @@ Part 6 step S18 needs S16.
      white dwarfs can leave them empty.
 
    *Default:* as described, unless you prefer them packed into `notes`.
+
+>A. Use your default
 
 ## Logging
 
