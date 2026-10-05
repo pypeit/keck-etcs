@@ -454,3 +454,175 @@ core`: 39 passed (10 deselected); the full suite has 49 passed.
 - The J2 half-power blue edge (1.1169 um) is where PypeIt's J2 clean
   window starts (1.117).
 - The night job's harvest call never passed `--filter`.
+
+### 2026-10-05 (Prompt #3 / S9: compute(), CLI, regression fixtures; frozen against the PROVISIONAL XTcalc throughput)
+
+**Throughput product used:** no S10 curve exists yet, so
+`scripts/mosfire/build_provisional_throughput.py` builds
+`keck_etcs/data/mosfire/throughput/mosfire_thru_provisional-xtcalc-2012.ecsv`.
+
+- It uses the S10 column layout `wave, thru_median, thru_mad, n_std` on a
+  1 A grid, 11000-14000 A, with `calib_version = provisional-xtcalc-2012`.
+- `index.yaml` carries `provisional: true`, `pypeit_version: n/a`, and
+  every output carries a "PROVISIONAL throughput" warning.
+- Recipe: XTcalc `Jeff.sm.dat` x 0.89^2, divided by our Keck J filter
+  curve to make it filter-free (design 5.3.4), smoothed with a 51-sample
+  running median.
+  - The ratio is used only over 11700-13400 A. `Jeff.sm` is smoothed and
+    its cut-on does not match the Keck J curve, so the ratio collapses at
+    the filter edges: it is still falling at 11605 A, where F_J first
+    reaches 0.85, and my first build with an F_J >= 0.85 cut gave 0.157 at
+    the J2 blue end. It is held constant outside that range.
+  - Result: 0.201 at <= 11700 A, 0.246 at 12000, 0.287 at 12500, 0.333 at
+    13000. Median 0.218 over the J2 window and 0.287 over J. For context,
+    LDS749B gives 0.18 in J2 with the filter included.
+- **The regression fixtures are frozen against this provisional
+  product.** S10 must replace it and regenerate them, with a `CHANGES.md`
+  line.
+
+**Code:**
+
+- `keck_etcs/etc.py`:
+  - **`validate(inputs) -> (filled, warnings)`:** the schema check first
+    (an `InputError` names every field), then defaults filled recursively
+    from `etc_input.json`. Semantic warnings: CDS with n_reads != 1; unused
+    `line` or user arrays; `snr_reference = line` without a line; an
+    extended source without `length_arcsec`; `snr_reference` without
+    `target_snr`. A user `wave_A`/`flux` length mismatch raises.
+  - **`compute(inputs) -> dict`:** every field of `etc_output.json`, and
+    the output validates against it.
+    - Fine grid: the sky grid's 0.5 A vacuum samples over the window ± 10
+      LSF FWHM.
+    - N0 x T_atm x T_sys (the filter-free era curve x the band filter x
+      `scale`) is convolved with the LSF and then sampled. The product is
+      convolved, not each factor, which is correct for a line on a telluric
+      feature and identical for a smooth source; noted in the docstring.
+    - Sky: `sky_scale` x B x T_sys convolved, without T_atm (N6).
+    - The source is normalized on the filter's own grid, so the whole
+      filter is covered.
+    - Line mode uses the new `core.source.gaussian_line_binned`
+      (cell-integrated, so flux is conserved below the grid step), plus an
+      optional flat-f_nu continuum.
+    - Extended sources: SB x pi D^2/4 x `extended_fraction`; in line mode
+      the line flux is per arcsec^2, with a warning.
+    - `seeing_wave_um` gives per-pixel slit fractions, interpolated from 7
+      nodes.
+    - Target S/N: pixel and resel use `solve_exptime_median`; line uses the
+      window sums. Solved times below 1.455 s or above 3600 s warn; an
+      unreachable target warns and keeps `exptime_s`.
+    - Saturation peak, plus the persistence warning when the flag is not
+      `ok`.
+    - A warning whenever the LSF width comes from the interim rule rather
+      than a measured slit.
+    - `meta`: `keck_etcs_version`; `calib_version` and `pypeit_version` from
+      the throughput's `index.yaml` entry (no PypeIt import); `era`;
+      `inputs`.
+- `keck_etcs/instruments/base.py`: `throughput(era)` (the S10 file
+  `mosfire_thru_{era}.ecsv` if present, else the provisional one) and
+  `index()`. `mosfire.py` sets both paths.
+- `keck_etcs/core/slitloss.py`: the extended-source sampling step is now
+  `min(FWHM/4, max(0.01", FWHM/20, D/200))`, since the disk is smoothed by
+  the PSF. A 2" disk dropped from 0.15 s to 0.02 s with the same fraction
+  to 1e-4, and the S7 tests pass unchanged.
+- `bin/keck_etc`: JSON file (or `-`) in; JSON to stdout or `-o`.
+  `--summary` prints:
+  - versions, calib and era;
+  - window, LSF and R;
+  - slit and aperture fractions;
+  - exptime x frames;
+  - band-median S/N per pixel and per resel;
+  - the line S/N;
+  - the per-frame peak ADU, e- and flag;
+  - the warnings.
+
+  Invalid input gives exit 2 and names the fields. `setup.py` already globs
+  `bin/`.
+- `examples/J_point.json`: the S9 case (J = 20 AB, 0.7"/0.7", 4 x 120 s,
+  MCDS-16, ABBA, X 1.2, PWV 1.6).
+- `examples/J2_point.json`: J2, 19 AB with alpha = -1, 1" slit, 0.9"
+  seeing, 4 x 150 s, X 1.075, date 2022-04-09.
+- `examples/J_line.json`: 5e-17 cgs at 12820 A, 150 km/s, continuum 23 AB,
+  target line S/N 10 → 8 x 137 s, not saturated. The first draft at 1e-17
+  needed 8 x 1700 s and saturated on the 12906 A OH line.
+- Fixtures `keck_etcs/tests/data/reference_{J,J2,line}.json` (250, 163 and
+  253 kB): the inputs plus the full output, floats rounded to 10
+  significant digits. The helpers are in `keck_etcs/tests/regression.py`;
+  `meta.keck_etcs_version` is excluded, so a version bump alone does not
+  fail.
+  - `test_regression.py` fails on any relative change above 1e-6 and checks
+    that each fixture's inputs are its example.
+  - `scripts/regen_regression_fixtures.py` only reports by default (exit 1
+    on a difference). `--regen` needs `--note`, which is appended to
+    `CHANGES.md` with the date, version and throughput `calib_version`.
+- `CHANGES.md` (design 5.5) is new: a calibration-release section (none
+  yet; the provisional throughput is called out) and the fixture log, whose
+  first line is the S9 freeze.
+- **Tests:** `test_etc.py` adds 15:
+  - validation, schema-valid output, the window, LSF and aperture;
+  - the noise budget (ABBA variance identity);
+  - stare against ABBA; throughput and sky scaling;
+  - Vega = AB + offset;
+  - a hand photon count for J = 20 AB (2%);
+  - target-S/N round trips for pixel and resel (1e-6);
+  - line mode: the window width; line-flux conservation (3%); the line
+    target round trip; an out-of-band warning;
+  - the extended-source SB x w x L limit (2e-3);
+  - clipping and era-gap warnings; seeing scaling;
+  - user-spectrum normalization;
+  - `etc` running with sockets blocked and without PypeIt, boto3 or
+    requests.
+
+  The suite has **82 passed**.
+
+**Verification:**
+
+- `bin/keck_etc examples/J_point.json --summary`: band-median S/N per
+  pixel 4.334 (per resel 6.890); per-frame peak 3986 ADU at 12905.7 A, an
+  OH line; flag `ok`.
+- **XTcalc by hand** (`scripts/mosfire/xtcalc_hand_snr.py`): a
+  re-implementation of XTcalc v2.3's magnitude mode from `XTcalc.pro` on
+  its own files (`Jeff.sm` x 0.89^2, the May 2012 MOSFIRE sky
+  `Jsky_cal_pA`, `mktrans_zm`; 75 m^2; RN 15/sqrt(16) = 3.75 e-; dark
+  0.005; 1.31 A/pix; R = 3310; no slit loss; 2-point dither x2).
+  - Same case: XTcalc gives **7.39** (theta 0.7", airmass 1.0; 7.33 at
+    1.5; 6.15 with theta 1.05"). Ours is 4.33, a **ratio of 0.59, within
+    the factor of 2**.
+  - The gap comes from our slit and aperture loss (0.561; XTcalc assumes
+    none), the measured read noise (5.8 against 3.75 e-) and 6 spatial
+    pixels against 3.9. It is partly offset by the Gemini interline
+    continuum, which is **2.7x lower** than XTcalc's 2012 MOSFIRE-measured
+    sky (median 0.81 against 2.2 ph/s/arcsec^2/nm/m^2 over 11700-13300 A
+    and in the 12440-12480 A low-OH window; the OH-line means agree, 8.2
+    against 8.8).
+  - That continuum difference decides faint-source S/N. It is the D14
+    question for S11 (the default `sky_scale`, and whether to scale the
+    lines and the continuum separately).
+  - My first pass gave XTcalc 17.4 (ratio 0.25) because of an extra 1e4
+    in my conversion of XTcalc's sky units: its `10^(loghc+4)` is already
+    h·c in erg·um. Fixed before the numbers above.
+  - S12 does the full grid of magnitudes and slits.
+- `keck_etcs.core` and `keck_etcs.etc` import and run without PypeIt,
+  boto3 or network access (tested).
+
+**Choices for review:**
+
+1. The provisional throughput's constant extension below 11700 A (J2's
+   blue 530 A) and above 13400 A.
+2. The source is convolved as a product with T_atm and T_sys rather than
+   factor by factor.
+3. Extended sources in line mode take the line flux per arcsec^2.
+4. Fixtures are stored rounded to 10 significant digits (about 670 kB in
+   git).
+
+**Learned:**
+
+- XTcalc's magnitude mode:
+  - takes the median S/N over pixels where the convolved filter exceeds
+    0.1 (1.145-1.361 um), wider than our half-power window;
+  - its `theta` is the object's extent along the slit and sets both the
+    sky area and the read-noise pixels;
+  - `Jsky_cal_pA` is MOSFIRE-measured and flux-calibrated per spatial row
+    of a 0.7" slit;
+  - it has no slit loss and uses 75 m^2.
+- `conda run` does not forward stdin, so the CLI's `-` input was checked
+  only through a file.

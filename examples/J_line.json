@@ -1,0 +1,17 @@
+{
+  "instrument": "keck_mosfire",
+  "band": "J",
+  "slit_width_arcsec": 0.7,
+  "source": {"type": "point"},
+  "spectrum": {"shape": "line",
+               "line": {"wave_A": 12820.0, "flux_cgs": 5e-17, "fwhm_kms": 150, "continuum_mag": 23.0}},
+  "seeing_fwhm_arcsec": 0.7,
+  "exptime_s": 180,
+  "n_frames": 8,
+  "readout": {"mode": "MCDS", "n_reads": 16},
+  "nod": "ABBA",
+  "airmass": 1.2,
+  "pwv_mm": 1.6,
+  "target_snr": 10,
+  "snr_reference": "line"
+}

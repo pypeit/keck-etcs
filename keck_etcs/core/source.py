@@ -120,3 +120,18 @@ def gaussian_line(wave, center_A, flux_cgs, fwhm_A):
 def photon_rate(wave, flam, area_cm2):
     """Photon rate above the atmosphere N0 = f_lambda A lam / (h c) [photons/s/A] (5.3.2)."""
     return np.asarray(flam, float) * area_cm2 * np.asarray(wave, float) / HC_ERG_A
+
+
+def gaussian_line_binned(wave, center_A, flux_cgs, fwhm_A):
+    """Gaussian line as f_lambda averaged over cells centred on a uniform ``wave`` grid.
+
+    Each cell's value is the line flux falling in it divided by the step, so
+    the flux is conserved even when the line is narrower than the grid.
+    """
+    from scipy.special import ndtr
+    wave = np.asarray(wave, float)
+    step = float(np.median(np.diff(wave)))
+    sigma = fwhm_A / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    hi = ndtr((wave + step / 2 - center_A) / sigma)
+    lo = ndtr((wave - step / 2 - center_A) / sigma)
+    return flux_cgs * (hi - lo) / step

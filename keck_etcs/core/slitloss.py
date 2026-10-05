@@ -115,7 +115,8 @@ def aperture_quantities(fwhm, slit_width, length, platescale, beta=BETA):
 def _extended_cached(fwhm, slit_width, length, size, beta):
     a = moffat_alpha(fwhm, beta)
     r = size / 2.0
-    step = min(fwhm / 4.0, max(GRID_STEP, size / 200.0))
+    # the disk is smoothed by the PSF, so FWHM/20 sampling of the source suffices
+    step = min(fwhm / 4.0, max(GRID_STEP, fwhm / 20.0, size / 200.0))
     # quarter disk (the rectangle and the disk share both symmetry axes)
     n = max(1, int(np.ceil(r / step)))
     c = (np.arange(n) + 0.5) * (r / n)

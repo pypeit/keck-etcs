@@ -103,6 +103,8 @@ MOSFIRE = Instrument(
     detector_file='mosfire/detector.ecsv',
     sky_grid_file='sky/gemini_mk_sky_grid.fits',
     lsf_file='mosfire/lsf_measurements.ecsv',
+    throughput_pattern='mosfire/throughput/mosfire_thru_{era}.ecsv',          # S10 (design 4.5)
+    provisional_throughput='mosfire/throughput/mosfire_thru_provisional-xtcalc-2012.ecsv',   # S9, XTcalc
     moffat_beta=MOFFAT_BETA,
     monitor=MONITOR,
 )

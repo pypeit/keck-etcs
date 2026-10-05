@@ -84,3 +84,12 @@ files:
     script: scripts/mosfire/build_detector_table.py
     provenance: 'Keck MOSFIRE detector page https://www2.keck.hawaii.edu/inst/mosfire/detector.html: read
       noise vs reads, gain, dark, linearity, minimum integration; plate scales from PypeIt and XTcalc'
+  mosfire/throughput/mosfire_thru_provisional-xtcalc-2012.ecsv:
+    calib_version: provisional-xtcalc-2012
+    created: '2026-10-05T01:52:19Z'
+    sha256: eb5a9e982d1e0fc42befe0610474821655c74a5b5f12c0c04eb4759fbc64beda
+    script: scripts/mosfire/build_provisional_throughput.py
+    provisional: true
+    pypeit_version: n/a
+    provenance: 'PROVISIONAL: XTcalc 2012 Jeff.sm.dat x 0.89^2 / Keck J filter (11700-13400 A, constant
+      outside); to be replaced by the S10 per-era curves before any release'

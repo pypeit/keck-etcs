@@ -50,6 +50,8 @@ class Instrument:
     detector_file: str
     sky_grid_file: str
     lsf_file: str = None
+    throughput_pattern: str = None      # per-era curve, e.g. 'mosfire/throughput/mosfire_thru_{era}.ecsv' (S10)
+    provisional_throughput: str = None  # fallback until S10 exists
     moffat_beta: float = 3.5
     gaps: tuple = ()                    # (start, end, warning) periods inside or between eras
     monitor: dict = None
@@ -100,6 +102,37 @@ class Instrument:
             t = Table.read(DATA_DIR / self.lsf_file, format='ascii.ecsv')
             return [{c: (r[c].item() if hasattr(r[c], 'item') else r[c]) for c in t.colnames} for r in t]
         return self._load('lsf', load)
+
+    def index(self):
+        """``keck_etcs/data/index.yaml`` as a dict (``{'files': {path: entry}}``)."""
+        def load():
+            import yaml
+            return yaml.safe_load((DATA_DIR / 'index.yaml').read_text()) or {}
+        return self._load('index', load)
+
+    def throughput(self, era):
+        """Filter-free system throughput for an era.
+
+        Uses the S10 per-era curve when it exists, else the provisional
+        product.
+
+        Returns:
+            dict: ``wave_A``, ``thru``, ``file``, ``calib_version``,
+            ``pypeit_version``, ``provisional`` (bool).
+        """
+        def load():
+            from astropy.table import Table
+            rel = self.throughput_pattern.format(era=era) if self.throughput_pattern else None
+            provisional = rel is None or not (DATA_DIR / rel).exists()
+            if provisional:
+                rel = self.provisional_throughput
+            t = Table.read(DATA_DIR / rel, format='ascii.ecsv')
+            entry = self.index().get('files', {}).get(rel, {})
+            return {'wave_A': np.asarray(t['wave'], float), 'thru': np.asarray(t['thru_median'], float),
+                    'file': rel, 'provisional': bool(provisional or entry.get('provisional', False)),
+                    'calib_version': str(entry.get('calib_version', t.meta.get('calib_version', 'unknown'))),
+                    'pypeit_version': str(entry.get('pypeit_version', t.meta.get('pypeit_version', 'unknown')))}
+        return self._load(('throughput', era), load)
 
     # ---------------------------------------------------------------- derived
     def band_window(self, band):

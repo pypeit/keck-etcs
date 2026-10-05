@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+"""Keck exposure-time calculator: JSON inputs in, JSON outputs out (design 5.1, 5.2).
+
+Usage:
+    keck_etc INPUT.json [-o OUTPUT.json] [--summary]
+    keck_etc - < INPUT.json
+
+INPUT is a JSON object of ``keck_etcs/schema/etc_input.json`` (``-`` reads
+stdin). Without ``--summary`` the full output (``etc_output.json``) is
+written to OUTPUT or stdout. ``--summary`` prints the band-median S/N, the
+exposure time, the per-frame peak pixel and its linearity flag, and the
+warnings. Exit status 2 on invalid inputs, naming the fields.
+"""
+import argparse
+import json
+import sys
+
+
+def summary(out):
+    s, sat, m = out['summary'], out['saturation'], out['meta']
+    inp = m['inputs']
+    lines = [
+        f"keck_etcs {m['keck_etcs_version']} | {inp['instrument']} {inp['band']} | calib {m['calib_version']} "
+        f"| era {m['era']}",
+        f"window {out['wave_A'][0]:.1f}-{out['wave_A'][-1]:.1f} A, {len(out['wave_A'])} pix at "
+        f"{out['dispersion_A_per_pix']:.4f} A/pix; LSF {out['n_spec_per_resel']:.2f} pix "
+        f"(R {out['resolving_power'][len(out['wave_A']) // 2]:.0f})",
+        f"slit fraction {_first(out['slit_fraction']):.3f}, aperture fraction {_first(out['aperture_fraction']):.3f}, "
+        f"{out['n_spatial_pix']} spatial pix, seeing {out['fwhm_arcsec_band']:.2f}\"",
+        f"exptime {s['exptime_s']:.2f} s x {s['n_frames']} frames = {s['total_time_s']:.1f} s ({inp['nod']}, "
+        f"{inp['readout']['mode']}-{inp['readout']['n_reads']})",
+        f"band-median S/N per pixel {s['snr_pixel_median']:.3f}, per resolution element {s['snr_resel_median']:.3f}",
+    ]
+    if s.get('snr_line') is not None:
+        lines.append(f"line S/N {s['snr_line']:.3f} over {s['line_window_A'][0]:.1f}-{s['line_window_A'][1]:.1f} A")
+    lines.append(f"peak pixel per frame {sat['peak_adu_per_frame']:.0f} ADU ({sat['peak_e_per_frame']:.0f} e-) "
+                 f"at {sat['wave_A']:.1f} A: {sat['flag']}")
+    lines += [f"warning: {w}" for w in out['warnings']]
+    return '\n'.join(lines)
+
+
+def _first(x):
+    return x if isinstance(x, (int, float)) else x[len(x) // 2]
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    p.add_argument('input', help='input JSON file, or - for stdin')
+    p.add_argument('-o', '--output', help='write the output JSON here (default stdout)')
+    p.add_argument('--summary', action='store_true', help='print a short summary instead of the JSON')
+    a = p.parse_args(argv)
+    from keck_etcs import etc
+    inputs = json.load(sys.stdin if a.input == '-' else open(a.input))
+    try:
+        out = etc.compute(inputs)
+    except etc.InputError as exc:
+        print(f'invalid input: {exc}', file=sys.stderr)
+        return 2
+    if a.output:
+        with open(a.output, 'w') as f:
+            json.dump(out, f)
+    if a.summary:
+        print(summary(out))
+    elif not a.output:
+        json.dump(out, sys.stdout)
+        print()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
