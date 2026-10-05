@@ -1,0 +1,35 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: mode, datatype: string}
+# - {name: sampmode, datatype: int32, description: 'Sampling Mode (1:Single, 2:CDS, 3:MCDS, 4:UTR)'}
+# - {name: numreads, datatype: int32, description: Number of reads}
+# - {name: n_frames, datatype: int32}
+# - {name: fraction, datatype: float64}
+# meta: !!omap
+# - {description: SAMPMODE x NUMREADS histogram of all public on-sky MOSFIRE spectroscopy frames (design D13; plan S14)}
+# - {koa_query: 'SELECT sampmode, numreads, COUNT(*) AS n_frames FROM koa_mosfire WHERE gratmode = ''spectroscopy'' AND axestat IN (''tracking'',
+#     ''slewing'') AND targname NOT LIKE ''%FLAT%'' GROUP BY sampmode, numreads'}
+# - {n_frames_total: 168038}
+# - sampmode_codes: {1: Single, 2: CDS, 3: MCDS, 4: UTR}
+# - {created: '2026-10-05T22:27:15Z'}
+# - {script: scripts/koa/search_mosfire_standards.py}
+# - {calib_version: mosfire-J-2026.10-dev}
+# schema: astropy-2.0
+mode sampmode numreads n_frames fraction
+Single 1 1 99 0.00059
+CDS 2 1 24845 0.14785
+MCDS 3 1 3622 0.02155
+MCDS 3 2 613 0.00365
+MCDS 3 4 10188 0.06063
+MCDS 3 5 21 0.00012
+MCDS 3 6 343 0.00204
+MCDS 3 8 3423 0.02037
+MCDS 3 14 4 2e-05
+MCDS 3 16 123155 0.7329
+MCDS 3 32 114 0.00068
+MCDS 3 64 26 0.00015
+UTR 4 1 1301 0.00774
+UTR 4 2 7 4e-05
+UTR 4 6 1 1e-05
+UTR 4 16 276 0.00164

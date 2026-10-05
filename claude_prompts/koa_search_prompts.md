@@ -165,6 +165,58 @@ by `keck_mosfire_prompt_5.md`.
 
 ## Q&A
 
+### MOSFIRE prompt 1 (2026-10-05)
+
+1. **Lamp arcs: which to download in prompt 2 (design D44)?**
+   - 74 of the 372 candidate nights (19.9 percent) have Ne/Ar lamp arcs
+     matching the standard's mask and filter.
+   - Separately, PypeIt wavelength-calibrates `long2pos_specphot` on those
+     arcs, not on OH lines. So for specphot nights they are **required for
+     the reduction**, not just optional input for the monitor. Specphot
+     carries 51 of the 62 wide-slit standard rows.
+
+   The options:
+   - (a) arcs for specphot nights only;
+   - (b) (a) plus matching arcs on every downloaded night, for the
+     monitor's lamp-line metrics (a few frames per night).
+
+   *Default:* (b).
+
+2. **A1V and other non-A0V telluric stars.** 168 rows (128 nights, 81
+   stars) are HIP/HD stars that are not A0 dwarfs in SIMBAD: mostly A1V
+   (e.g. HIP 56736, 22 rows), Am (HIP 87643), A2III/IV, F3V, or untyped. N3's
+   Vega model is for A0V, so they are `other` and unusable. Only 11 of them
+   are wide-slit nights with flats.
+
+   *Default:* leave them out (A0V only, as N3 says). Revisit if the
+   sample proves too small.
+
+3. **The 5" slit question for Josh Walawender (design 8).** The census
+   answers it from the data:
+   - of the 62 wide-slit standard rows, 51 are `long2pos_specphot` (13
+     "(align)"), 9 are `LONGSLIT-46x5` and 2 are 10" slits;
+   - the 46x5 nights are nearly all the Hennawi program (LDS749B 2022;
+     GD153 on 2024-12-29/30, 2025-01-25, 2025-07-18/22/23).
+
+   So the 5" long slit was not routine; long2pos_specphot is the standard
+   wide-slit mode, as design 4.1 anticipated.
+
+   *Default:* record this in the design and drop the question to WMKO,
+   unless you still want to ask.
+
+4. **The pilot nights** (`nautilus/manifests/nights_pilot.csv`, rules in
+   `make_night_manifest.py`):
+
+   | Night | Standard | Class | Mask | Band | Role |
+   |---|---|---|---|---|---|
+   | 20241230 | GD153 | WD | LONGSLIT-46x5 | J2 | WD on the dry-run path, another night |
+   | 20170615 | HD133772 | A0V | long2pos_specphot | J | A0V, 12 lamp arcs |
+   | 20240721 | Feige110 | WD | long2pos_specphot | J | WD on the same mask, band and era as the A0V |
+   | 20131225 | BD+17 4708 | archive (CALSPEC sdF8) | LONGSLIT-3x4 | J | era 2012-16 |
+   | 20250722 | GD153 | WD | LONGSLIT-46x5 | J2 | era 2025-04.. |
+
+   *Default:* download and reduce these in prompt 2 and S15a.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -175,3 +227,147 @@ format:
 <Detailed description of the work and what you learned>
 
 ## Logs
+
+### 2026-10-05 (MOSFIRE prompt 1: census, candidate table, SAMPMODE census, night manifests)
+
+**Tools:** `pykoa`, `astroquery` and `pyvo` are not in `pypeit14b`.
+Nothing was installed: every query uses plain HTTP TAP via `requests`.
+- KOA: `https://koa.ipac.caltech.edu/TAP/sync`, table `koa_mosfire`.
+- SIMBAD: `/simbad/sim-tap/sync`.
+- VizieR: `tapvizier.cds.unistra.fr`, table `II/246/out`.
+
+Raw answers are cached under `$KECK_ETCS_DATA/koa/` (local).
+
+**Learned about KOA:**
+
+- **KOA TAP returns public frames only.** Anonymous queries are rewritten
+  with `current_date > add_months(date_obs, propint)` (seen in an error
+  message), so every candidate is public by construction (`propint`: 18
+  months for 12,000 frames; 0, 6, 12 or 24 for the rest).
+- `date_obs` cannot be compared to a string (Oracle ORA-01861); select a
+  night by `koaid LIKE 'MF.YYYYMMDD%'`.
+- **KOA's CSV does not escape quotes** in text fields (`object = dome flat:
+  longslit, 120" x 0.7"`), so the census reads KOA as VOTable.
+- **`koaimtyp` is unreliable for MOSFIRE.** On 2022-04-09 the J0841 and
+  LDS749 frames and the five lamp-off dome flats are all `flatlamp`
+  (`FLATSPEC = 1`, as in the headers).
+- KOA has no `FLAMP1`/`FLAMP2`; `flimagin`/`flspectr` are other controls,
+  mostly off or empty. Lamp-on and lamp-off flats therefore cannot be told
+  apart from KOA; the driver checks the headers.
+- The census classes: on-sky = `axestat` tracking or slewing and not a FLAT
+  target; dome flat = not on sky and a FLAT target or KOA flat type; lamp
+  arc = `pwstata7/8 = 1`.
+- Every column the doc lists exists. `propint` is the proprietary period;
+  `pwloca7/8` name the Ne/Ar outlets.
+
+**`scripts/koa/search_mosfire_standards.py`:**
+
+- KOA query: `gratmode = 'spectroscopy'`, J/J2/J3, LONGSLIT% or
+  long2pos%. That gives **12,769 public frames**: on sky 5,301, dome flats
+  6,187, lamp arcs 1,138, other 143.
+- Standards:
+  - **archive:** within 60" of a star in PypeIt's 7 archives (242 stars),
+    giving `WD` (type D*, or a blackbody DC) or `archive` (non-WD CALSPEC
+    stars PypeIt fluxes: HD116405 and HD172728 (A0V), BD+17 4708, HZ44,
+    BD+75 325, P330E);
+  - **A0V:** within 60" of a SIMBAD A0 dwarf with V < 11 (one all-sky
+    query: 25,935 A0 stars, of which 24,803 are dwarfs or unclassified),
+    with 2MASS J from VizieR (5" cone, cached);
+  - **other:** a HIP/HD target that is neither.
+- **The `archive` class is a fourth class** beyond the doc's WD/A0V/other:
+  without it, usable CALSPEC stars would have been lost in "other". The
+  driver treats WD and archive alike.
+- **The match radius is checked.** Separations are bimodal: 0-20" (the
+  long slit) and 45-56" (the off-centre long2pos slits). There are no
+  archive matches beyond 56", and only 4 of 2,576 A0-dwarf frames fall
+  between 60" and 180". PypeIt's 20' tolerance is far too loose for a
+  census.
+- **The unmatched HIP stars are not A0V:** HIP 56736 A1V, HIP 87643
+  kA1hA2mA3, HIP 24311 A2III/IV, HIP 38490 A1V, HIP 49180 F3V; HIP 106329
+  and HIP 24508 have no type.
+- Night = the UT date of (UT + 6 h), 08:00 to 08:00 HST. It keeps
+  afternoon flats with their night (a test checks 23:30 UT → the next
+  date).
+- `slit_length_bars` holds the CSU bar count, as the harvest's
+  `slit_length` does. I first wrote a function that claimed arcsec but
+  returned bars.
+
+**Results** (`keck_etcs/data/mosfire/koa_standards_candidates.ecsv`, one
+row per night × standard × mask × filter; registered in `index.yaml`):
+
+- **594 rows over 372 nights:**
+
+  | Class | Rows | Nights | Stars |
+  |---|---|---|---|
+  | WD | 31 | 26 | 5 (GD71 12, GD153 10, LDS749B 3, HZ4 3, Feige110 3) |
+  | archive | 20 | 18 | 7 |
+  | A0V | 375 | 273 | 102 (V 5.1-10.2; every one has 2MASS J) |
+  | other | 168 | 128 | 81 |
+
+- **Per era and slit class** (all classes; "usable" = WD, archive or A0V
+  with flats):
+
+  | Era | Wide | Narrow | Wide usable | Narrow usable |
+  |---|---|---|---|---|
+  | 2012-04..2016-09 | 24 | 322 | 14 | 155 |
+  | 2017-02..2025-02 | 51 | 192 | 35 | 109 |
+  | 2025-04.. | 3 | 2 | 3 | 1 |
+
+- **Public wide-slit usable standards with flats: 52 rows, 44 nights, 27
+  stars** (WD 10, archive 1, A0V 41), across all three eras. That is above
+  the milestone's ">= 10 standards over >= 2 eras", so the WMKO question
+  is not blocking. The narrow-slit sample (265 usable rows) is for the slit
+  loss.
+- Wide masks: `long2pos_specphot` 38 and its "(align)" variant 13,
+  `LONGSLIT-46x5` 9, 10" slits 2. **long2pos_specphot dominates** (Q&A 3),
+  so S15a's long2pos branch is on the main path.
+- **Matching lamp arcs:** 74 of 372 candidate nights (19.9%) (Q&A 1).
+- 10 nights are from the priority (Hennawi/Yang/Wang) programs.
+- **Check:** 2022-04-09, LDS749B, LONGSLIT-46x5, `wide_slit = True`,
+  MF.20220409.55932 and .56084, 11 flats → **PASS**.
+
+**SAMPMODE census** (`keck_etcs/data/mosfire/koa_sampmode_census.ecsv`;
+168,038 public on-sky spectroscopy frames):
+
+| Mode | Share |
+|---|---|
+| MCDS | **84.21%** (MCDS-16 73.29%, MCDS-4 6.06%, MCDS-8 2.04%, MCDS-1 2.15%) |
+| CDS | **14.79%** |
+| UTR | **0.94%** |
+| Single | 0.06% |
+
+UTR is below "a few percent", so by D13 the ETC does not need UTR.
+
+**`scripts/koa/make_night_manifest.py`:**
+
+- Writes `nautilus/manifests/nights_<batch>.csv`: the 7 design columns plus
+  `std_class`, `jmag_2mass`, `std_ra`, `std_dec` (S15a-3) and **`filter`**,
+  new.
+  - Some nights have the standard in both J and J2, and a pod reduces one
+    band, so `reduce_standard.py`'s `--filter` now defaults to `$FILTER`.
+  - `status_row.py` and `night_failures.py` carry `filter` among their
+    optional columns.
+- One row per night; `standard` without spaces.
+- `check()` parses the manifest as the night job does.
+- **`nights_dryrun.csv`** is regenerated: the first 6 columns are
+  identical, and the optional columns are added (LDS749B, WD, J2).
+- **`nights_pilot.csv`**: 5 nights by fixed rules (Q&A 4). Rule 3 prefers
+  era 2 so that the WD (Feige110, 2024-07-21) and the A0V (HD133772,
+  2017-06-15) share mask, band and era for S15a's comparison; my first rule
+  set picked Feige110 in 2014.
+
+**Tests:** `keck_etcs/tests/test_koa_manifest.py` (4) checks:
+- the candidate table has the dry-run night;
+- the manifests parse;
+- the pilot has 3-5 nights without 2022-04-09, with WD and A0V;
+- the night definition, slit parsing and A0-dwarf rule.
+
+The `night_failures` test is updated. The suite has **100 passed**.
+
+**For prompt 2:** download, per night, the standard's frames, the dome
+flats (same band; LONGSLIT or long2pos to match), and the lamp arcs (always
+for specphot; matching arcs per Q&A 1), from the `koaids` and the night's
+calibrations in the cached KOA table.
+
+**Questions:** Q&A MOSFIRE-1 (lamp arcs), 2 (A1V stars), 3 (the 5" slit
+question is answered by the data), 4 (pilot nights).

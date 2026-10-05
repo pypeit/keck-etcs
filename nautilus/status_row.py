@@ -26,7 +26,7 @@ from keck_etcs import paths
 STATUSES = ('success', 'skipped', 'no calibs', 'setup failed', 'reduce failed', 'no trace',
             'sens failed', 'gate failed', 'push failed', 'pull failed', 'pin check failed')
 MANIFEST_COLS = ('night', 'instrument', 's3_prefix', 'standard', 'slit', 'spec2d', 'notes')
-OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec')
+OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter')
 """Extra night-manifest columns for A0V standards (plan S15a); empty when the manifest lacks them."""
 
 

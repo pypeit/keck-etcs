@@ -31,7 +31,8 @@ def test_sweep_keeps_a0v_columns(tmp_path, monkeypatch):
     out = tmp_path / 'sweep.csv'
     assert nf.main('jobx', out=str(out), no_pull=True) == 0
     rows = list(csv.DictReader(open(out)))
-    assert list(rows[0])[:7] == list(nf.COLS) and set(nf.OPTIONAL_COLS) <= set(rows[0])
+    assert list(rows[0])[:7] == list(nf.COLS) and {'std_class', 'jmag_2mass', 'std_ra', 'std_dec'} <= set(rows[0])
+    assert 'filter' not in rows[0]          # optional columns appear only when some row has a value
     a0v = [r for r in rows if r['night'] == '20150101'][0]
     assert (a0v['std_class'], a0v['jmag_2mass'], a0v['std_ra'], a0v['std_dec']) == ('A0V', '7.1', '10.5', '-3.2')
     wd = [r for r in rows if r['night'] == '20150102'][0]

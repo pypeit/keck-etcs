@@ -62,7 +62,9 @@ The standard (``--std-class``, ``--std-name``, ``--std-ra``, ``--std-dec``,
 ``--jmag``; defaults from the night-manifest columns the night job exports,
 ``STD_CLASS``, ``STANDARD``, ``STD_RA``, ``STD_DEC``, ``JMAG_2MASS``) is
 recorded in ``run_manifest.json`` under ``standard``; the A0V sensfunc
-itself is built by ``build_sensfunc.py``.
+itself is built by ``build_sensfunc.py``. The manifest's optional ``filter``
+column (``$FILTER``) is the default ``--filter``, for nights with the standard
+in more than one band (plan S14).
 
 Paths come from arguments or ``KECK_ETCS_DATA``; nothing is interactive.
 ``--scratch DIR`` uses DIR as the data root for the whole run (raw frames
@@ -613,7 +615,8 @@ if __name__ == '__main__':
                'AWS_PROFILE or AWS_*) and are no-ops when not given. Exit codes: '
                + ', '.join(f'{v} {k}' for k, v in EXIT.items()) + '.')
     parser.add_argument('date', help='Night, YYYYMMDD')
-    parser.add_argument('--filter', help='Filter to reduce (default: the only one present)')
+    parser.add_argument('--filter', default=os.environ.get('FILTER') or None,
+                        help='Filter to reduce (default: $FILTER from the night manifest, else the only one present)')
     parser.add_argument('--par', help='File with the PypeIt parameter block (default: built-in, '
                                       'from the dev-suite J2 template)')
     parser.add_argument('--sens', help='.sens file; run pypeit_sensfunc on each standard')

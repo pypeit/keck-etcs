@@ -10,7 +10,7 @@ Pulls ``runs/<JOB_NAME>/status/`` from the bucket (``s3_sync.py``; skip with
 ``$KECK_ETCS_DATA/runs/<JOB_NAME>/status.ecsv``, and writes the nights whose
 status is neither ``success`` nor ``skipped`` to a night manifest (columns
 ``night, instrument, s3_prefix, standard, slit, spec2d, notes``, plus the
-optional A0V columns ``std_class, jmag_2mass, std_ra, std_dec`` when any status
+optional columns ``std_class, jmag_2mass, std_ra, std_dec, filter`` when any status
 row carries them, so a swept A0V night keeps its standard; plan S15a/S15b)
 ready to be the ConfigMap of a sweep job.
 
@@ -33,7 +33,7 @@ from keck_etcs import paths
 REPO = Path(__file__).resolve().parents[1]
 DATA_REASONS = {'no calibs', 'no trace'}
 COLS = ('night', 'instrument', 's3_prefix', 'standard', 'slit', 'spec2d', 'notes')
-OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec')   # nautilus/status_row.py
+OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter')   # nautilus/status_row.py
 
 
 def cell(r, c):
