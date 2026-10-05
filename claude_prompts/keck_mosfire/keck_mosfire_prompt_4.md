@@ -125,6 +125,47 @@ part 3's regression fixtures against the real throughput (see prompt 1).
 
 ## Q&A
 
+### S12 (2026-10-05)
+
+1. **Can you confirm XTcalc's band-median quirk by running XTcalc itself?**
+   The context:
+   - Reading `XTcalc.pro`, its magnitude-mode "median S/N" uses
+     `filt_index`, which is computed on the full 3072-pixel grid but applied
+     to the 1650-pixel band arrays.
+   - IDL clips the 729 out-of-range subscripts to the last (red-edge)
+     pixel, so the reported value is about the 28th percentile of the
+     band's S/N.
+   - My Python port reproduces the manual's K-band line example (8.85
+     against 9.1). That example is line mode, which the quirk does not
+     touch, so the magnitude mode is unverified.
+
+   One run of the IDL program (the IDL Virtual Machine, `run_XTcalc.sav`)
+   would settle it. In the GUI, choose J band, slit 0.7", angular extent
+   0.7", 4 exposures, 16 Fowler reads, "Use Magnitude" with 20.0 AB and
+   Flat F_nu, "Determine Signal to Noise" with total time 480 s, and the
+   default airmass and water vapour.
+
+   The port predicts **S/N = 4.44** with the quirk, or 7.39 without it.
+   *Default:* if you cannot run it, Appendix A keeps the quirk as "inferred
+   from the source, not confirmed by running IDL".
+
+2. **Default `sky_scale`, given S11 and S12.** The numbers so far:
+   - The sky model is the largest single input difference between the two
+     calculators (step 6 of Appendix A: x1.09-1.45 in S/N).
+   - On 2022-04-09 the measured sky is 0.86x Gemini in the OH lines and
+     1.15-1.33x between them (design 6.1.1).
+   - XTcalc's 2012 sky is 2.7x Gemini between the lines.
+
+   The options:
+   - (a) keep 1.0 until the part-5 sky-limited nights;
+   - (b) adopt about 1.2 now, a continuum compromise, with a warning that
+     the lines are overestimated;
+   - (c) add separate `sky_scale_lines` and `sky_scale_continuum` to the
+     schema (a design change, D14).
+
+   *Default:* (a), with (c) proposed to you after S16 if the
+   continuum-to-line ratio holds over many nights.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -250,3 +291,230 @@ entry describing the curve and the replacement of the provisional one.
    extrapolation until a J-filter standard is reduced (part 5). For J
    targets this matters more than any other open item.
 5. Deleting, rather than archiving, the provisional product.
+
+### 2026-10-05 (Prompt #2 / S11: validation against J0841+3814 — PASS: ETC/measured 0.996 band, 1.003 between OH lines)
+
+**Inputs:**
+
+- The in-pod products of image 0.1.6 (`sha256:0c5e88fd…`), already in the
+  mirror from S6b's `s3_sync.py pull mosfire/20220409 --force --include
+  'redux/*' …`. That pull includes all six `spec2d_*`, so no new pull was
+  needed.
+- `run_manifest.json`: `pypeit_git_sha` = `pypeit_pin` = 8017f47.
+  `scripts/check_pypeit_pin.py`: PASS.
+- **The target is J0841+3814_OFF, the bright blind-offset star** (J2 =
+  15.9 AB intrinsic; S/N 51 per pixel in one frame), not the faint quasar
+  the prompt anticipated.
+- PypeIt paired the frames A–B (`bkg_id` 36↔37, 38↔39), so each spec1d is
+  a difference frame, which matches the ETC's ABBA variance.
+
+**`scripts/mosfire/validate_j0841.py`** (outputs in
+`<night>/validation/`, never in `redux/`):
+
+- **(a)** Copies the four spec1d to `validation/work/`, fluxes them
+  (`pypeit_flux_calib`, a flux file with the LDS749B sensfunc) and coadds
+  them (`pypeit_coadd_1dspec`) → `J0841_coadd_20220409.fits`.
+- **(b)** Measured quantities:
+  - S/N per frame = `OPT_FLAM*sqrt(OPT_FLAM_IVAR)`;
+  - 4-frame S/N from the coadd (its grid is 1.3027 A against the native
+    1.2922, so it is rescaled by sqrt(dlam ratio)) and as sqrt(sum of the
+    frames' S/N^2), which agree to 0.7%;
+  - FWHM = median `FWHMFIT` over the band, x 0.1798: 4.98, 5.04, 5.63,
+    5.55 px → 0.952";
+  - **the sky from the raw frames**: flat-fielded e-/s per (spatial pix,
+    spectral pix), the objects masked (±3 FWHM), the central half of the
+    slit, each column resampled with its own `waveimg`, the median of 1017
+    columns and of the 4 frames. That is the ETC's b(lam).
+  - PypeIt's `OPT_COUNTS_SKY` is the profile-weighted sky (from
+    `extract_optimal`: the per-pixel sky x N_eff = 1/sum P^2), so it is not
+    a sky level and was not used for D14.
+- **(c)** The ETC input:
+  - the coadd / the ETC's own convolved T_atm (masked below 0.3) / the model
+    slit fraction (0.678 at 0.952"), with a 51-px running median;
+  - `source.mag` = its own J2 AB magnitude, 15.933;
+  - the tellurics, slit loss and normalization all cancel inside `compute`,
+    so the signal is a closure and the test is the noise model, as design
+    6.1 intends;
+  - other inputs: 1" slit, FWHM 0.952", exptime 149.84 s (TRUITIME, not
+    the nominal 150), 4 frames, MCDS-16, ABBA, airmass 1.076 (the mean of
+    the four), PWV 1.616 mm (the standard's telluric fit, 9 h later),
+    date 2022-04-09.
+- **(d)** Writes `validation_j0841_bins.ecsv` (50 A bins: S/N measured,
+  frames and ETC, ratios overall and between lines, sky measured and ETC,
+  sky ratios, counts), `validation_j0841_summary.json` and
+  `validation_j0841.png` (S/N, ratio, sky). Each carries the image, digest,
+  PypeIt SHA, pin, keck-etcs SHA, sensfunc sha256, spec1d names, coadd
+  sha256, keck_etcs version, `calib_version` and era.
+
+**Results:**
+
+- S/N per pixel, 1.117-1.260 um: measured 81.92 (coadd; 82.52 from the
+  frames in quadrature), ETC 82.03.
+- **ETC/measured: band 0.996, between OH lines 1.003. Both pass** (20% and
+  10%).
+  - Against the frames in quadrature: 0.991.
+  - Per frame: 0.937, 0.950, 1.037, 1.056. The ETC used the median FWHM,
+    and frames 0038/0039 had 5.6 px seeing.
+  - Every 50 A bin is within ±10% except the telluric blue edge (0.908 at
+    11170 A).
+- Signal closure, counts in the slit ETC/measured: 0.999.
+- **D14 sky:**
+  - measured / (Gemini x T_sys): **0.859 in OH lines** (the S6b monitor
+    gave 0.91); **1.332 between them**;
+  - the between-line value is contaminated by OH wings: the cleanest bins
+    (11370, 11720, 11820 A) give 1.14-1.19, and bins beside bright lines
+    give 1.5-2.3 (the real LSF wings exceed the Gaussian model);
+  - dark (0.008) is negligible against the 0.1-0.5 e-/s/pix excess, and
+    MCDS has no bias pedestal;
+  - with `sky_scale` = 1.33 the ratios become 0.968 and 0.978.
+- **N5 (second test):** OH centroids measured − Gemini = **−0.070 A** (MAD
+  0.098, 26 isolated lines), 0.05 px. The grid is vacuum-consistent.
+- **D16:** scanning `length_fwhm` 0.6-3.0, the band ratio goes from 0.75
+  to 1.01; the best value is 2.22. Within 1% for 1.48-2.44, within 2% for
+  1.32-2.64. The default 1.5 gives 0.996.
+- **Noise budget** (`scripts/mosfire/validation_noise_budget.py`):
+  - between lines, this star's variance is 70% source, 16% sky, 13% read
+    noise and 0.5% dark. **So the sky level and aperture are only weakly
+    tested here.**
+  - At J2 = 17.9/19.9/21.9 AB the sky share is 39/51/53%. A x1.33
+    continuum would lower the S/N by 6/7.5/8%, and length_fwhm 2.22 changes
+    it by 6/8/9%.
+
+**Recorded** in `keck_etcs/instruments/mosfire.py`, with provenance:
+
+- `VALIDATION_J0841` (all the numbers above);
+- `SKY_SCALE_DEFAULT = 1.0`;
+- `APERTURE_LENGTH_FWHM_DEFAULT = 1.5`.
+
+**The schema defaults are unchanged**:
+
+- One night gives lines x0.86 and continuum x1.15-1.33, which no single
+  `sky_scale` reconciles.
+- The bright star does not fix the aperture.
+- The part-5 sky-limited quasar nights should decide both.
+- `test_instruments.py` now checks that the recorded defaults equal the
+  schema's and that 1.5 lies in the allowed aperture range.
+
+**Docs:** design 6.1.1 "Results, 2022-04-09" (table and reading) is new;
+section 8's sky-model item gets the S11 result, and an effective-aperture
+item is added.
+
+**Tests:**
+
+- `keck_etcs/tests/test_validation_j0841.py`, three tests: the D18
+  criterion; signal closure ±2% and N5 < 0.5 A; validation against the
+  in-pod products (image, digest, pin).
+- They are marked `slow`, skipped without `KECK_ETCS_DATA`, and excluded
+  by default (`pytest.ini`: `addopts = -ra -m "not slow"`, marker
+  registered).
+- The run command is `KECK_ETCS_DATA=… pytest -m slow --run-slow`. The
+  installed pytest-astropy plugin owns a `--run-slow` switch, and without
+  it the tests were skipped. Result: **3 passed** (7 s, reusing the coadd).
+- Default suite: 88 passed, 3 deselected.
+
+**For review:**
+
+1. Keep `sky_scale` = 1.0 for now, or adopt 0.86 (lines) or 1.2-1.3
+   (continuum), or add separate line/continuum scales to the schema
+   (a design change)?
+2. The slow-test convention: `-m "not slow"` by default plus
+   pytest-astropy's `--run-slow`.
+3. The validation target is the offset star. For a sky-limited test,
+   include the quasar itself if it was extracted on other nights (it was
+   not detected here: one object per frame).
+
+**Learned:**
+
+- MOSFIRE spec1d `OPT_COUNTS_SKY` is the profile-weighted sky (x N_eff).
+- `pypeit_coadd_1dspec` resampled to 1.3027 A/pix.
+- pytest-astropy, installed in `pypeit14b`, skips `slow` tests unless given
+  `--run-slow`.
+- `conda run` does not forward stdin; inline Python must be written to a
+  file.
+
+### 2026-10-05 (Prompt #3 / S12: XTcalc comparison — port reproduces the manual's example to 3%; every difference attributed)
+
+**`scripts/mosfire/compare_xtcalc.py`** (a script, not a CI test; about 4 s;
+outputs `xtcalc_comparison.ecsv` and `xtcalc_attribution.ecsv` in
+`$KECK_ETCS_DATA/external/xtcalc/comparison/`, with meta):
+
+- A line-by-line Python port of XTcalc v2.3 on its own files (filter,
+  `<band>eff.sm.dat` x KMRef^2, the `<band>sky_cal_pA` 2012 sky,
+  `mktrans_zm_16_10`).
+  - `mosfire_resolution` is reproduced: a 1 km/s velocity grid; IDL
+    `interpol`, i.e. linear with linear extrapolation; a Gaussian of c/R;
+    IDL `convol` edges set to 0; a 3072-pixel grid centred on the band.
+  - The band is where the convolved filter exceeds 0.1. Line and magnitude
+    modes are both ported, with XTcalc's constants (75 m^2, 0.18"/pix,
+    15/sqrt(N) e-, dark 0.005, zp 48.59, J 1.31 / K 2.10 A/pix, R = rt x
+    0.7 / slit) and the two-point dither.
+- **Manual check.** `MOSFIRE_XTcalc.pdf` has no magnitude-mode example in
+  its text. Its worked example is the Figure 1 GUI screenshot, a **line**
+  case:
+  - inputs (read at 300 dpi; the source FWHM is 30 km/s, not 90 as it first
+    looked at low resolution, and the dark and RN values confirm it): K,
+    0.7"/0.7", 1 exposure, 16 reads, 9e-18 at 6563 A, z = 2.3, 1000 s;
+  - the port gives **S/N 8.85 against 9.1 (0.972) — within 10%, PASS**;
+  - dark 58.92 and RN 12.87 are exact; signal 0.955, sky 0.963,
+    throughput 0.989;
+  - the GUI is v1.8 beta, from before the 2012-06-26 switch to the measured
+    throughput and sky in the v2.3 files.
+- **XTcalc magnitude-mode quirk** (found by reading the source):
+  - `sn_index = filt_index = NONzero_index` is computed on the full grid
+    (2379 indices, 1.049-1.360 um, since the extrapolated sky stays
+    positive), but subscripts the band-cut arrays (1650 px). There is no
+    `compile_opt strictarrsubs`, and IDL clips 729 (31%) of them to the
+    red-edge pixel;
+  - the "median" is therefore about the 28th percentile. At J = 20, 0.7",
+    XTcalc displays 4.44, against a true band median of 7.39. The 7.39
+    matches S9's independent hand calculation, which took the plain median;
+  - not confirmed by running IDL: **Q&A item 1** asks you to run it once.
+- **Table** (J 17-23 AB, 0.7" and 1.0", 4 x 120 s MCDS-16 ABBA, 0.7"
+  seeing; XTcalc theta 0.7" at airmass 1; ours at airmass 1.2, PWV 1.6, the
+  2017-02..2025-02 curve): keck_etcs / XTcalc-as-coded = 0.89-1.01 (0.7")
+  and 1.07-1.27 (1.0"); keck_etcs / XTcalc's true median = 0.58-0.77.
+- **Attribution** (cumulative swaps on one S/N engine; XTcalc's noise
+  formula equals ours):
+  - the quirk x1.34-1.74;
+  - area and zp x0.97;
+  - throughput x1.00-1.03;
+  - atmosphere grid x1.000 (same Gemini source);
+  - airmass 1.0→1.2 x0.99-1.00;
+  - **sky model (2012 MOSFIRE → Gemini) x1.09-1.45**;
+  - RN 3.75→5.8 and dark x0.84-0.97;
+  - extraction 3.89→6 pixels x0.81-0.94;
+  - **slit loss x0.56-0.76**;
+  - sampling (dispersion, LSF, window) x1.04-1.12;
+  - `compute` against the engine: x1.000. The chain closes to <0.1%.
+- Every cause on the prompt's list is quantified (throughput era, RN 3.75
+  against 5.8, slit loss, sky model, area 72.4 against 75), plus three it
+  did not name: XTcalc's quirk, the extraction pixels and the sampling.
+
+**Docs:**
+
+- `docs/keck_mosfire_design.md` **Appendix A** (new): the manual check, the
+  quirk, the table, the attribution and a reading.
+  - XTcalc's quirk (x0.6) offsets most of what it omits or underestimates
+    (slit loss, read noise, aperture), so the two calculators agree to
+    0.89-1.27 largely by accident.
+  - The sky model is the largest disagreement between the inputs, which
+    feeds the `sky_scale` question.
+- **Q&A** (S12) added: (1) run XTcalc once to confirm the quirk; (2) the
+  default `sky_scale` options, with my default of keeping 1.0 until the
+  part-5 nights.
+
+**Notes:**
+
+- `scripts/mosfire/xtcalc_hand_snr.py` (S9) is kept. Its plain-median value
+  (7.39) agrees with the port's quirk-free median (7.392), an independent
+  cross-check, but the port supersedes it.
+- XTcalc's reported S/N for faint sources is set by the low-S/N red-edge
+  pixel, so published XTcalc numbers are likely pessimistic by about 40%
+  in J magnitude mode. Worth telling WMKO if it is confirmed.
+
+**Learned:**
+
+- XTcalc ships its manual as `XTcalc_dir/MOSFIRE_XTcalc.pdf`;
+  `docs/MOSFIRE_XTcalc.pdf` in this repo does not exist (the context line
+  is stale).
+- `pdftotext` is on the workstation; `pypdf` is not in `pypeit14b`.

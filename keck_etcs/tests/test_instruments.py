@@ -120,3 +120,13 @@ def test_instruments_import_without_pypeit():
             "print(','.join(m for m in ('pypeit', 'boto3') if m in sys.modules))\n")
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == ''
+
+
+def test_recorded_defaults_match_the_schema():
+    from keck_etcs import schema
+    from keck_etcs.instruments import mosfire
+    props = schema.load('etc_input')['properties']
+    assert props['sky_scale']['default'] == mosfire.SKY_SCALE_DEFAULT
+    assert props['aperture']['properties']['length_fwhm']['default'] == mosfire.APERTURE_LENGTH_FWHM_DEFAULT
+    lo, hi = mosfire.VALIDATION_J0841['aperture_length_fwhm']['within_1pct']
+    assert lo <= mosfire.APERTURE_LENGTH_FWHM_DEFAULT <= hi

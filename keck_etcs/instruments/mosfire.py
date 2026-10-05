@@ -56,6 +56,33 @@ LSF_FLOOR_PIX = 2.2
 MOFFAT_BETA = 3.5
 """Moffat index for slit loss (D26)."""
 
+# S11 validation (design 6.1, D14, D16, D18): J0841+3814_OFF on 2022-04-09, four
+# 149.8 s ABBA MCDS-16 frames through the 1" slit, against the in-pod products of
+# image keck-etcs:0.1.6 (sha256:0c5e88fd838e...), PypeIt pin 8017f47, with the
+# 2017-02..2025-02 throughput (mosfire-J-2026.10-dev). scripts/mosfire/validate_j0841.py,
+# output <night>/validation/validation_j0841_{bins.ecsv,summary.json,png}.
+# The source is bright (J2 = 15.9 AB intrinsic; source 70% of the interline variance),
+# so the sky and aperture terms are only weakly constrained by this night.
+VALIDATION_J0841 = {
+    'snr_ratio_etc_over_measured': {'band_1117_1260': 0.996, 'between_oh_lines': 1.003},   # D18: PASS 20% / 10%
+    'signal_ratio_etc_over_measured': 0.999,
+    'sky_measured_over_gemini': {'oh_lines': 0.859, 'between_lines': 1.332,
+                                 'cleanest_50A_bins': (1.14, 1.19)},     # D14; 'between' includes OH-line wings
+    'n5_oh_centroid_offset_A': -0.070,                                  # measured - Gemini, MAD 0.098, 26 lines
+    'aperture_length_fwhm': {'best': 2.22, 'within_1pct': (1.48, 2.44), 'within_2pct': (1.32, 2.64)},   # D16
+}
+
+SKY_SCALE_DEFAULT = 1.0
+"""D14 default ``sky_scale``: kept at 1.0. One night gives OH lines x0.86 and the
+continuum between them x1.15-1.33 relative to Gemini, so a single scale cannot match
+both; the choice (and whether to scale lines and continuum separately) waits for the
+part-5 nights. At J2 = 20-22 AB a x1.33 continuum would lower the S/N by ~8%."""
+
+APERTURE_LENGTH_FWHM_DEFAULT = 1.5
+"""D16 extraction length in FWHM: the schema default 1.5 lies inside the range the
+validation allows (1.48-2.44 for a band ratio within 1%; best fit 2.22)."""
+
+
 # Calibration monitor (design 4.9.6, D40-D47). Moved verbatim from
 # keck_etcs/calib/monitor_configs.py in S8, which re-exports it; the rows
 # must not change.

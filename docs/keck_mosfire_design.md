@@ -1081,6 +1081,68 @@ commit touching only `keck_etcs/data/` and `CHANGES.md`.
 The fluxed spectrum is the input and the noise is the output, so the test is
 not circular. Later, every KOA quasar night adds a validation point.
 
+#### 6.1.1 Results, 2022-04-09 (plan S11, 2026-10-05)
+
+**Setup.**
+
+- Script: `scripts/mosfire/validate_j0841.py`. Outputs in
+  `$KECK_ETCS_DATA/mosfire/20220409/validation/`: a 50 A bin table, a
+  summary JSON and a figure, each with the provenance below.
+- Products: the in-pod reduction, image `keck-etcs:0.1.6`
+  (`sha256:0c5e88fd838e…`), PypeIt pin `8017f47` (equal to the
+  `run_manifest.json` SHA); sensfunc `sens_LDS749B_20220409.fits`.
+- ETC: keck_etcs 0.1.6, throughput `mosfire_thru_2017-2025.ecsv`
+  (`mosfire-J-2026.10-dev`).
+- The target is **J0841+3814_OFF**, the bright blind-offset star (J2 = 15.9 AB
+  intrinsic), not the quasar.
+- Steps:
+  - the four spec1d were copied, fluxed with `pypeit_flux_calib` and
+    coadded with `pypeit_coadd_1dspec`;
+  - the ETC input is the coadd divided by the ETC's own LSF-convolved T_atm
+    and by the model slit fraction (0.678 at the measured 0.95"), smoothed
+    over 51 pixels;
+  - other inputs: J2, 1" slit, 4 x 149.8 s ABBA MCDS-16, airmass 1.076,
+    PWV 1.62 mm (the standard's telluric fit), `throughput.date =
+    2022-04-09`, default `sky_scale` and aperture.
+- "Between OH lines" means pixels where the model sky is <= 1.25 x its
+  median.
+
+| Quantity | Value |
+|----------|-------|
+| Median S/N per pixel, 4 frames, 1.117-1.260 um | measured 81.9 (coadd); ETC 82.0 |
+| ETC / measured S/N, band | **0.996** (criterion 20 percent: pass) |
+| ETC / measured S/N, between OH lines | **1.003** (criterion 10 percent: pass) |
+| ETC / measured S/N, per frame | 0.94, 0.95, 1.04, 1.06 (the ETC used the median FWHM; the frames span 4.98-5.63 px) |
+| Signal in the slit, ETC / measured counts | 0.999 (closure: same standard, same throughput) |
+| Sky, measured / Gemini x T_sys, in OH lines (D14) | 0.86 (the S6b monitor gave 0.91) |
+| Sky, measured / Gemini x T_sys, between OH lines (D14) | 1.33 overall; 1.14-1.19 in the cleanest 50 A bins, up to 2.3 next to bright lines (OH wings beyond the Gaussian LSF) |
+| OH centroids, measured - Gemini (N5, second test) | -0.07 A (MAD 0.10, 26 lines) |
+| Effective aperture (D16) | `length_fwhm` 1.5 gives 0.996; best 2.22; within 1 percent for 1.48-2.44, within 2 percent for 1.32-2.64 |
+
+**Reading.**
+
+- The ETC reproduces PypeIt's S/N to better than 1 percent in the median,
+  and within ±10 percent in every 50 A bin except the telluric-dominated
+  blue edge (0.91 at 11170 A).
+- The star is bright: between OH lines the source is 70 percent of the
+  variance, the sky 16 percent and read noise 13 percent
+  (`scripts/mosfire/validation_noise_budget.py`). This night therefore
+  confirms the signal chain and the noise bookkeeping (ABBA doubling, read
+  noise, optimal extraction against a 1.5-FWHM aperture), but constrains the
+  sky level and the aperture only weakly.
+- Applying the measured continuum (x1.33) would change this case by 2.6
+  percent, but faint sources by about 8 percent (J2 = 20-22 AB).
+- **Recorded, not adopted:**
+  - `keck_etcs/instruments/mosfire.py` holds these numbers
+    (`VALIDATION_J0841`, `SKY_SCALE_DEFAULT = 1.0`,
+    `APERTURE_LENGTH_FWHM_DEFAULT = 1.5`) with provenance;
+  - the schema defaults are unchanged. One night cannot set a sky scale
+    when the lines (x0.86) and the continuum (x1.15-1.33) disagree;
+  - the part-5 quasar nights, which are sky-limited, decide `sky_scale`
+    and whether the lines and the continuum need separate scales;
+  - N5 holds: the Gemini grid is consistent with vacuum to 0.1 A
+    (0.05 px).
+
 ### 6.2 Tests (pytest, `keck_etcs/tests/`)
 
 - Unit tests with analytic cases: Poisson-only limit (`SNR = sqrt(S)` when
@@ -1137,6 +1199,15 @@ not circular. Later, every KOA quasar night adds a validation point.
   night, not only 2022-04-09. *First value (S6b, 2026-10-04):* measured /
   Gemini = 0.91 for the summed monitor-line windows on the dark 1" J0841
   frames of 2022-04-09 (per line 0.81-1.20), so no change from 1 yet.
+  *S11 (2026-10-05, section 6.1.1):* the full sky from the raw frames gives
+  x0.86 in the OH lines but x1.15-1.33 between them. A single `sky_scale`
+  cannot match both, so the default stays 1.0. The sky-limited part-5
+  nights decide the default, and whether the ETC needs separate line and
+  continuum scales (a schema change).
+- **Effective extraction aperture (D16), S11:** the default 1.5 x FWHM
+  reproduces PypeIt's optimal-extraction S/N (0.996). The bright validation
+  star allows 1.48-2.44 within 1 percent, so a sky-limited night must fix
+  it.
 - **1" against 5" OH slit normalisation (S6b):** not testable on
   2022-04-09, because its 5" standard frames are in nautical twilight
   (`flag = twilight`). Re-run `scripts/mosfire/verify_monitor.py` check 6 on
@@ -1231,3 +1302,90 @@ by the user, each tied to the plan step that checks it:
   `kube_dev_suite.yaml`, `README_s3`, `s3_pypeit_policy.json`); PypeIt's
   `pypeit/pkg/cache.py`, `pypeit/data/s3_url.txt` and the
   `pypeit_install_telluric` / `pypeit_cache_github_data` scripts.
+
+## Appendix A. XTcalc comparison (plan S12, 2026-10-05)
+
+`scripts/mosfire/compare_xtcalc.py` ports XTcalc v2.3 (`XTcalc.pro`)
+line by line and runs it on XTcalc's own files: filter, efficiency x
+KMRef^2, the May 2012 MOSFIRE sky, and Gemini `mktrans_zm_16_10`. It
+writes `xtcalc_comparison.ecsv` and `xtcalc_attribution.ecsv` to
+`$KECK_ETCS_DATA/external/xtcalc/comparison/`. This is a sanity check, not
+a target (project rule) and not a CI test.
+
+**Check against the manual.** The worked example of `MOSFIRE_XTcalc.pdf`
+(Figure 1, the GUI v1.8 beta) is a line-flux case:
+
+- inputs: K, 0.7" slit, theta 0.7", 1 x 1000 s, 16 reads, 9e-18
+  erg/s/cm^2 at 6563 A, z = 2.3, 30 km/s;
+- the port gives S/N 8.85 per FWHM against the manual's 9.1 (0.972; within
+  10 percent);
+- dark (58.92 e-) and read noise (12.87 e-) agree exactly; signal and sky
+  are about 4 percent lower;
+- the manual's GUI predates XTcalc's 2012-06-26 switch to the measured
+  throughput and sky, which the v2.3 files hold.
+
+**An XTcalc quirk.** In magnitude mode XTcalc reports the median S/N over
+`filt_index`, which is computed on its full 3072-pixel grid but applied to
+the band-cut arrays (1650 pixels in J).
+
+- IDL clips out-of-range subscripts, and `XTcalc.pro` has no
+  `compile_opt strictarrsubs`, so 729 of 2379 indices (31 percent) repeat
+  the band's red-edge pixel.
+- The reported "median" is then about the 28th percentile of the band's
+  S/N: 0.57-0.75 of the true median in this case.
+- This is inferred from the source; it has not been confirmed by running
+  IDL.
+
+**Table.** Flat f_nu in J, 4 x 120 s MCDS-16 ABBA (XTcalc's two-point
+dither), seeing 0.7". XTcalc mode as coded uses theta 0.7" and airmass 1.0;
+keck_etcs uses airmass 1.2, PWV 1.6, the 2017-02..2025-02 throughput and
+the default 1.5-FWHM aperture. Values are the median S/N per pixel.
+
+| J (AB) | 0.7": XTcalc | 0.7": XTcalc, true median | 0.7": keck_etcs | 0.7": ratio | 1.0": XTcalc | 1.0": XTcalc, true median | 1.0": keck_etcs | 1.0": ratio |
+|---|---|---|---|---|---|---|---|---|
+| 17 | 53.79 | 71.92 | 47.92 | 0.891 | 47.53 | 66.11 | 50.73 | 1.067 |
+| 18 | 24.95 | 36.83 | 23.42 | 0.939 | 21.33 | 32.32 | 24.58 | 1.153 |
+| 19 | 10.76 | 17.12 | 10.41 | 0.968 | 8.93 | 14.53 | 10.85 | 1.215 |
+| 20 | 4.437 | 7.392 | 4.381 | 0.987 | 3.621 | 6.119 | 4.530 | 1.251 |
+| 21 | 1.784 | 3.060 | 1.785 | 1.000 | 1.453 | 2.488 | 1.843 | 1.268 |
+| 22 | 0.714 | 1.240 | 0.718 | 1.005 | 0.583 | 1.000 | 0.740 | 1.269 |
+| 23 | 0.285 | 0.497 | 0.287 | 1.005 | 0.232 | 0.400 | 0.295 | 1.271 |
+
+**Attribution.** Each step swaps one ingredient, cumulatively, on the same
+S/N engine. XTcalc's noise formula is ours: S T + k (B T + n D T + n RN^2
+N_exp). The factor is the S/N ratio of a step to the one before. Ranges
+are given at J = 17 / 20 / 23 for the 0.7" slit (1.0" in brackets).
+
+| Step | Cause | Factor, 0.7" (1.0") |
+|---|---|---|
+| 1 | XTcalc band-median quirk removed | 1.34 / 1.67 / 1.74 (1.39 / 1.69 / 1.72) |
+| 2 | Area 75 -> 72.37 m^2 (N1), AB zero point 48.59 -> 48.6 | 0.976 / 0.971 / 0.970 |
+| 3 | Throughput: XTcalc 2012 (`Jeff.sm` x 0.89^2) -> our 2017-02..2025-02 curve x Keck J filter | 1.007 / 1.027 / 1.022 (1.003 / 1.011 / 1.017) |
+| 4 | Atmosphere: XTcalc's `mktrans_zm_16_10` -> our grid at airmass 1.0 (same Gemini source) | 1.000 |
+| 5 | Airmass 1.0 -> 1.2 | 0.997 / 0.993 / 0.996 |
+| 6 | Sky: MOSFIRE 2012 measured -> Gemini model (interline continuum 2.7x fainter) | 1.088 / 1.357 / 1.451 (1.101 / 1.309 / 1.369) |
+| 7 | Read noise 15/sqrt(16) = 3.75 -> 5.8 e- (Keck table), dark 0.005 -> 0.008 | 0.968 / 0.869 / 0.836 (0.970 / 0.907 / 0.891) |
+| 8 | Extraction pixels: theta/0.18" = 3.89 -> ceil(1.5 FWHM / 0.1798") = 6 | 0.937 / 0.830 / 0.807 (0.925 / 0.825 / 0.807) |
+| 9 | Slit x aperture loss: none -> Moffat 0.561 (0.682) | 0.665 / 0.577 / 0.562 (0.755 / 0.690 / 0.682) |
+| 10 | Sampling: 1.31 A, XTcalc's velocity LSF (R = 3310 or 2317), its filter > 0.1 band -> 1.2922 A, our LSF (measured at 1"), the J half-power window | 1.037 / 1.060 / 1.061 (1.056 / 1.114 / 1.122) |
+| 11 | `compute` against the step-10 engine (it convolves N0 T_atm T_sys as a product) | 1.000 |
+
+**Reading.**
+
+- The two calculators agree to within 0.89-1.27 in this case. That
+  agreement is largely an accident: XTcalc's quirk (x0.6) offsets three
+  effects it omits or underestimates, namely slit loss (x0.56-0.76), the
+  measured read noise (x0.84-0.97) and a realistic extraction aperture
+  (x0.81-0.94).
+- Against XTcalc's true band median, keck_etcs is 0.58-0.77 of XTcalc.
+- The largest disagreement between the inputs is the sky.
+  - XTcalc's 2012 MOSFIRE-measured sky has an interline continuum 2.7x the
+    Gemini model's.
+  - Section 6.1.1 measured 1.15-1.33x Gemini between the lines on
+    2022-04-09, between the two.
+  - So at faint magnitudes the choice of `sky_scale` (section 8) moves the
+    S/N by tens of percent.
+- The throughput (our one standard against XTcalc's 2012 curve), the
+  atmosphere and the collecting area each contribute 3 percent or less.
+- Every step of the chain is a known cause, and the chain closes on
+  `compute` to better than 0.1 percent.
