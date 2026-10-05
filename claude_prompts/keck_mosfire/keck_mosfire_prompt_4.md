@@ -544,3 +544,75 @@ outputs `xtcalc_comparison.ecsv` and `xtcalc_attribution.ecsv` in
   is about 40% below its own band median. It reports roughly the 28th
   percentile, weighted toward the red-edge pixel by the `filt_index`
   subscript clipping in `XTcalc.pro`.
+
+### 2026-10-05 (Prompt #4: report on the XTcalc bug, docs/XTcalc_bug.md)
+
+**Report:** `docs/XTcalc_bug.md`, written to be shared. It has a summary,
+the program identification (tarball and `XTcalc.pro` sha256s), the code
+with line numbers, the mechanism, the confirmation, the size of the effect
+in tables and two figures, what is not affected, a one-line fix, caveats
+and reproduction commands.
+
+**Script:** `scripts/mosfire/xtcalc_bug_report.py` computes every number
+in the report and writes `docs/figures/xtcalc_bug_J20.png` and
+`docs/figures/xtcalc_bug_ratio.png`. For each band it evaluates XTcalc's
+magnitude mode per pixel and takes the median as coded and as intended
+(band pixels with non-zero sky, the intent in XTcalc's own changelog,
+item 6).
+
+**Findings beyond S12:**
+
+- The same index drives:
+  - exposure-time mode (line 709): for S/N 10 at J = 20 the times are
+    2343 s as coded against 824 s, x2.84 (Y x1.97, H x1.11, K x0.90);
+  - the signal, background and noise medians (lines 792-801);
+  - the reported mean throughput (line 754): J 0.178 against 0.238.
+- "Max e- per pixel" (line 757) is unaffected in the tested
+  configurations, because the brightest OH pixel is selected either way.
+- The bug acts in every band, but differently:
+  - Y and J overflow 33% and 31% of their indices onto the red-edge pixel
+    (ratios 0.66-0.80 and 0.57-0.75 over 17-23 AB);
+  - H overflows 13% and its indices start 459 band pixels late (0.93-0.95);
+  - K has no overflow, but its indices are offset by 126 pixels (1.05,
+    optimistic).
+- Not affected: line mode (`line_index` lives on the band grid) and the
+  spectra written to file. The plots index wavelength and value
+  consistently, so each point is right, but they cover only the selected
+  subset.
+- I first wrote that the plots were unaffected, then checked:
+  `plot_index_ptr` and `filt_index` feed the plots. I corrected the report.
+- The proposed fix is `filt_index=where(raw_bkSpecObs gt 0)` after line
+  483. The port then returns 7.41 for the J test case.
+
+**Port fix:** `compare_xtcalc.interpol` now accepts descending abscissae, as
+IDL's `interpol` does. XTcalc's H and K filter files run red to blue, and
+`np.interp` had silently mishandled them, which gave an empty H band. The K
+line example (8.85) and every J number are unchanged. The Y and H constants
+from `XTcalc.pro` were added.
+
+**Version correction:**
+
+- The manual (PDF dated 2012-06-29) and the GUI title (`run_XTcalc.pro`)
+  both say **v2.0**. The Keck page gives no version.
+- The "v2.3" in earlier docs had no source. I corrected it in design 9
+  (references), Appendix A, `docs/XTcalc_HOWTO.md`, `compare_xtcalc.py`,
+  `xtcalc_bug_report.py` and `xtcalc_hand_snr.py`; the report identifies
+  the program by the tarball sha256.
+- Not changed: the committed sky-grid FITS header (`SOURCE … XTcalc v2.3`),
+  the matching string in `build_gemini_sky_grid.py` and design 5.4's
+  description of that header. Editing them would make them disagree with
+  the shipped file; fix them at the next grid rebuild. The earlier log
+  entries keep "v2.3" as written.
+
+**Figures:** matplotlib PNGs following the dataviz guidance (the reference
+palette's slots 1-4 in fixed order on its light surface, ink-colored text,
+recessive axes, one axis per panel, every series direct-labeled and in the
+legend). The palette validator needs `node`, which is not installed on the
+workstation, so it was not run; these slots are the reference palette's
+validated set, and identity never relies on color alone.
+
+**Caveat (also in the report):** only the J magnitude-mode value is
+confirmed against the IDL program (the GUI at WMKO gave 4.4). Y, H and K
+come from the port, which matches the program in both checks so far.
+
+No new questions for the Q&A.

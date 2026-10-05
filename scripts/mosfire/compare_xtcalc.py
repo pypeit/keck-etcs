@@ -4,7 +4,7 @@
 Usage:
     conda run -n pypeit14b python scripts/mosfire/compare_xtcalc.py [--out DIR]
 
-1. **XTcalc mode.** A line-by-line Python port of XTcalc v2.3
+1. **XTcalc mode.** A line-by-line Python port of XTcalc v2.0 (Keck's XTcalc.tar, sha256 344b45b4...)
    (``XTcalc_dir/bin/XTcalc.pro``, G. Rudie 2012) on its own data files:
    the order-sorting filter (``mosfire/mosfire_<band>.txt``), the measured
    efficiency ``MosfireSpecEff/<band>eff.sm.dat`` x KMRef^2 (0.89 in J, 0.95
@@ -77,7 +77,9 @@ H_ERG_S = 6.626068e-27
 C_KMS = 2.99792458e5
 HC_ERG_UM = H_ERG_S * 29979245800.0 * 1e4
 AT_CM2, PIX, DET_RN, DARK, SLIT_W, NPIX, FNU_AB = 750000.0, 0.18, 15.0, 0.005, 0.7, 3072, 48.59
-STAT = {'J': {'disp': 1.31, 'lam': 1.25, 'rt': 3310.0, 'kmref': 0.89},
+STAT = {'Y': {'disp': 1.05, 'lam': 1.05, 'rt': 3380.0, 'kmref': 0.85},    # XTcalc.pro Ystat, Jstat, Hstat, Kstat
+        'J': {'disp': 1.31, 'lam': 1.25, 'rt': 3310.0, 'kmref': 0.89},
+        'H': {'disp': 1.73, 'lam': 1.65, 'rt': 3660.0, 'kmref': 0.94},
         'K': {'disp': 2.10, 'lam': 2.2, 'rt': 3620.0, 'kmref': 0.95}}
 PDF_EXAMPLE = {'S/N': 9.1, 'signal': 1999.45, 'background': 46061.75, 'dark': 58.92, 'RN': 12.87, 'noise': 219.68,
                'throughput': 0.34}
@@ -91,8 +93,10 @@ def xt_dir():
 
 
 def interpol(x, xp, fp):
-    """IDL ``interpol``: linear, with linear extrapolation beyond the ends."""
+    """IDL ``interpol``: linear, with linear extrapolation beyond the ends; ``xp`` monotonic either way."""
     xp, fp = np.asarray(xp, float), np.asarray(fp, float)
+    if xp[-1] < xp[0]:                    # the H and K filter files run red to blue
+        xp, fp = xp[::-1], fp[::-1]
     y = np.interp(x, xp, fp)
     lo, hi = x < xp[0], x > xp[-1]
     y[lo] = fp[0] + (x[lo] - xp[0]) * (fp[1] - fp[0]) / (xp[1] - xp[0])
@@ -292,7 +296,7 @@ def main(out=None):
             'calib_version': MOSFIRE.throughput(MOSFIRE.eras[1])['calib_version'],
             'case': f'flat f_nu J, {NEXP} x {TFRAME:.0f} s MCDS-{NREADS} ABBA, seeing {SEEING}"; XTcalc theta {SEEING}", '
                     'airmass 1.0 (its default); ours airmass 1.2, PWV 1.6',
-            'xtcalc': 'XTcalc v2.3 data files (XTcalc_dir), ported to Python',
+            'xtcalc': 'XTcalc v2.0 (Keck XTcalc.tar) data files, ported to Python',
             'pdf_example': {'port': ex, 'pdf': PDF_EXAMPLE, 'within_10pct': bool(ok_pdf)}}
     t.meta, a.meta = dict(meta), dict(meta)
     for c in ('snr_xtcalc', 'snr_xtcalc_plain_median', 'snr_keck_etcs', 'ratio_ours_over_xtcalc'):

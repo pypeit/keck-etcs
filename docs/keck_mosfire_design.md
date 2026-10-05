@@ -1273,7 +1273,7 @@ by the user, each tied to the plan step that checks it:
 - Keck MOSFIRE pages: instrument home, detector (`detector.html`), filters
   (`filters.html`), throughput (`throughput.html`), news (`news.html`), ETC
   landing page (`etc.html`) with XTcalc tarball and
-  `docs/MOSFIRE_XTcalc.pdf` (G. C. Rudie, v2.3, 2012-07-02).
+  `XTcalc_dir/MOSFIRE_XTcalc.pdf` in Keck's `XTcalc.tar` (G. C. Rudie, v2.0, 2012-06-29).
 - Kulas, K. R., et al. 2012, "Performance of the HgCdTe detector for MOSFIRE",
   Proc. SPIE 8453, arXiv:1208.0314.
 - McLean, I. S., et al. 2012, "MOSFIRE, the multi-object spectrometer for
@@ -1305,7 +1305,7 @@ by the user, each tied to the plan step that checks it:
 
 ## Appendix A. XTcalc comparison (plan S12, 2026-10-05)
 
-`scripts/mosfire/compare_xtcalc.py` ports XTcalc v2.3 (`XTcalc.pro`)
+`scripts/mosfire/compare_xtcalc.py` ports XTcalc (`XTcalc.pro`; Keck's `XTcalc.tar`, GUI and manual v2.0)
 line by line and runs it on XTcalc's own files: filter, efficiency x
 KMRef^2, the May 2012 MOSFIRE sky, and Gemini `mktrans_zm_16_10`. It
 writes `xtcalc_comparison.ecsv` and `xtcalc_attribution.ecsv` to
@@ -1322,7 +1322,7 @@ a target (project rule) and not a CI test.
 - dark (58.92 e-) and read noise (12.87 e-) agree exactly; signal and sky
   are about 4 percent lower;
 - the manual's GUI predates XTcalc's 2012-06-26 switch to the measured
-  throughput and sky, which the v2.3 files hold.
+  throughput and sky, which the distributed files hold.
 
 **An XTcalc quirk.** In magnitude mode XTcalc reports the median S/N over
 `filt_index`, which is computed on its full 3072-pixel grid but applied to

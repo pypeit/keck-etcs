@@ -1,6 +1,6 @@
 # Running the Keck XTcalc ETC (MOSFIRE)
 
-Purpose: run the original IDL XTcalc v2.3 (G. Rudie 2012) once, to check
+Purpose: run the original IDL XTcalc (G. Rudie 2012; GUI and manual v2.0) once, to check
 our Python port (`scripts/mosfire/compare_xtcalc.py`) and the band-median
 quirk described in `docs/keck_mosfire_design.md` Appendix A
 (`claude_prompts/keck_mosfire/keck_mosfire_prompt_4.md`, Q&A S12 item 1).

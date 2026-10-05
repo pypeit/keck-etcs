@@ -4,7 +4,7 @@
 Usage:
     conda run -n pypeit14b python scripts/mosfire/xtcalc_hand_snr.py [--mag 20] [--theta 0.7]
 
-Re-implements the magnitude mode of XTcalc v2.3 (``XTcalc_dir/bin/XTcalc.pro``)
+Re-implements the magnitude mode of XTcalc v2.0 (``XTcalc_dir/bin/XTcalc.pro``)
 on XTcalc's own data files, for the S9 verification case: J = 20 AB flat
 f_nu, 0.7" slit, 0.7" seeing, 4 x 120 s MCDS-16 ABBA, airmass 1.2, PWV 1.6
 mm. XTcalc, from its source:
