@@ -24,8 +24,10 @@ Usage:
    ``filt_index = NONzero_index``, which is computed on the full 3072-pixel
    grid but applied to the band-cut arrays; IDL clips out-of-range
    subscripts to the last element, so every index beyond the band repeats
-   the band's last (red-edge) pixel. The port reproduces this
-   (``quirk=True``) and also reports the plain median over the band.
+   the band's last (red-edge) pixel. The port reproduces this and also
+   reports the plain median over the band. Confirmed 2026-10-05: the XTcalc
+   GUI at WMKO gave S/N 4.4 for J = 20 AB, 0.7"/0.7", 4 x 120 s, 16 reads
+   (port: 4.437 with the quirk, 7.392 without).
 
 2. **Check against the PDF.** The worked example of ``MOSFIRE_XTcalc.pdf``
    (Figure 1, GUI v1.8 beta): K band, 0.7" slit, theta 0.7", 1 exposure, 16

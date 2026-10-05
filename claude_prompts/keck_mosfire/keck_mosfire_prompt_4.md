@@ -148,6 +148,7 @@ part 3's regression fixtures against the real throughput (see prompt 1).
    The port predicts **S/N = 4.44** with the quirk, or 7.39 without it.
    *Default:* if you cannot run it, Appendix A keeps the quirk as "inferred
    from the source, not confirmed by running IDL".
+>A. I have run the XTcalc GUI at WMKO with your config.  The S/N reported is 4.4 per spectral pixel
 
 2. **Default `sky_scale`, given S11 and S12.** The numbers so far:
    - The sky model is the largest single input difference between the two
@@ -518,3 +519,22 @@ outputs `xtcalc_comparison.ecsv` and `xtcalc_attribution.ecsv` in
   `docs/MOSFIRE_XTcalc.pdf` in this repo does not exist (the context line
   is stale).
 - `pdftotext` is on the workstation; `pypdf` is not in `pypeit14b`.
+
+### 2026-10-05 (S12 follow-up: XTcalc band-median quirk confirmed by the user's GUI run)
+
+- I wrote `docs/XTcalc_HOWTO.md` (how to run XTcalc with the IDL VM GUI or
+  the command line, the test case, the expected values) for the user.
+- The user ran the XTcalc GUI at WMKO with the Q&A S12-1 configuration
+  (J, 0.7"/0.7", 4 exposures, 16 reads, 20.0 AB flat f_nu, 480 s, default
+  airmass and PWV). It reported **S/N 4.4 per spectral pixel**.
+  - The port predicted 4.437 with the quirk and 7.392 without it, so the
+    quirk is **confirmed**, and the port's magnitude mode reproduces the
+    real program to within the 0.1 display precision.
+  - Together with the manual's line example (8.85 against 9.1), both modes
+    of the port are now checked against XTcalc itself.
+- Updated: design Appendix A (from "inferred" to "confirmed"); the
+  `compare_xtcalc.py` docstring; `docs/XTcalc_HOWTO.md` (result recorded).
+- Worth telling WMKO: XTcalc's magnitude-mode S/N for J continuum sources
+  is about 40% below its own band median. It reports roughly the 28th
+  percentile, weighted toward the red-edge pixel by the `filt_index`
+  subscript clipping in `XTcalc.pro`.

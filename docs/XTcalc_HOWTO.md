@@ -88,3 +88,9 @@ Put the numbers under Q&A S12 item 1 in
 `claude_prompts/keck_mosfire/keck_mosfire_prompt_4.md`. Appendix A of the
 design doc is then updated from "inferred from the source" to "confirmed"
 (or corrected).
+
+## Result (2026-10-05)
+
+The XTcalc GUI at WMKO, run with the J configuration above, reported
+**S/N 4.4 per spectral pixel**, matching the port's 4.437. The band-median
+quirk is confirmed (design Appendix A).

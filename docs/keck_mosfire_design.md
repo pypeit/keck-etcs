@@ -1333,8 +1333,13 @@ the band-cut arrays (1650 pixels in J).
   the band's red-edge pixel.
 - The reported "median" is then about the 28th percentile of the band's
   S/N: 0.57-0.75 of the true median in this case.
-- This is inferred from the source; it has not been confirmed by running
-  IDL.
+- **Confirmed (2026-10-05):** the user ran the XTcalc GUI at WMKO (J, 0.7"
+  slit, angular extent 0.7", 4 exposures, 16 reads, 20.0 AB flat f_nu,
+  480 s, default airmass and PWV). It reported **S/N 4.4 per spectral
+  pixel**; the port gives 4.437 with the quirk and 7.392 without it. So
+  XTcalc's magnitude-mode S/N is pessimistic by about 40 percent in this
+  case, and published XTcalc numbers for J continuum sources inherit the
+  bias.
 
 **Table.** Flat f_nu in J, 4 x 120 s MCDS-16 ABBA (XTcalc's two-point
 dither), seeing 0.7". XTcalc mode as coded uses theta 0.7" and airmass 1.0;
