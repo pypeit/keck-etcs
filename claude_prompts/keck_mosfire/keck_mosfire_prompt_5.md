@@ -263,6 +263,26 @@ Part 6 step S18 needs S16.
 
 >A. Use your default
 
+### S15b (2026-10-05)
+
+1. **May I run the first real backup now?**
+   - `backup_products.py` is written and dry-run tested. The bucket's
+     backup set today is the 2022-04-09 night only: 60 objects, 6.4 MB.
+   - A real run would create `AIOcean:keck-etcs/` on the shared Google
+     Drive, copy those files, and then confirm them with
+     `rclone check --one-way`. That verifies the copy-and-check path end to
+     end before any batch depends on it.
+
+   *Default:* yes, run it once now (`--run`), then after every S15b batch
+   as the prompt says.
+
+2. **The batches are blocked on the KOA search, as in S15a-1.** You chose
+   the default there: `koa_search_prompts.md` prompts 1-2 come first. S15b's
+   batch loop (apply the Job, follow it, sweep, back up, log) starts once
+   there are manifests and raw frames, and after the S15a pilot.
+
+   *Default:* point me next at `koa_search_prompts.md` prompt 1.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -388,3 +408,81 @@ as an A0V, outputs in `<night>/a0v_hook_check/`):
 
 **Questions:** Q&A S15a-1 (the KOA doc must run first), S15a-2 (the Vega
 zero point of the A0V model), S15a-3 (the A0V manifest columns).
+
+### 2026-10-05 (Prompt #2 / S15b, part 1: backup script and sweep fix; batches BLOCKED on the KOA search)
+
+**Q&A read:** the user chose the defaults for S15a-1 (the KOA doc first),
+S15a-2 (photon-counting synthetic J for the A0V model) and S15a-3 (extra
+manifest columns). No code change was needed for 2 and 3; they are what
+S15a implemented.
+
+**Blocked:** there are still no batch manifests and no raw frames beyond
+2022-04-09, and the S15a pilot has not run. So no Job, no sweep, no
+per-batch backup and no batch log entry. I did the parts of S15b that need
+no new nights.
+
+**`scripts/nautilus/backup_products.py`** (new):
+
+- A thin wrapper around `rclone copy nautilus_s3:keck-etcs/
+  AIOcean:keck-etcs/` and `rclone check --one-way`, with one filter set
+  (written to a temporary `--filter-from` file).
+  - Included, per night: `sens/**`, `harvest/**`, `run_manifest.json`,
+    `run.log`, `redux/*.pypeit`, `redux/Science/spec1d_*` and
+    `raw/manifest.ecsv`; at the root, `manifests/**` and `runs/**`.
+  - Everything else is excluded.
+- `sens/**` follows the prompt's Context, a superset of design 4.8.9's
+  `sens/sens_*.fits` plus QA. It also keeps the A0V `.sens` and
+  `*_std_model.json` (S15a), which the harvest needs to classify an A0V
+  row.
+- Modes:
+  - dry run (default): `rclone size` objects and bytes, plus the count a
+    copy would transfer;
+  - `--run`: copy, then check, counting =, −, * and ! from `--combined`;
+  - `--prefix mosfire/<night> …`: per-batch subsets;
+  - `--release TAG [--nights …]`: copy to `releases/TAG/`; the nights
+    default to the non-excluded rows of `standards.ecsv` (S16);
+  - `--check-only`.
+- Each run writes a JSON summary to `$KECK_ETCS_DATA/runs/backup/` (local)
+  and prints the line for the log. No credentials are printed: the rclone
+  remotes hold them.
+- **Tested (dry runs only):**
+  - whole set: 60 objects, 6.4 MB, 60 to copy, `AIOcean:keck-etcs/` absent;
+  - release dry run: picks night 20220409 from `standards.ecsv`;
+  - filter audit (`rclone lsf` with the rules): 60 of the bucket's 163
+    objects (40 `sens`, 3 `harvest`, 12 spec1d `.fits`/`.txt`, the
+    `.pypeit`, `run.log`, `run_manifest.json`, `raw/manifest.ecsv`, 1
+    `runs` status row), and 0 spec2d, raw FITS, `Calibrations/` or `QA/`.
+- **No real copy yet:** it writes to the shared Drive, so I asked first
+  (Q&A S15b-1).
+
+**`nautilus/night_failures.py`, a gap fixed:**
+
+- The sweep manifest kept only the 7 design columns, so an A0V night
+  swept after a failure would lose `std_class`, `jmag_2mass`, `std_ra` and
+  `std_dec`, and fail again as `setup failed`.
+- It now adds those columns when any status row carries them (which
+  `status_row.py` records since S15a), empty where a row lacks them.
+- `keck_etcs/tests/test_night_failures.py`: one A0V row and one older row
+  without the columns; the sweep keeps the A0V values and leaves the white
+  dwarf's empty.
+- Suite: **96 passed**, 3 slow deselected.
+
+**Incident:**
+
+- While checking which rclone remotes exist, an `awk` filter on
+  `rclone.conf` matched "type" inside `token_type` and printed the OAuth
+  tokens of the three Google Drive remotes (GDrive, AIOcean, RoB) into the
+  session transcript. Nothing was written to any file, log or repo.
+- The access tokens shown had expired; the refresh tokens are long-lived.
+  I told the user and suggested `rclone config reconnect <remote>:` if they
+  want them rotated.
+- Lesson: list remotes with `rclone listremotes` and types with
+  `rclone config show <remote> | grep '^type'`, never by grepping the
+  config file.
+
+**Verify (S15b):** `git status` shows the backup script, the
+`night_failures.py` fix, its test and this doc; no manifests yet. The other
+per-batch checks wait for batches.
+
+**Next:** `koa_search_prompts.md` prompt 1 (Q&A S15b-2), then its prompt 2,
+then S15a's pilot, then S15b's batches.
