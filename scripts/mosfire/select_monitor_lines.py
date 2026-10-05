@@ -26,7 +26,8 @@ inside the band window. Rules, per design 4.9.4:
 Prints the ranked table and writes it (with its sha256 in the log) to
 ``--out`` (default ``<night>/lsf/monitor_lines_<band>.ecsv`` of the first
 date). The chosen wavelengths go into
-``keck_etcs/calib/monitor_configs.py`` by hand, as the provisional list
+``MONITOR`` of ``keck_etcs/instruments/mosfire.py`` by hand (re-exported by
+``keck_etcs/calib/monitor_configs.py``), as the provisional list
 (frozen after the S15a pilot).
 """
 import argparse

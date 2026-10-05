@@ -22,7 +22,7 @@ if os.path.exists('README.md'):
 setup_keywords['provides'] = [setup_keywords['name']]
 setup_keywords['python_requires'] = '>=3.11'
 setup_keywords['install_requires'] = [
-    'numpy', 'scipy', 'matplotlib', 'astropy',
+    'numpy', 'scipy', 'matplotlib', 'astropy', 'jsonschema', 'pyyaml',
     'IPython', 'pytest',
     # Source of throughputs, sky, extinction and detector parameters;
     # see requirements.txt on installing the local checkout
@@ -30,7 +30,7 @@ setup_keywords['install_requires'] = [
 setup_keywords['zip_safe'] = False
 setup_keywords['packages'] = find_packages()
 # Shipped data products (design 5.4); keck_etcs/data/ is not a package, so list it
-setup_keywords['package_data'] = {'keck_etcs': ['data/*.yaml', 'data/*/*', 'data/*/*/*']}
+setup_keywords['package_data'] = {'keck_etcs': ['data/*.yaml', 'data/*/*', 'data/*/*/*', 'schema/*.json']}
 
 if os.path.isdir('bin'):
     setup_keywords['scripts'] = [fname for fname in glob.glob(os.path.join('bin', '*'))

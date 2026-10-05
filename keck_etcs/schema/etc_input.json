@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pypeit/keck-etcs/keck_etcs/schema/etc_input.json",
+  "title": "Keck ETC input",
+  "description": "Input of keck_etcs.etc.compute (design 5.2). Unlisted fields are rejected; missing fields take the default. Wavelengths are vacuum Angstroms unless the unit is in the name. Units are given in x-unit.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "instrument": {"type": "string", "enum": ["keck_mosfire"], "default": "keck_mosfire",
+                   "description": "PypeIt spectrograph name"},
+    "band": {"type": "string", "enum": ["J", "J2"], "default": "J",
+             "description": "filter; Y, J3, H and K later"},
+    "slit_width_arcsec": {"type": "number", "minimum": 0.3, "maximum": 5.0, "default": 0.7,
+                          "x-unit": "arcsec", "description": "CSU long-slit width"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "type": {"type": "string", "enum": ["point", "extended"], "default": "point"},
+        "mag": {"type": "number", "minimum": 5, "maximum": 30, "default": 20.0, "x-unit": "mag",
+                "description": "total magnitude (point) or magnitude per arcsec^2 (extended), in the band"},
+        "mag_system": {"type": "string", "enum": ["AB", "Vega"], "default": "AB",
+                       "description": "Vega offsets from synthetic photometry of the Vega spectrum"},
+        "size_arcsec": {"type": "number", "minimum": 0.2, "maximum": 20, "default": 1.0, "x-unit": "arcsec",
+                        "description": "extended only: top-hat diameter"}
+      }
+    },
+    "spectrum": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "shape": {"type": "string", "enum": ["flat_fnu", "power_law", "user", "line"], "default": "flat_fnu"},
+        "alpha": {"type": "number", "minimum": -5, "maximum": 5, "default": 0.0,
+                  "description": "power law f_nu ~ nu^alpha"},
+        "wave_A": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "minItems": 2,
+                   "x-unit": "Angstrom", "description": "user spectrum wavelengths (vacuum)"},
+        "flux": {"type": "array", "items": {"type": "number"}, "minItems": 2,
+                 "description": "user spectrum, f_lambda in any units (normalized to source.mag)"},
+        "line": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "wave_A": {"type": "number", "exclusiveMinimum": 0, "x-unit": "Angstrom",
+                       "description": "observed line centre; must be in the band"},
+            "flux_cgs": {"type": "number", "exclusiveMinimum": 0, "x-unit": "erg/s/cm^2",
+                         "description": "integrated line flux"},
+            "fwhm_kms": {"type": "number", "minimum": 10, "maximum": 5000, "default": 200, "x-unit": "km/s",
+                         "description": "intrinsic FWHM"},
+            "continuum_mag": {"type": ["number", "null"], "minimum": 5, "maximum": 30, "default": null,
+                              "x-unit": "mag", "description": "optional flat-f_nu continuum under the line, in source.mag_system"}
+          },
+          "required": ["wave_A", "flux_cgs"]
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"shape": {"const": "user"}}, "required": ["shape"]},
+         "then": {"required": ["wave_A", "flux"]}},
+        {"if": {"properties": {"shape": {"const": "line"}}, "required": ["shape"]},
+         "then": {"required": ["line"]}}
+      ]
+    },
+    "seeing_fwhm_arcsec": {"type": "number", "minimum": 0.3, "maximum": 3.0, "default": 0.7, "x-unit": "arcsec",
+                           "description": "at the observing band unless seeing_wave_um is given"},
+    "seeing_wave_um": {"type": ["number", "null"], "minimum": 0.4, "maximum": 2.5, "default": null, "x-unit": "micron",
+                       "description": "if given, FWHM scales as (lambda/seeing_wave)^-0.2"},
+    "exptime_s": {"type": "number", "minimum": 1.455, "maximum": 3600, "default": 120, "x-unit": "s",
+                  "description": "per frame"},
+    "n_frames": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 4},
+    "readout": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "mode": {"type": "string", "enum": ["CDS", "MCDS"], "default": "MCDS",
+                 "description": "UTR is reserved (D13)"},
+        "n_reads": {"type": "integer", "enum": [1, 2, 4, 8, 16, 32, 64, 128], "default": 16,
+                    "description": "CDS forces 1"}
+      }
+    },
+    "nod": {"type": "string", "enum": ["ABBA", "stare"], "default": "ABBA",
+            "description": "ABBA: each frame is sky-subtracted with a frame of equal time (D15)"},
+    "airmass": {"type": "number", "minimum": 1.0, "maximum": 2.5, "default": 1.2,
+                "description": "clipped to 1.0-2.0 for the grids, with a warning"},
+    "pwv_mm": {"type": "number", "minimum": 0.5, "maximum": 10, "default": 1.6, "x-unit": "mm",
+               "description": "precipitable water vapour; clipped to 1.0-5.0 for the grids, with a warning"},
+    "sky_scale": {"type": "number", "minimum": 0.3, "maximum": 3.0, "default": 1.0,
+                  "description": "multiplies the sky emission"},
+    "aperture": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "length_fwhm": {"type": "number", "minimum": 0.5, "maximum": 5, "default": 1.5,
+                        "description": "extraction length along the slit in units of the band FWHM"},
+        "length_arcsec": {"type": ["number", "null"], "exclusiveMinimum": 0, "default": null, "x-unit": "arcsec",
+                          "description": "overrides length_fwhm"}
+      }
+    },
+    "throughput": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "date": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "default": null,
+                 "description": "ISO date; selects the era; null = latest"},
+        "scale": {"type": "number", "minimum": 0.1, "maximum": 2, "default": 1.0}
+      }
+    },
+    "target_snr": {"type": ["number", "null"], "exclusiveMinimum": 0, "default": null,
+                   "description": "if set, exptime_s is solved for at fixed n_frames"},
+    "snr_reference": {"type": "string", "enum": ["pixel", "resel", "line"], "default": "pixel",
+                      "description": "which S/N target_snr refers to"}
+  },
+  "examples": [
+    {},
+    {"band": "J", "slit_width_arcsec": 0.7, "source": {"type": "point", "mag": 20.0, "mag_system": "AB"},
+     "seeing_fwhm_arcsec": 0.7, "exptime_s": 120, "n_frames": 4, "readout": {"mode": "MCDS", "n_reads": 16},
+     "nod": "ABBA", "airmass": 1.2, "pwv_mm": 1.6},
+    {"band": "J2", "slit_width_arcsec": 1.0, "source": {"mag": 15.0, "mag_system": "Vega"},
+     "spectrum": {"shape": "power_law", "alpha": -1.0}, "exptime_s": 150, "airmass": 1.075,
+     "throughput": {"date": "2022-04-09"}, "target_snr": 10, "snr_reference": "resel"},
+    {"band": "J", "spectrum": {"shape": "line",
+                               "line": {"wave_A": 12820.0, "flux_cgs": 1e-17, "fwhm_kms": 150, "continuum_mag": null}},
+     "snr_reference": "line"},
+    {"band": "J", "source": {"type": "extended", "mag": 21.0, "size_arcsec": 2.0},
+     "spectrum": {"shape": "user", "wave_A": [11000, 12000, 13000, 14000], "flux": [1, 1.1, 1.2, 1.3]},
+     "readout": {"mode": "CDS", "n_reads": 1}, "nod": "stare", "aperture": {"length_arcsec": 3.0}}
+  ]
+}

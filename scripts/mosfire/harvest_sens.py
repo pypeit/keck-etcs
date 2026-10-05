@@ -22,8 +22,11 @@ curve on the common 1 A grid with design 5.4 ``meta``) into DIR. With
 night job pushes.
 
 ``--filter FILE`` divides out a filter curve (ECSV with ``wave_A`` and
-``transmission``, part 3, S8). Without it ``thru`` is masked and
-``flag = nofilter``.
+``transmission``, part 3, S8). In the ``DATE`` form without ``--filter``, the
+night's filter (``run_manifest.json``) selects the curve shipped with the
+instrument module (``keck_etcs/data/mosfire/filters/mosfire_<band>.ecsv``),
+so the night job divides it out from image 0.2.0 on. Without a curve
+``thru`` is masked and ``flag = nofilter``.
 
 ``monitor`` writes ``<night>_monitor.ecsv`` (the long table of design
 4.9.5, from ``keck_etcs.calib.monitor.monitor_night``) into DIR (default
@@ -73,6 +76,16 @@ def read_filter(path):
     return np.asarray(t['wave_A'], float), np.asarray(t['transmission'], float)
 
 
+def default_filter(manifest):
+    """Path of the shipped filter curve for the night's band, or None."""
+    from keck_etcs.instruments.mosfire import MOSFIRE
+    from keck_etcs.instruments.base import DATA_DIR
+    band = json.loads(Path(manifest).read_text()).get('filter')
+    if band in MOSFIRE.bands and (DATA_DIR / MOSFIRE.bands[band].filter_file).exists():
+        return DATA_DIR / MOSFIRE.bands[band].filter_file
+    return None
+
+
 def cmd_harvest(args):
     if len(args.inputs) == 1 and args.inputs[0].isdigit() and len(args.inputs[0]) == 8:
         date = args.inputs[0]
@@ -83,6 +96,9 @@ def cmd_harvest(args):
         sens = [night / 'sens' / f'sens_{args.standard}_{date}.fits']
         manifest = night / 'run_manifest.json'
         outdir = Path(args.out) if args.out else night / 'harvest'
+        if not args.filter and manifest.exists():
+            args.filter = default_filter(manifest)
+            print(f'filter curve: {args.filter or "none for this band (nofilter)"}')
     else:
         sens = [Path(s) for s in args.inputs]
         if not args.manifest or not args.out:

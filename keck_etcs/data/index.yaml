@@ -29,3 +29,58 @@ files:
     sha256: 0ac7c746de3c322c9144112c4f83545ad00a20fed00b01a869aa72db8ee3699e
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 136 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
+  mosfire/filters/mosfire_Y.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:11Z'
+    sha256: 6c2d2da122617d7cba190499ce32b5353a53e354148a296053361a4edf067cec
+    script: scripts/mosfire/fetch_keck_filter_curves.py
+    waveref: vacuum (converted from assumed air)
+    provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_Y.txt
+      (downloaded 2026-10-05, sha256 062fe47e9c3f); AB-Vega 0.655 from PypeIt vega_tspectool_vacuum.dat
+  mosfire/filters/mosfire_J.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:11Z'
+    sha256: 46ed8a523b14f08289c91f9187be9d7f531e1cdf9a9702ea17e9b97f33c63979
+    script: scripts/mosfire/fetch_keck_filter_curves.py
+    waveref: vacuum (converted from assumed air)
+    provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_J.txt
+      (downloaded 2026-10-05, sha256 5410e4e790af); AB-Vega 0.930 from PypeIt vega_tspectool_vacuum.dat
+  mosfire/filters/mosfire_J2.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:11Z'
+    sha256: cce274c7868506b042dc809ade549b07973f36967752e799cf202d90f4a67567
+    script: scripts/mosfire/fetch_keck_filter_curves.py
+    waveref: vacuum (converted from assumed air)
+    provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/J2_center_corr.txt
+      (downloaded 2026-10-05, sha256 3e3fe8ba1b53); AB-Vega 0.833 from PypeIt vega_tspectool_vacuum.dat
+  mosfire/filters/mosfire_J3.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:11Z'
+    sha256: 06d8156c6cb69dbc092b34037e4dd4f241289ec13c60df2a44f530d781857949
+    script: scripts/mosfire/fetch_keck_filter_curves.py
+    waveref: vacuum (converted from assumed air)
+    provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/J3_center_corr.txt
+      (downloaded 2026-10-05, sha256 9c8cd6013706); AB-Vega 0.989 from PypeIt vega_tspectool_vacuum.dat
+  mosfire/filters/mosfire_H.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:11Z'
+    sha256: 214c81b298bc819e14fb3e62d0c4313553096cb60d704e0f0c318e0c381d0d40
+    script: scripts/mosfire/fetch_keck_filter_curves.py
+    waveref: vacuum (converted from assumed air)
+    provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_H.txt
+      (downloaded 2026-10-05, sha256 919daf2bd924); AB-Vega 1.365 from PypeIt vega_tspectool_vacuum.dat
+  mosfire/filters/mosfire_K.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:11Z'
+    sha256: 416903ac78029fbf4f63dc43d3cd54a6bd129d165778d4915c984ec352f3ce04
+    script: scripts/mosfire/fetch_keck_filter_curves.py
+    waveref: vacuum (converted from assumed air)
+    provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_K.txt
+      (downloaded 2026-10-05, sha256 cce475d988d5); AB-Vega 1.845 from PypeIt vega_tspectool_vacuum.dat
+  mosfire/detector.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-05T01:36:43Z'
+    sha256: a6cefb64cded1c70a4b833c067434586e105f07061177c3f410c55d303b80544
+    script: scripts/mosfire/build_detector_table.py
+    provenance: 'Keck MOSFIRE detector page https://www2.keck.hawaii.edu/inst/mosfire/detector.html: read
+      noise vs reads, gain, dark, linearity, minimum integration; plate scales from PypeIt and XTcalc'

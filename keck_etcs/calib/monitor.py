@@ -19,6 +19,8 @@ from pathlib import Path
 import numpy as np
 from astropy.table import Table
 
+from keck_etcs.core.slitloss import slit_fraction
+
 ROW_COLUMNS = ('night', 'mjd', 'instrument', 'metric', 'source', 'frame', 'target', 'decker',
                'slit_width', 'filter', 'wave_A', 'line_id', 'value', 'unit', 'err', 'n', 'airmass',
                'pwv_fit', 'cards', 'flag')
@@ -42,23 +44,6 @@ def row(**kw):
 def slit_from_decker(decker):
     from keck_etcs.calib.harvest import slit_from_decker as s
     return s(decker)
-
-
-# ------------------------------------------------------------------ slit loss (provisional)
-
-def moffat_slit_fraction(fwhm_arcsec, slit_arcsec, beta=3.5, n=401):
-    """Fraction of a centred, circular Moffat PSF passing an infinitely long slit.
-
-    Provisional local copy of the D26 integral (design 4.9.1); replaced by
-    ``keck_etcs.core.slitloss`` once S7 exists.
-    """
-    alpha = fwhm_arcsec / (2.0 * np.sqrt(2.0 ** (1.0 / beta) - 1.0))
-    r_max = 30.0 * fwhm_arcsec
-    x = np.linspace(-r_max, r_max, 4 * n + 1)
-    xx, yy = np.meshgrid(x, x, indexing='ij')
-    prof = (1.0 + (xx ** 2 + yy ** 2) / alpha ** 2) ** (-beta)
-    inside = np.abs(xx) <= slit_arcsec / 2.0
-    return float(prof[inside].sum() / prof.sum())
 
 
 # ------------------------------------------------------------------ spatial FWHM (D41)
@@ -103,7 +88,7 @@ def object_fwhm(spec1d_files, frames, config, band, night):
                     val = float(np.median(np.asarray(fit)[sel])) if n else None
                 rows.append(row(metric='fwhmfit_pix', wave_A=w0, value=val, unit='pix', n=n, **base))
             if fwhm is not None and width is not None:
-                frac = moffat_slit_fraction(fwhm * ps, width, config['moffat_beta'])
+                frac = slit_fraction(fwhm * ps, width, config['moffat_beta'])
                 rows.append(row(metric='slitloss_gt1pct', value=float(1.0 - frac > 0.01),
                                 err=float(1.0 - frac), unit='bool',
                                 **{**base, 'flag': 'slitloss=provisional'}))

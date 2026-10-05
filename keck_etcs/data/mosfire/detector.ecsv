@@ -1,0 +1,42 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: n_reads, datatype: int64}
+# - {name: read_noise_e, datatype: float64}
+# - {name: read_noise_lab_e, datatype: float64}
+# meta: !!omap
+# - {description: 'MOSFIRE H2RG detector: read noise per frame vs reads per group, and detector constants (design section 3, D12)'}
+# - {instrument: keck_mosfire}
+# - {read_noise_source: 'https://www2.keck.hawaii.edu/inst/mosfire/detector.html (n_reads = 1 is CDS; MCDS-N for N >= 4)'}
+# - {read_noise_lab_source: 'Kulas et al. 2012, SPIE 8453 (laboratory; for reference, not used)'}
+# - {read_noise_interpolation: linear in log2(n_reads) (keck_etcs.core.detector.read_noise)}
+# - {gain_e_per_adu: 2.15}
+# - {gain_source: 'https://www2.keck.hawaii.edu/inst/mosfire/detector.html; header SYSGAIN'}
+# - {dark_e_per_s_per_pix: 0.008}
+# - {dark_source: 'https://www2.keck.hawaii.edu/inst/mosfire/detector.html (< 0.008); PypeIt 28.8 e-/pix/hr'}
+# - linearity_adu: {nonlinear_1pct: 26000, nonlinear_5pct: 37000, saturated: 43000}
+# - linearity_e: {nonlinear_1pct: 56000, nonlinear_5pct: 80000, saturated: 97000}
+# - {linearity_source: 'https://www2.keck.hawaii.edu/inst/mosfire/detector.html; header SATURATE = 33000 noted but not used (D12)'}
+# - {platescale_spatial_arcsec_per_pix: 0.1798}
+# - {platescale_spatial_source: PypeIt keck_mosfire; header PSCALE 0.1799}
+# - {platescale_dispersion_arcsec_per_pix: 0.24}
+# - {platescale_dispersion_source: XTcalc; anamorphic factor 1.48 (header FCANAMOR)}
+# - {min_integration_s: 1.455}
+# - {min_integration_source: 'https://www2.keck.hawaii.edu/inst/mosfire/detector.html; header READTIME 1.45479 s'}
+# - n_pix: [2048, 2048]
+# - {detector: 'Teledyne H2RG HgCdTe, 2.5 um cutoff'}
+# - {persistence: '~0.04 percent, time constant ~600-660 s (not modeled)'}
+# - sampmode_codes: {1: Single, 2: CDS, 3: MCDS, 4: UTR}
+# - {calib_version: mosfire-J-2026.10-dev}
+# - {keck_etcs_version: 0.1.6}
+# - {created: '2026-10-05T01:36:43Z'}
+# - {script: scripts/mosfire/build_detector_table.py}
+# schema: astropy-2.0
+n_reads read_noise_e read_noise_lab_e
+1 21.0 17.2
+4 10.8 8.9
+8 7.7 6.5
+16 5.8 4.9
+32 4.2 3.8
+64 3.5 3.3
+128 3.0 ""

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pypeit/keck-etcs/keck_etcs/schema/etc_output.json",
+  "title": "Keck ETC output",
+  "description": "Output of keck_etcs.etc.compute (design 5.2). Arrays are per spectral pixel on wave_A (vacuum Angstroms, the band window of N2). Electrons are per spectral pixel in the extraction aperture, summed over all frames, unless the name says per_frame. Units are given in x-unit.",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "spectrum": {"type": "array", "items": {"type": "number"}},
+    "scalar_or_spectrum": {"anyOf": [{"type": "number"}, {"$ref": "#/$defs/spectrum"}]}
+  },
+  "required": ["meta", "wave_A", "dispersion_A_per_pix", "lsf_fwhm_A", "resolving_power", "n_spec_per_resel",
+               "slit_fraction", "aperture_fraction", "n_spatial_pix", "fwhm_arcsec_band",
+               "throughput", "atm_transmission", "filter_transmission",
+               "signal_e", "sky_e", "dark_e", "read_noise_e", "noise_e", "snr_pixel", "snr_resel",
+               "summary", "saturation", "warnings"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keck_etcs_version", "pypeit_version", "calib_version", "era", "inputs"],
+      "properties": {
+        "keck_etcs_version": {"type": "string"},
+        "pypeit_version": {"type": "string", "description": "PypeIt version that built the calibration products (from index.yaml)"},
+        "calib_version": {"type": "string", "description": "e.g. mosfire-J-2026.10"},
+        "era": {"type": "string", "description": "instrument era of the throughput used"},
+        "inputs": {"type": "object", "description": "validated inputs with defaults filled (etc_input.json)"}
+      }
+    },
+    "wave_A": {"$ref": "#/$defs/spectrum", "x-unit": "Angstrom"},
+    "dispersion_A_per_pix": {"type": "number", "exclusiveMinimum": 0, "x-unit": "Angstrom/pix"},
+    "lsf_fwhm_A": {"type": "number", "exclusiveMinimum": 0, "x-unit": "Angstrom"},
+    "resolving_power": {"$ref": "#/$defs/scalar_or_spectrum", "description": "lambda / lsf_fwhm_A"},
+    "n_spec_per_resel": {"type": "number", "exclusiveMinimum": 0, "x-unit": "pix",
+                         "description": "LSF FWHM in pixels"},
+    "slit_fraction": {"$ref": "#/$defs/scalar_or_spectrum", "description": "Moffat flux fraction through the slit (all y)"},
+    "aperture_fraction": {"$ref": "#/$defs/scalar_or_spectrum", "description": "f_slit_ap / slit_fraction"},
+    "n_spatial_pix": {"type": "integer", "minimum": 1, "description": "ceil(L / platescale)"},
+    "fwhm_arcsec_band": {"type": "number", "exclusiveMinimum": 0, "x-unit": "arcsec",
+                         "description": "seeing FWHM at the band"},
+    "throughput": {"$ref": "#/$defs/spectrum", "description": "system throughput incl. filter and throughput.scale, LSF-convolved"},
+    "atm_transmission": {"$ref": "#/$defs/spectrum"},
+    "filter_transmission": {"$ref": "#/$defs/spectrum"},
+    "signal_e": {"$ref": "#/$defs/spectrum", "x-unit": "electron"},
+    "sky_e": {"$ref": "#/$defs/spectrum", "x-unit": "electron"},
+    "dark_e": {"$ref": "#/$defs/scalar_or_spectrum", "x-unit": "electron"},
+    "read_noise_e": {"$ref": "#/$defs/scalar_or_spectrum", "x-unit": "electron",
+                     "description": "rms read noise in the aperture over all frames"},
+    "noise_e": {"$ref": "#/$defs/spectrum", "x-unit": "electron"},
+    "snr_pixel": {"$ref": "#/$defs/spectrum"},
+    "snr_resel": {"$ref": "#/$defs/spectrum"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snr_pixel_median", "snr_resel_median", "exptime_s", "n_frames", "total_time_s"],
+      "properties": {
+        "snr_pixel_median": {"type": "number"},
+        "snr_resel_median": {"type": "number"},
+        "snr_line": {"type": ["number", "null"], "description": "line mode only: S/N within +/- FWHM_obs/2"},
+        "line_window_A": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
+                          "x-unit": "Angstrom"},
+        "exptime_s": {"type": "number", "minimum": 0, "x-unit": "s", "description": "per frame; solved if target_snr"},
+        "n_frames": {"type": "integer", "minimum": 1},
+        "total_time_s": {"type": "number", "minimum": 0, "x-unit": "s"}
+      }
+    },
+    "saturation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["peak_e_per_frame", "peak_adu_per_frame", "wave_A", "flag"],
+      "properties": {
+        "peak_e_per_frame": {"type": "number", "x-unit": "electron"},
+        "peak_adu_per_frame": {"type": "number", "x-unit": "ADU"},
+        "wave_A": {"type": "number", "x-unit": "Angstrom"},
+        "flag": {"type": "string", "enum": ["ok", "nonlinear_1pct", "nonlinear_5pct", "saturated"]}
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "examples": [
+    {"meta": {"keck_etcs_version": "0.2.0", "pypeit_version": "2.0.2.dev1218+g8017f4799",
+              "calib_version": "mosfire-J-2026.10", "era": "2025-04", "inputs": {}},
+     "wave_A": [12000.0, 12001.3, 12002.6], "dispersion_A_per_pix": 1.3, "lsf_fwhm_A": 3.29,
+     "resolving_power": [3647.4, 3647.8, 3648.2], "n_spec_per_resel": 2.53,
+     "slit_fraction": 0.657, "aperture_fraction": 0.854, "n_spatial_pix": 6, "fwhm_arcsec_band": 0.7,
+     "throughput": [0.3, 0.3, 0.3], "atm_transmission": [0.95, 0.96, 0.97], "filter_transmission": [0.9, 0.9, 0.9],
+     "signal_e": [400.0, 410.0, 405.0], "sky_e": [900.0, 5000.0, 850.0], "dark_e": 23.0, "read_noise_e": 28.4,
+     "noise_e": [60.0, 105.0, 59.0], "snr_pixel": [6.7, 3.9, 6.9], "snr_resel": [10.6, 6.2, 10.9],
+     "summary": {"snr_pixel_median": 6.7, "snr_resel_median": 10.6, "snr_line": null, "line_window_A": null,
+                 "exptime_s": 120, "n_frames": 4, "total_time_s": 480},
+     "saturation": {"peak_e_per_frame": 1500.0, "peak_adu_per_frame": 697.7, "wave_A": 12001.3, "flag": "ok"},
+     "warnings": []}
+  ]
+}

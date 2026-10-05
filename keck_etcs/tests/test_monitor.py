@@ -6,13 +6,11 @@ from keck_etcs.calib import monitor as mo
 from keck_etcs.calib import monitor_configs as mc
 
 
-def test_moffat_slit_fraction_limits():
-    # a very wide slit passes everything; a narrow one loses a lot
-    assert mo.moffat_slit_fraction(1.0, 50.0) == pytest.approx(1.0, abs=1e-3)
-    narrow = mo.moffat_slit_fraction(1.0, 0.5)
-    assert 0.3 < narrow < 0.7
-    # monotonic in slit width
-    assert mo.moffat_slit_fraction(1.0, 1.0) > narrow
+def test_object_fwhm_uses_core_slit_fraction():
+    # the provisional copy is gone; the D26 integral lives in keck_etcs.core.slitloss
+    from keck_etcs.core import slitloss
+    assert mo.slit_fraction is slitloss.slit_fraction
+    assert not hasattr(mo, 'moffat_slit_fraction')
 
 
 def test_sky_line_fwhm_uses_interim_slope_and_floor():
