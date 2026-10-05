@@ -123,6 +123,11 @@ part 3's regression fixtures against the real throughput (see prompt 1).
    attribution as an appendix to `docs/keck_mosfire_design.md`. This is a
    script, not a CI test. Log your work.
 
+4. **XTcalc bug?** Write a report of the possible XTcalc bug.  Include figures 
+   if you can.  Be quantitative and stick to the facts.
+   Write it to `docs/XTcalc_bug.md` and I will share it.
+   Use Opus 5.5. Log your work
+
 ## Q&A
 
 ### S12 (2026-10-05)
@@ -166,6 +171,7 @@ part 3's regression fixtures against the real throughput (see prompt 1).
 
    *Default:* (a), with (c) proposed to you after S16 if the
    continuum-to-line ratio holds over many nights.
+>A. use your default
 
 ## Logging
 
