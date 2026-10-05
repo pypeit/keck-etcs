@@ -2,5 +2,5 @@ night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,std_r
 20241230,mosfire,mosfire/20241230,GD153,LONGSLIT-46x5,0,WD xshooter DA1; J2; 2 frames; flats 43; lamp arcs 0; prog U418 Hennawi; era 2017-02..2025-02,WD,,194.259750,22.031306,J2
 20170615,mosfire,mosfire/20170615,HD133772,long2pos_specphot,0,A0V simbad A0V; J; 6 frames; flats 26; lamp arcs 12; prog C263 Heida; era 2017-02..2025-02,A0V,7.242,226.642669,-12.907061,J
 20240721,mosfire,mosfire/20240721,Feige110,long2pos_specphot,0,WD xshooter DOp; J; 7 frames; flats 13; lamp arcs 6; prog O445 Strom; era 2017-02..2025-02,WD,,349.993333,-5.165611,J
-20131225,mosfire,mosfire/20131225,BD+174708,LONGSLIT-3x4,0,archive calspec sdF8; J; 4 frames; flats 24; lamp arcs 0; prog Z295M Kewley; era 2012-04..2016-09,archive,,332.880729,18.092822,J
-20250722,mosfire,mosfire/20250722,GD153,LONGSLIT-46x5,0,WD xshooter DA1; J2; 2 frames; flats 60; lamp arcs 0; prog N110 Hennawi; era 2025-04..,WD,,194.259750,22.031306,J2
+20140601,mosfire,mosfire/20140601,Feige110,long2pos_specphot (align),0,WD xshooter DOp; J; 12 frames; flats 22; lamp arcs 2; prog C223M Steidel; era 2012-04..2016-09,WD,,349.993333,-5.165611,J
+20250723,mosfire,mosfire/20250723,GD153,LONGSLIT-46x5,0,WD xshooter DA1; J2; 2 frames; flats 20; lamp arcs 0; prog N110 Hennawi; era 2025-04..,WD,,194.259750,22.031306,J2

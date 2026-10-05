@@ -487,3 +487,17 @@ per-batch checks wait for batches.
 
 **Next:** `koa_search_prompts.md` prompt 1 (Q&A S15b-2), then its prompt 2,
 then S15a's pilot, then S15b's batches.
+
+### 2026-10-05 (S15b: first real backup, approved in Q&A S15b-1)
+
+- `python scripts/nautilus/backup_products.py --run` copied the bucket's
+  backup set (night 20220409: 60 objects, 6.4 MB) to the new
+  `AIOcean:keck-etcs/`.
+- `rclone check --one-way`: 60 match, 0 missing, 0 differ, 0 errors
+  (COMPLETE).
+- A dry run afterwards would transfer 0 files (idempotent).
+- Summaries are in `$KECK_ETCS_DATA/runs/backup/`.
+- Also this session (KOA doc prompt 2): the KOA probe passed, and the
+  batch-1 download manifest (19 reducible nights) and Job are ready, waiting
+  for image 0.2.0 and the user's go-ahead. Pilot changes (20250722 →
+  20250723, 20131225 → 20140601) are explained in `koa_search_prompts.md`.

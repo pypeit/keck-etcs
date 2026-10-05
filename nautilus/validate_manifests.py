@@ -8,8 +8,9 @@ For every ``nautilus/*.yaml``: ``yaml.safe_load`` succeeds, ``kind`` and
 ``metadata.namespace == pypeit``; for each container whose command is
 ``bash -lc``, the script block passes ``bash -n``. For the job manifests,
 ``night_job.yaml`` and ``validate_job.yaml`` must carry byte-identical script
-blocks, mount the credentials secret at ``/root/.aws/credentials`` (subPath
-``credentials``), mount an ``emptyDir`` at ``/scratch``, and set the env
+blocks; every Job except the KOA probe (no bucket access) mounts the
+credentials secret at ``/root/.aws/credentials`` (subPath ``credentials``)
+and an ``emptyDir`` at ``/scratch``; the reduction jobs also set the env
 variables of plan step S4b. Exit status 1 on any failure.
 """
 import subprocess
@@ -18,6 +19,11 @@ import tempfile
 from pathlib import Path
 
 import yaml
+
+NO_BUCKET = {'koa_probe_job.yaml'}
+"""Manifests that touch no bucket (no credentials or scratch checks): the KOA reachability probe."""
+REDUCTION_JOBS = {'night_job.yaml', 'validate_job.yaml'}
+"""Jobs that must set the S4b environment (JOB_ENV); other Jobs (KOA downloads) only need credentials and scratch."""
 
 HERE = Path(__file__).resolve().parent
 JOB_ENV = {'BUCKET', 'ENDPOINT_URL', 'HOME', 'KECK_ETCS_IMAGE', 'KECK_ETCS_IMAGE_DIGEST',
@@ -46,15 +52,17 @@ def main():
                 if res.returncode != 0:
                     bad.append(f'{path.name}: bash -n: {res.stderr.strip()}')
                 blocks[path.name] = block
+            if path.name in NO_BUCKET:
+                continue
             mounts = {m['mountPath']: m for m in c.get('volumeMounts', [])}
             cred = mounts.get('/root/.aws/credentials')
             if cred is None or cred.get('subPath') != 'credentials':
                 bad.append(f'{path.name}: credentials secret not mounted at /root/.aws/credentials')
             if doc['kind'] == 'Job':
                 env = {e['name'] for e in c.get('env', [])}
-                if JOB_ENV - env:
+                if path.name in REDUCTION_JOBS and JOB_ENV - env:
                     bad.append(f'{path.name}: missing env {sorted(JOB_ENV - env)}')
-                vols = {v['name']: v for v in spec['volumes']}
+                vols = {v['name']: v for v in spec.get('volumes', [])}
                 scratch = mounts.get('/scratch')
                 if scratch is None or 'emptyDir' not in vols.get(scratch['name'], {}):
                     bad.append(f'{path.name}: no emptyDir at /scratch')

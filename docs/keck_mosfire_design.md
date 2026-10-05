@@ -201,10 +201,21 @@ program ID, and whether calibrations (dome flats lamp on/off) exist on the
 same night. Standards on slits >= 3" enter the throughput sample (D4); the
 rest enter the slit-loss sample. The `SAMPMODE` histogram of all science frames
 answers the UTR question (D13). The search is its own prompt doc (N8); the
-priority nights are the Hennawi/Yang/Wang quasar program (D9). Open item: Josh
-Walawender (WMKO) will say whether the 5" slit was routine for standards; if
-not, the wide-slit sample may be small and `long2pos_specphot` frames become
-important.
+priority nights are the Hennawi/Yang/Wang quasar program (D9). *Settled by
+the KOA census (2026-10-05, `scripts/koa/search_mosfire_standards.py`;
+the question to Josh Walawender (WMKO) is dropped, user):* the 5" slit was
+not routine for standards. Of the 62 public wide-slit standard rows, 51 are
+`long2pos_specphot` (13 of them its "(align)" variant), 9 `LONGSLIT-46x5`
+(nearly all the Hennawi program, 2022-2025) and 2 10" slits, so
+`long2pos_specphot` carries the throughput sample. The usable wide-slit sample
+is 52 rows on 44 nights (27 stars: 10 WD, 1 CALSPEC, 41 A0V) over all three
+eras. *Reducible* (KOA prompt 2) needs a wavelength calibrator as well:
+narrow-slit on-sky frames of >= 55 s that night for the OH lines (a wide slit
+broadens the standard's own; short telluric exposures show too little OH),
+or, for `long2pos_specphot`, Ne/Ar arcs on a long2pos mask (PypeIt's
+calibration for that mask). Only 15 of the 43 specphot rows have such arcs,
+so the reducible wide-slit sample is 20 nights, 13 stars (era 2012-16: 7,
+2017-25: 12, 2025-: 1), still above the milestone.
 
 ### 4.2 Reduction workflow, S3 layout and data root
 
@@ -1183,10 +1194,13 @@ not circular. Later, every KOA quasar night adds a validation point.
 
 ## 8. Open items and TBDs
 
-- **Q3 / Josh Walawender (WMKO):** was the 5" long slit routine for MOSFIRE
-  standards? Determines the size of the wide-slit sample and whether
-  `long2pos_specphot` must be included.
-- **KOA `SAMPMODE` census:** decides whether UTR is added (D13).
+- **Q3 / Josh Walawender (WMKO):** *closed 2026-10-05.* The KOA census
+  answered it from the data (section 4.1): the 5" slit was rare, and
+  `long2pos_specphot` carries the wide-slit sample. The question was
+  dropped (user).
+- **KOA `SAMPMODE` census:** *done 2026-10-05.* Of 168,038 public on-sky
+  spectroscopy frames: MCDS 84.2 percent (MCDS-16 73.3), CDS 14.8, UTR 0.94,
+  Single 0.06. UTR stays out (D13).
 - **PypeIt `ronoise` branch:** to be drafted once the Keck RN table is
   confirmed against our own data (e.g. from the difference of two dome flats
   at fixed `NUMREADS`).

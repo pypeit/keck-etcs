@@ -94,13 +94,13 @@ files:
       PypeIt 8017f47997d6417d797be6d0a0358d7acb8918b5'
   mosfire/koa_standards_candidates.ecsv:
     calib_version: mosfire-J-2026.10-dev
-    created: '2026-10-05T22:27:15Z'
-    sha256: bb154405d8da38727bbd3a753fd4fbd7955ce0dbc8cc2b482fcf1af3687f2462
+    created: '2026-10-05T22:55:38Z'
+    sha256: c194a931da5618d7afc110012f4f3a16266527aaea7404dba8743d9c9178185f
     script: scripts/koa/search_mosfire_standards.py
     provenance: KOA TAP census, 12769 public frames; SIMBAD A0 V<11; 2MASS J (II/246)
   mosfire/koa_sampmode_census.ecsv:
     calib_version: mosfire-J-2026.10-dev
-    created: '2026-10-05T22:27:15Z'
-    sha256: 519cc4e0aee85e76bdf5c5a85e89fb641ba228f944ac06788840986f9e3e0395
+    created: '2026-10-05T22:55:38Z'
+    sha256: 79916ab5194ad28653f5e53ee75b4c45e410d7edf26bbc5aa80eb5efd05a2f2f
     script: scripts/koa/search_mosfire_standards.py
     provenance: KOA TAP SAMPMODE histogram of 168038 public on-sky spectroscopy frames

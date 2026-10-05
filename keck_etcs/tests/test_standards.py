@@ -85,3 +85,19 @@ def test_driver_long2pos_pairing_uses_pypeit(driver):
     assert notes == [] and 'setup' not in t.colnames
     assert list(t['comb_id']) == [1, 2, 3, 4]
     assert list(t['bkg_id']) == [2, 1, 4, 3]            # PypeIt's B-A pairs
+
+
+def test_driver_reads_koa_frame_types(driver, tmp_path):
+    from astropy.table import Table as T
+    T(rows=[{'file': 'a.fits', 'frame_type': 'oh_arc'}, {'file': 'b.fits', 'frame_type': 'standard'}]).write(
+        tmp_path / 'manifest.ecsv', format='ascii.ecsv')
+    assert driver.raw_manifest_types(tmp_path) == {'a.fits': 'oh_arc', 'b.fits': 'standard'}
+    assert driver.raw_manifest_types(tmp_path / 'none') == {}
+
+
+def test_driver_flat_typing_without_flamp_cards(driver):
+    old = {'AXESTAT': 'not controlling', 'TARGNAME': 'unknown', 'FLATSPEC': 1}
+    assert driver.classify(old, 10.0, 10.0, None) == 'pixelflat,illumflat,trace'
+    assert driver.classify({**old, 'FLATSPEC': 0}, 10.0, 10.0, None) == 'lampoffflats'
+    assert driver.classify({'AXESTAT': 'tracking', 'TARGNAME': 'X', 'FLATSPEC': 1, 'FLAMP1': 'off',
+                            'FLAMP2': 'off'}, 10.0, 10.0, None) == 'arc,science,tilt'   # 2022: FLATSPEC=1 on sky

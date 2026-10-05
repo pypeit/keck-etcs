@@ -1,0 +1,107 @@
+# keck-etcs KOA raw-frame downloads on Nautilus (plan S14b, design D37, 4.8.1):
+# an Indexed Job, one pod per row of a night manifest CSV (the row is
+# JOB_COMPLETION_INDEX). Each pod runs scripts/koa/download_mosfire_night.py
+# --to-s3 --lamp-arcs: it asks KOA's TAP service for the night's frames,
+# selects the standard, the dome flats, the OH frames (LONGSLIT) or the Ne/Ar
+# arcs (long2pos_specphot; --lamp-arcs adds the arcs on the standard's mask,
+# the user's choice after the census, Q&A MOSFIRE-1), downloads the public
+# frames over HTTP onto emptyDir scratch, writes raw/manifest.ecsv and pushes
+# mosfire/<night>/raw/ to s3://keck-etcs, then pushes its status row to
+# runs/<JOB_NAME>/download_status/ (collect with
+# download_mosfire_night.py --collect <JOB_NAME>). Idempotent: frames already
+# on S3 with the size in the manifest are not fetched again.
+#
+# Reachability: settled by nautilus/koa_probe_job.yaml on 2026-10-05 (PROBE
+# OK: TAP 3.8 s, a 16.9 MB frame in 1.5 s, 10.9 MB/s from the pod), so the
+# downloads run in-cluster; the local fallback is the same script with --to-s3
+# on the workstation.
+#
+# The script is new in the 0.2.0 image (scripts/koa/); 0.1.6 does not have it.
+# Politeness: parallelism 2. Data outcomes (no standard, no calibs; exit 11/10)
+# end the pod successfully after the status row, so they are not retried;
+# download or push failures exit 1 and are retried (backoffLimit).
+#
+# Sizing (estimate; measure on the first batch): a night is 20-90 frames of
+# 16.9 MB, i.e. 0.3-1.5 GB of scratch; about 10 MB/s from KOA.
+#
+# Set spec.completions to the number of rows in the manifest. Usage:
+#   kubectl -n pypeit create configmap keck-etcs-koa-nights \
+#     --from-file=nights.csv=nautilus/manifests/nights_<batch>.csv --dry-run=client -o yaml \
+#     | kubectl apply -f -
+#   kubectl -n pypeit delete job keck-etcs-koa-download --ignore-not-found
+#   kubectl apply -f nautilus/koa_download_job.yaml
+#   kubectl -n pypeit logs -f job/keck-etcs-koa-download          # DOWNLOAD_DONE per pod
+#   python scripts/koa/download_mosfire_night.py --collect keck-etcs-koa-download --to-s3
+# Credentials: the secret named by KECK_ETCS_S3_SECRET (default prp-s3-credentials).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keck-etcs-koa-download
+  namespace: pypeit
+  labels: {app: keck-etcs, role: koa-download}
+spec:
+  completionMode: Indexed
+  completions: 1             # = rows in the manifest CSV
+  parallelism: 2             # politeness to KOA
+  backoffLimit: 4
+  activeDeadlineSeconds: 14400
+  template:
+    metadata:
+      labels: {app: keck-etcs, role: koa-download}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: download
+        # image 0.2.0, digest TBD (set after build_image.sh --push)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.0
+        imagePullPolicy: Always
+        env:
+        - {name: HOME, value: /root}
+        - {name: BUCKET, value: keck-etcs}
+        - {name: KECK_ETCS_BUCKET, value: keck-etcs}
+        - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
+        - {name: KECK_ETCS_DATA, value: /scratch}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.0"}
+        - {name: MANIFEST, value: /opt/manifest/nights.csv}
+        - name: JOB_NAME
+          valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}
+        - name: POD_NAME
+          valueFrom: {fieldRef: {fieldPath: metadata.name}}
+        - name: NODE_NAME
+          valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+        command: ["/bin/bash", "-lc"]
+        args:
+          - |
+            set -o pipefail
+            SRC=/opt/src/keck-etcs
+            T0=$(date +%s)
+            mkdir -p "$KECK_ETCS_DATA"
+            log() { echo "=== $1 $(date -Is) ==="; }
+            log PROVENANCE
+            echo "image=$KECK_ETCS_IMAGE KECK_ETCS_GIT_SHAS=$KECK_ETCS_GIT_SHAS"
+            echo "job=$JOB_NAME index=$JOB_COMPLETION_INDEX pod=$POD_NAME node=$NODE_NAME"
+            sha256sum "$MANIFEST"
+            log DOWNLOAD
+            python $SRC/scripts/koa/download_mosfire_night.py --manifest "$MANIFEST" --index "$JOB_COMPLETION_INDEX" --to-s3 --lamp-arcs
+            RC=$?
+            echo "wall_clock_s=$(( $(date +%s) - T0 )) exit=$RC"
+            du -sh "$KECK_ETCS_DATA" || true
+            case $RC in
+              0) log DOWNLOAD_DONE ;;
+              10|11) log "DOWNLOAD_DONE (data outcome, exit $RC: recorded, not retried)"; exit 0 ;;
+              *) log "DOWNLOAD_FAILED exit $RC"; exit 1 ;;
+            esac
+        resources:
+          # requests = limits: Nautilus warns above a 1.2 limit/request ratio
+          requests: {cpu: "1", memory: "2Gi", ephemeral-storage: "20Gi"}
+          limits: {cpu: "1", memory: "2Gi", ephemeral-storage: "20Gi"}
+        volumeMounts:
+        - {name: scratch, mountPath: /scratch}
+        - {name: s3-credentials, mountPath: /root/.aws/credentials, subPath: credentials, readOnly: true}
+        - {name: manifest, mountPath: /opt/manifest, readOnly: true}
+      volumes:
+      - {name: scratch, emptyDir: {}}
+      - name: s3-credentials
+        secret: {secretName: prp-s3-credentials}
+      - name: manifest
+        configMap: {name: keck-etcs-koa-nights}

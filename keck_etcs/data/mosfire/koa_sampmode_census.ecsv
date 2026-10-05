@@ -12,7 +12,7 @@
 #     ''slewing'') AND targname NOT LIKE ''%FLAT%'' GROUP BY sampmode, numreads'}
 # - {n_frames_total: 168038}
 # - sampmode_codes: {1: Single, 2: CDS, 3: MCDS, 4: UTR}
-# - {created: '2026-10-05T22:27:15Z'}
+# - {created: '2026-10-05T22:55:38Z'}
 # - {script: scripts/koa/search_mosfire_standards.py}
 # - {calib_version: mosfire-J-2026.10-dev}
 # schema: astropy-2.0

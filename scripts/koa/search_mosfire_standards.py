@@ -39,6 +39,15 @@ here:
 checked from the headers by ``reduce_standard.py`` (``no calibs`` without
 lamp-on flats).
 
+Wavelength calibrator (``wavecal``, KOA prompt 2): a wide-slit standard's own
+OH lines are too broad, so a LONGSLIT standard needs narrow-slit (< 3")
+on-sky frames of the same night and filter, of at least 55 s, for the OH
+lines (``oh``, ``n_oh_frames``; short telluric exposures show too little OH), as the J0841 frames served LDS749B on 2022-04-09; a
+``long2pos_specphot`` standard is calibrated by PypeIt on Ne/Ar arcs taken
+with a long2pos mask (``lamp``, ``n_l2p_arcs``), since standard exposures
+are too short for the OH lines. ``reducible`` = usable class, flats and a
+calibrator.
+
 Standards (design 4.1). An on-sky pointing within 60" of a star in one of
 PypeIt's archives (``xshooter``, ``calspec``, ``esofil``, ``noao``, ``ing``,
 ``lbtmods``, ``blackbody``) is that standard: class ``WD`` if its type starts
@@ -84,7 +93,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-import requests
 import yaml
 from astropy import units as u
 from astropy.coordinates import SkyCoord
@@ -116,6 +124,9 @@ MATCH_ARCSEC = 60.0
 WIDE_SLIT = 3.0
 PRIORITY_PI = ('hennawi', 'yang', 'wang')
 USABLE = ('WD', 'archive', 'A0V')
+MIN_OH_EXPTIME = 55.0
+"""Shortest exposure [s] whose OH lines calibrate a night (the 2022-04-09 frames are 150 s; many telluric
+frames are 1.5-30 s and too faint in OH; 59.6 s frames are common)."""
 NAME_HINT = re.compile(r'^\s*(HIP|HD)\s*[-_]?\s*\d+', re.I)
 
 
@@ -125,6 +136,7 @@ def tap(url, adql, cache, refresh=False, fmt='csv'):
     KOA's CSV does not escape quotes inside text fields (e.g. ``object =
     dome flat: longslit, 120" x 0.7"``), so KOA queries use VOTable.
     """
+    import requests
     cache = Path(cache)
     if refresh or not cache.exists():
         r = requests.post(url, data={'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': fmt, 'QUERY': adql}, timeout=900)
@@ -193,6 +205,7 @@ def slit_length_bars(mask):
 
 def tmass_j(stars, cache_dir, refresh=False, pause=0.2):
     """2MASS J, e_J for (name, ra, dec) from VizieR II/246, one 5" cone per star (cached as JSON)."""
+    import requests
     cache = Path(cache_dir) / 'tmass_j.json'
     known = json.loads(cache.read_text()) if cache.exists() and not refresh else {}
     for name, ra, dec in stars:
@@ -314,6 +327,9 @@ def main(refresh=False):
     for r, d, a in zip(fr, dome, arc):
         if d or a:
             cal.setdefault(str(r['night']), []).append((r, 'flat' if d else 'arc'))
+    onsky_by_night = {}
+    for r in sky:
+        onsky_by_night.setdefault(str(r['night']), []).append(r)
     out = []
     for (night, std, mask, filt), g in sorted(groups.items()):
         rows, v = g['rows'], g['std']
@@ -323,6 +339,15 @@ def main(refresh=False):
         flats = [c for c, kind in cal.get(night, []) if kind == 'flat' and str(c['filter']) == filt
                  and same_kind(c['maskname'])]
         arcs_f = [c for c, kind in cal.get(night, []) if kind == 'arc' and str(c['filter']) == filt]
+        arcs_l2p = [c for c in arcs_f if 'long2pos' in str(c['maskname'])]
+        # OH arcs for a LONGSLIT standard: narrow-slit on-sky frames of the night, same filter, not the standard
+        oh = [] if l2p else [x for x in onsky_by_night.get(night, []) if str(x['filter']) == filt
+                             and float(x['truitime']) >= MIN_OH_EXPTIME
+                             and 'LONGSLIT' in str(x['maskname']) and slit_of(x['maskname'])[0] < WIDE_SLIT
+                             and SkyCoord(float(x['ra']), float(x['dec']), unit='deg').separation(
+                                 SkyCoord(v['std_ra'], v['std_dec'], unit='deg')).arcsec > MATCH_ARCSEC]
+        wavecal = ('lamp' if arcs_l2p else 'none') if 'long2pos_specphot' in mask else \
+                  (('lamp' if arcs_l2p else 'none') if l2p else ('oh' if oh else 'none'))
         arcs_m = [c for c in arcs_f if str(c['maskname']) == mask or ('long2pos_specphot' in mask
                                                                       and 'long2pos' in str(c['maskname']))]
         date_iso = f'{night[:4]}-{night[4:6]}-{night[6:]}'
@@ -349,6 +374,8 @@ def main(refresh=False):
             'public': True, 'has_flats': len(flats) > 0, 'n_flats': len(flats),
             'n_flats_koa_lampoff': sum(str(c['koaimtyp']) == 'flatlampoff' for c in flats),
             'n_lamp_arcs': len(arcs_m), 'n_lamp_arcs_filter': len(arcs_f), 'lamp_arcs_match': len(arcs_m) > 0,
+            'n_oh_frames': len(oh), 'n_l2p_arcs': len(arcs_l2p), 'wavecal': wavecal,
+            'reducible': bool(v['std_class'] in USABLE and len(flats) > 0 and wavecal != 'none'),
             'priority': any(p in pis for p in PRIORITY_PI),
         })
     cand = Table(rows=out)
@@ -393,6 +420,11 @@ def report(cand, sm):
     print(f"public wide-slit usable standards with flats: {len(use)} rows, {len(set(use['night']))} nights, "
           f"{len(set(use['standard']))} stars (WD {int(np.sum(use['std_class'] == 'WD'))}, archive "
           f"{int(np.sum(use['std_class'] == 'archive'))}, A0V {int(np.sum(use['std_class'] == 'A0V'))})")
+    red = use[use['reducible']]
+    print(f"  of which reducible (a wavelength calibrator: OH frames or long2pos arcs): {len(red)} rows, "
+          f"{len(set(red['night']))} nights, {len(set(red['standard']))} stars "
+          f"(oh {int(np.sum(red['wavecal'] == 'oh'))}, lamp {int(np.sum(red['wavecal'] == 'lamp'))}); per era: "
+          + ', '.join(f"{e.name} {len(set(red[red['era'] == e.name]['night']))}" for e in MOSFIRE.eras))
     oth = cand[(cand['std_class'] == 'other') & cand['wide_slit'] & cand['has_flats']]
     print(f"  not usable (other: HIP/HD not A0V or unclassified): wide with flats {len(oth)} rows, "
           f"{len(set(oth['night']))} nights")

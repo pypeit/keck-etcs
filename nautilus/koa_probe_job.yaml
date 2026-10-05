@@ -1,0 +1,66 @@
+# KOA reachability probe (plan S14b, design D37): can a pod in namespace pypeit
+# reach KOA anonymously and download a public frame? Settles in-cluster
+# downloads versus the local fallback (scripts/koa/download_mosfire_night.py
+# --to-s3 on the workstation) before any download batch.
+#
+# One pod, no bucket access and no secret: it asks KOA's TAP service for the
+# file handle of MF.20220409.55932.fits (LDS749B, public), downloads it over
+# HTTP (nph-getKOA; the same calls download_mosfire_night.py makes, standard
+# library only, so any keck-etcs image works), and prints PROBE OK with the size
+# and sha256 (expected 16856640 bytes, sha256 aa2fe1eb54701920...) or PROBE
+# FAILED with the error.
+#
+# Usage:
+#   kubectl -n pypeit delete job keck-etcs-koa-probe --ignore-not-found
+#   kubectl apply -f nautilus/koa_probe_job.yaml
+#   kubectl -n pypeit logs -f job/keck-etcs-koa-probe
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keck-etcs-koa-probe
+  namespace: pypeit
+  labels: {app: keck-etcs, role: koa-probe}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: keck-etcs, role: koa-probe}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: probe
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6
+        imagePullPolicy: IfNotPresent
+        resources:
+          # requests = limits: Nautilus warns above a 1.2 limit/request ratio
+          requests: {cpu: "500m", memory: 1Gi, ephemeral-storage: 2Gi}
+          limits: {cpu: "500m", memory: 1Gi, ephemeral-storage: 2Gi}
+        command: ["python", "-c"]
+        args:
+          - |
+            import hashlib, socket, sys, time, urllib.parse, urllib.request
+            koaid = 'MF.20220409.55932.fits'
+            tap = 'https://koa.ipac.caltech.edu/TAP/sync'
+            q = {'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv',
+                 'QUERY': f"SELECT filehand, filesize_mb FROM koa_mosfire WHERE koaid = '{koaid}'"}
+            print('host', socket.gethostname(), flush=True)
+            try:
+                t0 = time.time()
+                body = urllib.request.urlopen(urllib.request.Request(tap, data=urllib.parse.urlencode(q).encode()),
+                                              timeout=120).read().decode()
+                fh = body.strip().splitlines()[1].split(',')[0].strip('"')
+                print(f'TAP ok in {time.time() - t0:.1f} s: filehand {fh}', flush=True)
+                t0 = time.time()
+                data = urllib.request.urlopen('https://koa.ipac.caltech.edu/cgi-bin/getKOA/nph-getKOA?filehand='
+                                              + urllib.parse.quote(fh), timeout=300).read()
+                dt = time.time() - t0
+                ok = data.startswith(b'SIMPLE')
+                print(f'download {len(data)} bytes in {dt:.1f} s ({len(data) / 1e6 / max(dt, 1e-3):.1f} MB/s), '
+                      f'FITS {ok}, sha256 {hashlib.sha256(data).hexdigest()}', flush=True)
+                print('PROBE OK' if ok else 'PROBE FAILED: not a FITS file', flush=True)
+                sys.exit(0 if ok else 1)
+            except Exception as exc:
+                print(f'PROBE FAILED: {type(exc).__name__}: {exc}', flush=True)
+                sys.exit(1)

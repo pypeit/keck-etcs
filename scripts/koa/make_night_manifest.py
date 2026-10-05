@@ -4,6 +4,7 @@
 Usage:
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py pilot
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py dryrun
+    conda run -n pypeit14b python scripts/koa/make_night_manifest.py batch1
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py BATCH --nights 20150904 20211027 [...]
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py BATCH --era 2017-02..2025-02 [--usable-wide]
 
@@ -20,8 +21,9 @@ removed (it names files); ``slit`` is the mask name.
 A night with several candidate rows keeps one: usable classes first (WD,
 archive, A0V), then wide slits, then the most frames.
 
-``pilot`` (plan S15a): 3-5 public wide-slit nights with flats, never
-2022-04-09, picked by fixed rules so that the pilot exercises both mask
+``pilot`` (plan S15a): 3-5 public wide-slit *reducible* nights (flats and a
+wavelength calibrator: OH frames for LONGSLIT, long2pos arcs for
+long2pos_specphot), never 2022-04-09, picked by fixed rules so that the pilot exercises both mask
 types, both standard classes and all eras:
 
 1. a WD on a wide LONGSLIT mask with one filter that night, era
@@ -36,7 +38,10 @@ types, both standard classes and all eras:
 5. a usable wide-slit night in era 2025-04.. .
 
 Within a rule the row with the most flats wins, then the most lamp arcs,
-then the latest night. ``dryrun`` rewrites ``nights_dryrun.csv`` (2022-04-09,
+then the latest night. ``batch1`` (KOA prompt 2): every reducible public wide-slit night, then
+reducible Hennawi/Yang/Wang nights, up to 20 nights, 2022-04-09 excluded.
+
+``dryrun`` rewrites ``nights_dryrun.csv`` (2022-04-09,
 ``spec2d = 1``, the S4b note) with the optional columns.
 """
 import argparse
@@ -55,6 +60,7 @@ OPTIONAL = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter')
 USABLE = ('WD', 'archive', 'A0V')
 CLASS_RANK = {'WD': 0, 'archive': 1, 'A0V': 2, 'other': 3}
 DRYRUN_NOTE = 'S4b dry run; reference at mosfire/20220409/reference'
+BATCH1_SIZE = 20
 
 
 def best(rows):
@@ -86,7 +92,7 @@ def single_filter_nights(t):
 
 
 def select_pilot(t):
-    use = t[np.isin(t['std_class'], USABLE) & t['wide_slit'] & t['has_flats'] & (t['night'] != '20220409')]
+    use = t[np.isin(t['std_class'], USABLE) & t['wide_slit'] & t['reducible'] & (t['night'] != '20220409')]
     one = single_filter_nights(t)
     l2p = lambda r: 'long2pos_specphot' in str(r['maskname'])
     rules = [
@@ -108,6 +114,27 @@ def select_pilot(t):
         if cands:
             picked.append(cands[0])
             why.append(name)
+    return picked, why
+
+
+def select_batch1(t, size=BATCH1_SIZE):
+    """KOA prompt 2's first batch: every reducible public wide-slit night, then reducible
+    Hennawi/Yang/Wang nights (any slit), up to ``size`` nights; 2022-04-09 excluded (its raw
+    frames are already on S3). One row per night (:func:`best`)."""
+    red = t[t['reducible'] & np.isin(t['std_class'], USABLE) & (t['night'] != '20220409')]
+    by_night = {}
+    for r in red:
+        by_night.setdefault(str(r['night']), []).append(r)
+    wide = sorted(n for n, v in by_night.items() if any(bool(r['wide_slit']) for r in v))
+    prio = sorted(n for n, v in by_night.items() if n not in wide and any(bool(r['priority']) for r in v))
+    picked, why = [], []
+    for n in wide + prio:
+        if len(picked) >= size:
+            break
+        v = by_night[n]
+        rows = [r for r in v if bool(r['wide_slit'])] if n in wide else [r for r in v if bool(r['priority'])]
+        picked.append(best(rows))
+        why.append('wide-slit standard' if n in wide else 'Hennawi/Yang/Wang program')
     return picked, why
 
 
@@ -148,6 +175,9 @@ def main(batch, nights=None, era=None, usable_wide=False):
     elif batch == 'pilot':
         picked, why = select_pilot(t)
         rows = [manifest_row(r) for r in picked]
+    elif batch == 'batch1':
+        picked, why = select_batch1(t)
+        rows = [manifest_row(r) for r in picked]
     else:
         sub = t
         if nights:
@@ -155,7 +185,7 @@ def main(batch, nights=None, era=None, usable_wide=False):
         if era:
             sub = sub[sub['era'] == era]
         if usable_wide:
-            sub = sub[np.isin(sub['std_class'], USABLE) & sub['wide_slit'] & sub['has_flats']]
+            sub = sub[np.isin(sub['std_class'], USABLE) & sub['wide_slit'] & sub['reducible']]
         by_night = {}
         for r in sub:
             by_night.setdefault(str(r['night']), []).append(r)
@@ -172,9 +202,10 @@ def main(batch, nights=None, era=None, usable_wide=False):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    p.add_argument('batch', help='pilot, dryrun, or a batch name')
+    p.add_argument('batch', help='pilot, batch1, dryrun, or a batch name')
     p.add_argument('--nights', nargs='+')
     p.add_argument('--era')
-    p.add_argument('--usable-wide', action='store_true', help='only usable wide-slit nights with flats')
+    p.add_argument('--usable-wide', action='store_true',
+                   help='only usable, reducible wide-slit nights (flats and a wavelength calibrator)')
     a = p.parse_args()
     sys.exit(main(a.batch, a.nights, a.era, a.usable_wide))

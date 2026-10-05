@@ -35,7 +35,8 @@ every frame of 2022-04-09 (science and standard included), so every frame
 comes out as a flat. This driver types from the dome-lamp and telescope
 cards instead:
 
-- ``FLAMP1`` or ``FLAMP2 == 'on'`` -> ``pixelflat,illumflat,trace``;
+- ``FLAMP1`` or ``FLAMP2 == 'on'`` -> ``pixelflat,illumflat,trace``; headers
+  without FLAMP cards (e.g. 2013) use ``FLATSPEC == 1`` off sky instead;
 - lamps off and ``TARGNAME`` contains "FLAT", or the telescope is parked
   (``AXESTAT`` neither ``tracking`` nor ``slewing``; nodded frames read
   ``slewing``) -> ``lampoffflats``;
@@ -51,6 +52,13 @@ cards instead:
   (``--std-class A0V --std-ra --std-dec``; plan S15a, design N3) ->
   ``standard``;
 - other on-sky frames -> ``arc,science,tilt`` (OH lines as the arc).
+
+When ``raw/manifest.ecsv`` exists (written by
+``scripts/koa/download_mosfire_night.py``), its ``frame_type`` refines this:
+``oh_arc`` frames (narrow-slit on-sky frames downloaded only for their OH
+lines, often of faint unrelated targets) become ``arc,tilt``, so the night
+does not fail ``no trace`` on them; ``standard`` frames are typed
+``standard``.
 
 Nod pairing. Long-slit nights pair A and B frames in time order (below).
 ``long2pos`` and ``long2pos_specphot`` masks use PypeIt's own
@@ -185,12 +193,16 @@ def classify(hdr, ra, dec, std=None):
     """
     from pypeit.core import standard
     from keck_etcs.calib.standards import A0V_MATCH_ARCSEC
-    lamp_on = any(str(hdr.get(k, '')).strip().lower() == 'on' for k in ('FLAMP1', 'FLAMP2'))
+    on_sky = str(hdr.get('AXESTAT', '')).strip().lower() in ('tracking', 'slewing')
+    if 'FLAMP1' in hdr or 'FLAMP2' in hdr:
+        lamp_on = any(str(hdr.get(k, '')).strip().lower() == 'on' for k in ('FLAMP1', 'FLAMP2'))
+    else:
+        # older headers (e.g. 2013) have no FLAMP cards; FLATSPEC is then reliable off sky
+        lamp_on = (not on_sky) and hdr.get('FLATSPEC') == 1
     if lamp_on:
         return 'pixelflat,illumflat,trace'
     if hdr.get('PWSTATA7') == 1 or hdr.get('PWSTATA8') == 1:
         return LAMP_ARC
-    on_sky = str(hdr.get('AXESTAT', '')).strip().lower() in ('tracking', 'slewing')
     if not on_sky or 'FLAT' in str(hdr.get('TARGNAME', '')).upper():
         return 'lampoffflats'
     if standard.get_archive_standard(float(ra), float(dec), check=True):
@@ -199,6 +211,15 @@ def classify(hdr, ra, dec, std=None):
             and separation_arcsec(float(ra), float(dec), std['ra'], std['dec']) <= A0V_MATCH_ARCSEC:
         return 'standard'
     return 'arc,science,tilt'
+
+
+def raw_manifest_types(raw_dir):
+    """``{file: frame_type}`` from ``raw/manifest.ecsv`` (KOA downloads), or {} without one."""
+    p = Path(raw_dir) / 'manifest.ecsv'
+    if not p.exists():
+        return {}
+    t = Table.read(p, format='ascii.ecsv')
+    return {str(f): str(k) for f, k in zip(t['file'], t['frame_type'])}
 
 
 def pair_long2pos(tbl):
@@ -272,6 +293,10 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
         setups[f.stem] = pf.setup
     from astropy.table import vstack
     tbl = vstack(tables, metadata_conflicts='silent')
+    # pypeit_setup lists calibration frames shared by several setups in each of them: keep one row per file
+    _, first = np.unique(np.asarray(tbl['filename']), return_index=True)
+    n_dup = len(tbl) - len(first)
+    tbl = tbl[np.sort(first)]
     filters = sorted(set(tbl['filter1']))
     if filt is None:
         if len(filters) != 1:
@@ -281,10 +306,17 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     if len(tbl) == 0:
         raise StageError('setup failed', f'no frames with filter {filt} (have {filters})')
 
-    notes = []
+    notes = [f'{n_dup} duplicate row(s) of frames listed in several pypeit_setup setups removed'] if n_dup else []
     old = list(tbl['frametype'])
     tbl['frametype'] = [classify(fits.getheader(Path(raw_dir) / fn), ra, dec, std)
                         for fn, ra, dec in zip(tbl['filename'], tbl['ra'], tbl['dec'])]
+    koa = raw_manifest_types(raw_dir)
+    for i, fn in enumerate(tbl['filename']):
+        kt = koa.get(str(fn))
+        if kt == 'oh_arc' and tbl['frametype'][i] == 'arc,science,tilt':
+            tbl['frametype'][i] = 'arc,tilt'
+        elif kt == 'standard' and tbl['frametype'][i] == 'arc,science,tilt':
+            tbl['frametype'][i] = 'standard'
     specphot = any('long2pos_specphot' in str(d) for d in tbl['decker'])
     long2pos = any('long2pos' in str(d) for d in tbl['decker'])
     lamp = np.array([t == LAMP_ARC for t in tbl['frametype']])

@@ -104,4 +104,5 @@ print('KECK_ETCS OK', keck_etcs.__version__, provenance.git_shas())" \
  && python scripts/mosfire/build_sensfunc.py --help > /dev/null \
  && python -c "import keck_etcs.calib.harvest, keck_etcs.calib.monitor, keck_etcs.calib.monitor_configs, keck_etcs.calib.standards, keck_etcs.instruments.mosfire" \
  && python scripts/mosfire/harvest_sens.py --help > /dev/null \
+ && python scripts/koa/download_mosfire_night.py --help > /dev/null \
  && echo "GUARDS OK"

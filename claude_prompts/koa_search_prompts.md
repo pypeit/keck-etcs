@@ -221,6 +221,48 @@ by `keck_mosfire_prompt_5.md`.
    *Default:* download and reduce these in prompt 2 and S15a.
    >Answer: Your default
 
+### MOSFIRE prompt 2 (2026-10-05)
+
+1. **Go-ahead for batch 1 (in-cluster).** The probe passed, so the
+   downloads run as `nautilus/koa_download_job.yaml` over
+   `nautilus/manifests/nights_batch1.csv`:
+   - 19 reducible public wide-slit nights, including the 5 pilot nights;
+   - about 620 frames, at most about 10.5 GB;
+   - `parallelism` 2, `--lamp-arcs`.
+
+   The steps:
+   - (a) commit (the script is new and the image must contain it);
+   - (b) rebuild and push the image, `bash nautilus/build_image.sh --push`
+     (tag **0.2.0**: `keck_etcs.__version__` is bumped; same pin 8017f47).
+     This build also carries S8's filter curves, S15a's A0V and long2pos
+     code and the driver fixes below;
+   - (c) I set the digest in `koa_download_job.yaml`, create the ConfigMap,
+     set `completions: 19` and apply the Job.
+
+   *Default:* yes to (c) once you have done (a) and (b). One night,
+   20240721, is already on S3 from my `--to-s3` test, and the Job will skip
+   it.
+
+2. **Two pilot nights changed** after you approved the list. Both were
+   unreducible, which I found here:
+   - 20250722 has no narrow-slit OH frames in J2 → **20250723** (same
+     star, same era, 36 frames of 150 s);
+   - 20131225 (BD+17 4708) has only 1.5 s OH frames → **20140601**
+     (Feige110, long2pos_specphot with 2 arcs, era 2012-16).
+
+   *Default:* accept.
+
+3. **Unreducible wide-slit nights: 28 long2pos_specphot rows** have no
+   long2pos arcs that night, and 3 LONGSLIT ones have no OH frames of 55 s
+   or more. Possible later options:
+   - arcs from an adjacent night with the same mask and filter;
+   - the OH lines in the narrow long2pos slits;
+   - accepting shorter OH frames.
+
+   *Default:* leave them out of batch 1. Revisit in S15b if the
+   reducible sample (20 nights, 13 stars) proves too small for the era
+   medians.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -375,3 +417,150 @@ calibrations in the cached KOA table.
 
 **Questions:** Q&A MOSFIRE-1 (lamp arcs), 2 (A1V stars), 3 (the 5" slit
 question is answered by the data), 4 (pilot nights).
+
+### 2026-10-05 (MOSFIRE prompt 2: KOA probe OK; download script, Job, batch-1 manifest; driver fixes)
+
+**Answers read** (prompt 1):
+
+- (1) **(b)**: specphot nights always get their arcs, and every night gets
+  the matching arcs via `--lamp-arcs`.
+- (2) A0V only.
+- (3) **The 5" slit question is settled by the census and dropped.**
+  Design 4.1 and section 8 are updated: the WMKO question is closed, and
+  the SAMPMODE census is done (UTR 0.94%).
+- (4) Pilot as proposed, but two nights changed (Q&A prompt 2, item 2).
+
+Also done, approved in `keck_mosfire_prompt_5.md` (S15b-1): **the first
+real backup**, `backup_products.py --run`, copied 60 files (6.4 MB) to
+`AIOcean:keck-etcs/`; `rclone check --one-way` reports 60 match, 0 missing,
+0 differ (COMPLETE). A dry run afterwards would copy 0 (idempotent).
+
+**How frames are fetched:**
+
+- `pykoa` is not installed and is not needed. KOA's
+  `cgi-bin/getKOA/nph-getKOA?filehand=<filehand>` (the `filehand` column of
+  `koa_mosfire`) serves public frames over plain HTTP: 16.9 MB in 1.6 s
+  locally.
+- KOA also stores the original name (`ofname`, e.g. `m220409_0218.fits`),
+  which the downloads keep.
+- The KOA copy of MF.20220409.55932 has data **bit-identical** to the
+  dev-suite `m220409_0218.fits`. KOA adds header cards (KOAID, PROGID,
+  `GUIDFWHM`, IMAGEMN, …), so the sha256 differs.
+
+**Probe** (`nautilus/koa_probe_job.yaml`: one pod, image 0.1.6, standard
+library only, no bucket or secret), applied 2026-10-05 23:32 UTC:
+- **PROBE OK**;
+- TAP answered in 3.8 s; the 16,856,640-byte frame downloaded in 1.5 s
+  (10.9 MB/s), FITS, sha256 aa2fe1eb… (the same as locally);
+- **pods reach KOA anonymously, so downloads run in-cluster** and the D37
+  fallback is not needed;
+- the admission webhook warned about limit/request ratios above 1.2, so
+  requests now equal limits in both KOA manifests.
+
+**`scripts/koa/download_mosfire_night.py`** (standard library plus
+astropy, so it runs in the image):
+
+- Per night (a manifest row, or a night via the candidate table) it queries
+  KOA for the night's frames (UT date of UT + 6 h) and selects:
+  - **standard**: on sky, the filter and mask, within 60";
+  - **dome_flat**: one mask only (the standard's, else the OH frames',
+    else the most common of the right kind), so that PypeIt does not trace
+    mixed slit widths;
+  - **oh_arc** (LONGSLIT): up to 6 narrow-slit on-sky frames of **at least
+    55 s**, nearest in time;
+  - **lamp_arc**: long2pos arcs for specphot (required), plus the arcs on
+    the standard's mask with `--lamp-arcs`.
+- `no standard` (exit 11) and `no calibs` (no flats, or no calibrator;
+  exit 10) download nothing.
+- It writes `raw/manifest.ecsv` (koaid, file, frame_type, target, slit,
+  filter, sampmode, numreads, exptime, airmass, ut, mjd, size, sha256,
+  progid, priority).
+- **Idempotent:** a frame in the manifest with the same size on disk, or
+  in the bucket with `--to-s3`, is not fetched again.
+- `--to-s3` pushes `mosfire/<night>/raw/` and checks the bucket sizes
+  against the manifest.
+- Status rows go to `runs/<job>/download_status/<idx>_<night>.ecsv`;
+  `--collect` builds `download_status.ecsv`.
+
+**Tests** (scratchpad, plus one night into the bucket):
+
+- **20131225 local**: 22 frames (4 standard, 12 flats, 6 OH), 371 MB; the
+  re-run downloaded 0.
+- **20250722**: `no calibs` (2 standard frames, 20 flats, 0 OH frames),
+  nothing downloaded.
+- **20240721 `--to-s3`** (batch-1 index 14): 26 frames (7 standard, 13
+  flats, 6 arcs), 438 MB in `s3://keck-etcs/mosfire/20240721/raw/`; sizes
+  match the manifest.
+  - A re-run from **empty scratch** downloaded 0 (26 skipped, using the
+    bucket sizes alone).
+  - My test status rows are left under `runs/local-download-test/` in the
+    bucket (2 small files).
+
+**Problems found by running the driver on a KOA night** (fixed in
+`scripts/mosfire/reduce_standard.py`):
+
+1. **2013 headers have no `FLAMP1`/`FLAMP2`**, so "no lamp-on flats"
+   resulted. `FLATSPEC` is reliable then, so the driver now falls back to
+   `FLATSPEC == 1` off sky when the FLAMP cards are absent. (In 2022,
+   `FLATSPEC = 1` even on sky; the FLAMP cards exist there and win.)
+2. **Duplicate rows:** `pypeit_setup` lists calibration frames shared by
+   several setups in each of them, so the merged PypeIt file had every
+   flat twice. Rows are now kept once per file (a note records it).
+3. **OH frames typed science** would fail `no trace` on faint unrelated
+   targets. The driver now reads `raw/manifest.ecsv`: `oh_arc` →
+   `arc,tilt` and `standard` → `standard`.
+
+- After the fixes, `--setup-only` on 20131225 gives 22 rows: 12 pixelflats,
+  4 standards (pairs 24↔25, 26↔27) and 6 `arc,tilt`.
+- 2022-04-09's PypeIt data table is still **identical** to the pod's.
+- Tests: the FLATSPEC fallback and `raw_manifest_types`; the suite has
+  **102 passed**.
+
+**Census refined** (`search_mosfire_standards.py`):
+
+- New columns `n_oh_frames` (≥ 55 s), `n_l2p_arcs`, `wavecal` (oh, lamp or
+  none) and `reducible`.
+- **Reducible public wide-slit: 20 nights, 13 stars** (oh 5, lamp 15; era
+  1: 7, era 2: 12, era 3: 1), out of 52 usable rows. The losses: **28
+  specphot rows without long2pos arcs** (PypeIt calibrates that mask on
+  arcs, since the standard frames are too short for OH), and LONGSLIT
+  nights whose narrow frames are short telluric exposures (most of 2012-16).
+- The pilot now requires reducible nights (Q&A prompt 2, item 2), and
+  design 4.1 records it.
+
+**Manifests and YAML:**
+
+- `nautilus/manifests/nights_batch1.csv` (`make_night_manifest.py batch1`):
+  the 19 reducible wide-slit nights except 2022-04-09, which is already on
+  S3. They are the pilot 5 plus 14 more: 13 A0V and 2 Feige110 nights on
+  long2pos_specphot, and 4 GD153 nights on LONGSLIT-46x5. No further
+  reducible priority-program night was available. About 620 frames, at
+  most 10.5 GB.
+- `nautilus/koa_download_job.yaml`:
+  - Indexed, `parallelism` 2, `backoffLimit` 4, `activeDeadlineSeconds`
+    14400, 1 CPU / 2 Gi / 20 Gi scratch;
+  - the credentials secret mounted; `--to-s3 --lamp-arcs`;
+  - data outcomes (exit 10/11) end the pod successfully, other failures
+    retry;
+  - image **0.2.0**, which does not exist yet (the script is not in 0.1.6).
+- `nautilus/validate_manifests.py` gains per-file rules (the probe touches
+  no bucket; the download job needs credentials and scratch; the reduction
+  jobs also need the S4b env): MANIFESTS OK.
+- `nautilus/Dockerfile`'s image check adds
+  `download_mosfire_night.py --help`.
+- `keck_etcs.__version__` → **0.2.0**.
+
+**Verify (prompt 2):**
+
+- The probe result is logged before any batch.
+- Flats and a standard in every downloaded manifest, `s3_sync.py ls` sizes
+  matching the manifest, and re-runs downloading nothing: checked on the
+  test nights. A night without calibrators is recorded `no calibs`.
+- Total sizes: 371 MB and 438 MB for the test nights; batch 1 is estimated
+  at ≤ 10.5 GB.
+- **Batch 1 itself waits** for the 0.2.0 image and your go-ahead (Q&A
+  prompt 2, item 1).
+
+**Housekeeping:** `$CLAUDE_JOB_DIR` was unset in this shell, so some
+scratch files went to the shared `/tmp`. I moved or removed only my own
+(listed by name and time); later work uses the session scratchpad.
