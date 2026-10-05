@@ -30,8 +30,13 @@ class Band:
 
 @dataclass(frozen=True)
 class Era:
-    """A period of fixed instrument optics (D6); ``end`` None means open."""
+    """A period of fixed instrument optics (D6); ``end`` None means open.
+
+    ``name`` is the label echoed in outputs (``2017-02..2025-02``); ``tag``
+    names its throughput file (``mosfire_thru_<tag>.ecsv``).
+    """
     name: str
+    tag: str
     start: str
     end: str = None
     notes: str = ''
@@ -50,8 +55,7 @@ class Instrument:
     detector_file: str
     sky_grid_file: str
     lsf_file: str = None
-    throughput_pattern: str = None      # per-era curve, e.g. 'mosfire/throughput/mosfire_thru_{era}.ecsv' (S10)
-    provisional_throughput: str = None  # fallback until S10 exists
+    throughput_pattern: str = None      # per-era curve, e.g. 'mosfire/throughput/mosfire_thru_{tag}.ecsv' (S10)
     moffat_beta: float = 3.5
     gaps: tuple = ()                    # (start, end, warning) periods inside or between eras
     monitor: dict = None
@@ -110,29 +114,43 @@ class Instrument:
             return yaml.safe_load((DATA_DIR / 'index.yaml').read_text()) or {}
         return self._load('index', load)
 
-    def throughput(self, era):
-        """Filter-free system throughput for an era.
+    def throughput_file(self, era):
+        """Path (relative to ``DATA_DIR``) of an era's throughput curve."""
+        return self.throughput_pattern.format(tag=era.tag)
 
-        Uses the S10 per-era curve when it exists, else the provisional
-        product.
+    def throughput(self, era):
+        """Filter-free system throughput for an era (design 4.5).
+
+        If the era has no curve yet, the nearest era that has one is used
+        (the earlier one on a tie), with a warning.
 
         Returns:
-            dict: ``wave_A``, ``thru``, ``file``, ``calib_version``,
-            ``pypeit_version``, ``provisional`` (bool).
+            dict: ``wave_A``, ``thru``, ``era`` (the era actually used),
+            ``file``, ``calib_version``, ``pypeit_version``, ``valid_range_A``
+            and ``warnings``.
+
+        Raises:
+            FileNotFoundError: if no era has a throughput curve.
         """
         def load():
             from astropy.table import Table
-            rel = self.throughput_pattern.format(era=era) if self.throughput_pattern else None
-            provisional = rel is None or not (DATA_DIR / rel).exists()
-            if provisional:
-                rel = self.provisional_throughput
+            i = self.eras.index(era)
+            order = sorted(range(len(self.eras)), key=lambda j: (abs(j - i), j > i))
+            have = [j for j in order if (DATA_DIR / self.throughput_file(self.eras[j])).exists()]
+            if not have:
+                raise FileNotFoundError(f'no throughput curve for any {self.name} era')
+            used = self.eras[have[0]]
+            rel = self.throughput_file(used)
             t = Table.read(DATA_DIR / rel, format='ascii.ecsv')
             entry = self.index().get('files', {}).get(rel, {})
+            warnings = [] if used == era else [f'no throughput curve yet for era {era.name}; using era {used.name}']
+            versions = t.meta.get('pypeit_versions') or [entry.get('pypeit_version', 'unknown')]
             return {'wave_A': np.asarray(t['wave'], float), 'thru': np.asarray(t['thru_median'], float),
-                    'file': rel, 'provisional': bool(provisional or entry.get('provisional', False)),
+                    'era': used, 'file': rel, 'warnings': warnings,
                     'calib_version': str(entry.get('calib_version', t.meta.get('calib_version', 'unknown'))),
-                    'pypeit_version': str(entry.get('pypeit_version', t.meta.get('pypeit_version', 'unknown')))}
-        return self._load(('throughput', era), load)
+                    'pypeit_version': ','.join(str(v) for v in versions),
+                    'valid_range_A': tuple(t.meta.get('valid_range_A', (float(t['wave'][0]), float(t['wave'][-1]))))}
+        return self._load(('throughput', era.name), load)
 
     # ---------------------------------------------------------------- derived
     def band_window(self, band):

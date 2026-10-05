@@ -65,13 +65,24 @@ def test_lsf_measured_row_takes_precedence():
 
 
 def test_eras():
-    assert MOSFIRE.era_for_date(None)[0].name == '2025-04'
+    assert MOSFIRE.era_for_date(None)[0].name == '2025-04..'
     assert MOSFIRE.era_for_date('2022-04-09') == (MOSFIRE.eras[1], [])
+    assert MOSFIRE.eras[1].name == '2017-02..2025-02' and MOSFIRE.eras[1].tag == '2017-2025'
     era, w = MOSFIRE.era_for_date('2016-12-01')
-    assert era.name == '2012-04' and 'offline' in w[0]
+    assert era.name == '2012-04..2016-09' and 'offline' in w[0]
     era, w = MOSFIRE.era_for_date('2025-03-01')
-    assert era.name == '2017-02' and 'CSU' in w[0]
-    assert MOSFIRE.era_for_date('2011-01-01')[0].name == '2012-04'
+    assert era.name == '2017-02..2025-02' and 'CSU' in w[0]
+    assert MOSFIRE.era_for_date('2011-01-01')[0].name == '2012-04..2016-09'
+
+
+def test_throughput_era_file_and_fallback():
+    t = MOSFIRE.throughput(MOSFIRE.eras[1])
+    assert t['file'] == 'mosfire/throughput/mosfire_thru_2017-2025.ecsv' and t['warnings'] == []
+    assert t['calib_version'] == 'mosfire-J-2026.10-dev' and t['era'] is MOSFIRE.eras[1]
+    # eras without standards use the nearest era that has a curve
+    for e in (MOSFIRE.eras[0], MOSFIRE.eras[2]):
+        f = MOSFIRE.throughput(e)
+        assert f['era'] is MOSFIRE.eras[1] and 'no throughput curve yet' in f['warnings'][0]
 
 
 def test_sky_grid_loads():

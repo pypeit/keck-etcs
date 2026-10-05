@@ -33,10 +33,10 @@ BANDS = {
 }
 
 ERAS = (
-    # D6 and the MOSFIRE news page
-    Era('2012-04', '2012-04-04', '2016-09-15', 'first light to the collimator failure (original optics)'),
-    Era('2017-02', '2017-02-13', '2025-02-11', 'after the collimator element repair'),
-    Era('2025-04', '2025-04-29', None, 'after the CSU repair'),
+    # D6 and the MOSFIRE news page; name echoed in outputs, tag in the throughput file name
+    Era('2012-04..2016-09', '2012-2016', '2012-04-04', '2016-09-15', 'first light to the collimator failure (original optics)'),
+    Era('2017-02..2025-02', '2017-2025', '2017-02-13', '2025-02-11', 'after the collimator element repair'),
+    Era('2025-04..', '2025-on', '2025-04-29', None, 'after the CSU repair'),
 )
 
 GAPS = (
@@ -103,8 +103,7 @@ MOSFIRE = Instrument(
     detector_file='mosfire/detector.ecsv',
     sky_grid_file='sky/gemini_mk_sky_grid.fits',
     lsf_file='mosfire/lsf_measurements.ecsv',
-    throughput_pattern='mosfire/throughput/mosfire_thru_{era}.ecsv',          # S10 (design 4.5)
-    provisional_throughput='mosfire/throughput/mosfire_thru_provisional-xtcalc-2012.ecsv',   # S9, XTcalc
+    throughput_pattern='mosfire/throughput/mosfire_thru_{tag}.ecsv',          # S10 (design 4.5)
     moffat_beta=MOFFAT_BETA,
     monitor=MONITOR,
 )

@@ -9,7 +9,8 @@ that violate the schema raise :class:`InputError`. No PypeIt, no network.
 Method (design 5.3): on the sky grid's uniform 0.5 A vacuum grid around the
 band window, the source photon rate N0 (5.3.2) is multiplied by the
 atmospheric transmission (5.3.3) and the system throughput (5.3.4, the
-filter-free era curve times the band's filter times ``throughput.scale``),
+filter-free era curve times the band's filter times ``throughput.scale``;
+held constant beyond the curve's measured range, with a warning),
 convolved with the Gaussian LSF (5.3.6) and sampled at the pixel centres.
 The product is convolved, rather than each factor separately, so that a
 line on a telluric feature is handled correctly; for a smooth source the two
@@ -178,10 +179,13 @@ def compute(inputs):
     f_filt = np.interp(fw, filt['wave_A'], filt['transmission'], left=0.0, right=0.0)
     era, w2 = inst.era_for_date(p['throughput']['date'])
     warnings += w2
-    th = inst.throughput(era.name)
-    if th['provisional']:
-        warnings.append(f"PROVISIONAL throughput ({th['calib_version']}, {th['file']}): to be replaced by the "
-                        'per-era curves from our own standards before any release')
+    th = inst.throughput(era)
+    warnings += th['warnings']
+    era = th['era']
+    t_lo, t_hi = th['valid_range_A']
+    if lo < t_lo - fwhm_A or hi > t_hi + fwhm_A:          # more than one LSF FWHM uncovered
+        warnings.append(f'throughput measured over {t_lo:.0f}-{t_hi:.0f} A ({th["file"]}); held constant at the edge '
+                        f'value over the rest of the {band} window ({lo:.0f}-{hi:.0f} A)')
     t_sys = np.interp(fw, th['wave_A'], th['thru']) * f_filt * p['throughput']['scale']
 
     # ---- source (5.3.1, 5.3.2)

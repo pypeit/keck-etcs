@@ -135,3 +135,118 @@ format:
 <Detailed description of the work and what you learned>
 
 ## Logs
+
+### 2026-10-05 (Prompt #1 / S10: throughput product v0 from LDS749B; the provisional XTcalc curve is removed; fixtures regenerated)
+
+**Code:**
+
+- `keck_etcs/calib/combine.py` (design 4.5, D22, D36). `combine_era(rows,
+  curves, era, filters)`:
+  - selects the era's rows (`start <= date < end`; rows already flagged
+    `excluded` are skipped);
+  - takes each row's filter-free curve: the harvest's `thru` when the
+    filter was divided there, or else `thru_raw` / the band filter here
+    (rows flagged `nofilter`). Either way it keeps only the filter's
+    half-power band, where the division is stable;
+  - applies the whole-night 3-MAD cut on band medians, only with >= 3
+    nights;
+  - takes the pixel-wise median, the MAD (NaN for one curve) and `n_std` on
+    the 1 A grid;
+  - writes `meta`: era, standards used and excluded, filter handling,
+    `valid_range_A`, `band_median_era`, and the distinct `images`,
+    `image_digests`, `pypeit_git_shas`, `keck_etcs_git_shas` and
+    `pypeit_versions` of the contributing rows (D36). No PypeIt import.
+- `scripts/mosfire/combine_throughput.py`: runs every era of
+  `instruments/mosfire.py` and writes `mosfire_thru_<tag>.ecsv` for eras
+  with standards. It registers each file in `index.yaml` (`calib_version
+  mosfire-J-2026.10-dev`, `pypeit_version`, provenance) and adds
+  `excluded_3mad` to the `flag` of excluded rows in `standards.ecsv`
+  (updating that file's sha256).
+- **Eras renamed** to the prompt's form, now that files are named by era:
+  - `Era` gained a `tag`: `2012-04..2016-09` (tag `2012-2016`),
+    `2017-02..2025-02` (`2017-2025`), `2025-04..` (`2025-on`);
+  - `meta.era` echoes the name; the file is
+    `mosfire_thru_{tag}.ecsv`, as the prompt asks for 2017-2025.
+- `Instrument.throughput(era)`:
+  - takes an `Era` and returns the era actually used, `valid_range_A` and
+    warnings;
+  - **an era without a curve uses the nearest era that has one** (the
+    earlier on a tie), with the warning `no throughput curve yet for era
+    X; using era Y`;
+  - the provisional fallback and `provisional_throughput` are gone.
+- `etc.compute`:
+  - `meta.era` and `meta.calib_version` / `pypeit_version` come from the
+    era actually used;
+  - **new warning** when the band window extends more than one LSF FWHM
+    beyond the curve's measured range ("held constant at the edge value");
+  - the provisional warning is removed.
+
+**Product:** `keck_etcs/data/mosfire/throughput/mosfire_thru_2017-2025.ecsv`.
+
+- One standard: LDS749B, 2022-04-09, J2, 5" slit, image 0.1.6
+  (`sha256:0c5e88fd…`), PypeIt pin 8017f47, keck-etcs b2883b6.
+  `n_std = 1`, `thru_mad = NaN`.
+- The row was harvested in-pod before S8 (`flag = nofilter`), so the J2
+  filter was divided in `combine`. Coverage is 11172-12462 A, the J2
+  half-power band.
+- Filter-free throughput: 0.115 (11200 A), 0.165 (11500), 0.244 (12000),
+  0.273 (12400), 0.301 (12462). Band median 0.227.
+  - The XTcalc 2012 curve over the same window had a median of 0.218, so
+    the level agrees within 4%.
+  - Ours falls toward the blue: XTcalc's provisional curve was held flat at
+    0.20 below 11700 A, while ours is 0.12-0.16 at 11200-11500 A. That is
+    either a real loss at the J2 blue edge or a filter-curve and
+    instrument cut-on mismatch where the J2 filter is steep (the air/vacuum
+    assumption shifts the curve by 3.4 A). More standards, and J-filter
+    nights, will tell.
+- `index.yaml`: the new entry. **Removed:** the provisional file
+  `mosfire_thru_provisional-xtcalc-2012.ecsv`, its index entry and
+  `scripts/mosfire/build_provisional_throughput.py`; all three remain in
+  git history.
+
+**Fixtures:** the dry run showed 9242 differences in `reference_J`
+(throughput -14% at the J blue end, meta era and calib). I regenerated them
+with `scripts/regen_regression_fixtures.py --regen --note …`, which added
+the CHANGES.md line naming image 0.1.6, its digest and pin 8017f47.
+`CHANGES.md` also gains a "mosfire-J-2026.10-dev (development products)"
+entry describing the curve and the replacement of the provisional one.
+
+**Tests** (87 pass):
+
+- `test_combine.py`, 4 tests:
+  - one nofilter standard: the filter is divided, the curve is masked to
+    the half-power band, MAD is NaN;
+  - five standards with an outlier: the 3-MAD exclusion, median, MAD and
+    `meta.images` = the set of images of the contributing rows;
+  - no clipping below 3 nights; era boundaries;
+  - the shipped era file's `meta.images` and `pypeit_git_shas` equal those
+    of its rows in `standards.ecsv`.
+- `test_instruments.py`: new era names; the era file and the fallback.
+- `test_etc.py`: the era used, calib and pypeit versions, the fallback and
+  coverage warnings, no provisional warning.
+
+**Verify:**
+
+- The file loads through `instruments/mosfire.py`.
+- `compute` with `throughput.date = 2022-04-09` echoes `meta.era =
+  2017-02..2025-02` and `meta.calib_version = mosfire-J-2026.10-dev`. J2
+  with a 1" slit: no warnings, since a 2.5 A edge gap is under one LSF.
+- `meta.images` = `['…/keck-etcs:0.1.6']` = the set of the contributing
+  rows.
+- All tests pass.
+- `examples/J_point.json` (default date → era 2025-04.. → falls back to
+  2017-02..2025-02): S/N per pixel 4.381 (4.334 with XTcalc). It now warns
+  that J's 12462-13523 A is held at 0.301.
+
+**For review:**
+
+1. The era naming: name `2017-02..2025-02` plus file tag `2017-2025`. The
+   prompt used both forms; the open era's tag `2025-on` is my choice.
+2. Defaulting the latest era to the nearest era with a curve (with a
+   warning) rather than failing.
+3. Dividing the filter in `combine` for `nofilter` rows, restricted to the
+   half-power band. Design 4.5 does not say this yet.
+4. **J above 12462 A has no measured throughput**: it is a constant
+   extrapolation until a J-filter standard is reduced (part 5). For J
+   targets this matters more than any other open item.
+5. Deleting, rather than archiving, the provisional product.
