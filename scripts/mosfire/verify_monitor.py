@@ -149,7 +149,7 @@ def main(date, compare=None):
     # 8
     if compare:
         o = Table.read(compare, format='ascii.ecsv')
-        key = lambda r: (r['metric'], r['frame'], str(r['wave_A']), r['line_id'])
+        key = lambda r: tuple(str(r[c]) for c in ('metric', 'frame', 'wave_A', 'line_id'))   # str: masked cells
         a = {key(r): r for r in t}
         b = {key(r): r for r in o}
         bad = []

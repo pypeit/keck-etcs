@@ -1753,3 +1753,60 @@ Started S6b after reading design 4.9 and D40-D47.
   - Still to do: build and push 0.1.6; run the REPLACE=1 validate job;
     `pull --force`; `verify_monitor.py 20220409 --compare` on the in-pod
     monitor file (1e-6); merge the in-pod rows; record the digest.
+
+### 2026-10-05 (Prompt #7 / S6b closed: in-pod calibration monitor with image 0.1.6; in-pod = local exactly)
+
+- **Image 0.1.6:** pushed by the user from keck-etcs `b2883b6`, PypeIt pin
+  `8017f47997d6417d797be6d0a0358d7acb8918b5`. Digest
+  `sha256:0c5e88fd838e24f9e658be3a01ffee276d80546df772a9da19da9c0ce912a357`
+  is recorded in both job YAMLs (comment and `KECK_ETCS_IMAGE_DIGEST`).
+- **Validate run** (`keck-etcs-validate`, REPLACE=1, 20220409, node
+  usra-sti-01): GATES: PASS. The new MONITOR stage ran between HARVEST and
+  USAGE and wrote `harvest/20220409_monitor.ecsv` (136 rows, 14 metrics, 0
+  `monitor_failed`). It was pushed to the bucket; NIGHT_DONE. The pod took
+  about 18 minutes.
+- **Pulled** with `s3_sync.py pull mosfire/20220409 --force` (128 files,
+  1.5 GB, `harvest/*` included).
+- **verify_monitor.py 20220409** on the in-pod file: checks 1-7 give the
+  same results as the local run:
+  - line widths 3.6064 px, n 19, R 2676.7;
+  - `pixelflat_raw`/(on - off) 1.00000;
+  - peak 13,556 ADU;
+  - FWHM 6.2638;
+  - slit loss false for the standard;
+  - 1"/5" NOT TESTABLE (twilight);
+  - `sky_scale` 0.914.
+- **In-pod against local (check 8):**
+  - The first comparison, against the local file made from the 0.1.5
+    products, showed differences of about 1e-7, and 2.2e-5 in
+    `line_flux_above`. That file had different inputs: REPLACE=1
+    re-reduces the night, and `line_flux_above` is a difference of large
+    numbers, so it magnifies the change.
+  - Re-running the monitor locally (`harvest_sens.py monitor <redux>
+    --manifest --raw --out`) on the pulled 0.1.6 products gives **identical
+    values in every numeric column: VERIFY: PASS.**
+  - Lesson: the in-pod against local check must use the same reduction
+    products.
+- **Fix:** `verify_monitor.py --compare` keyed rows on raw cell values;
+  masked `wave_A`/`line_id` (for example `OH_sum`) are unhashable. Keys are
+  now strings.
+- **Merge:** `harvest_sens.py --merge <night>/harvest` replaced the night's
+  rows in `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` with the
+  in-pod rows: 136 rows, all image 0.1.6, digest `0c5e88fd...`, keck-etcs
+  `b2883b6`, `job_name` keck-etcs-validate.
+  - The LDS749B row of `standards.ecsv` and its curve were also replaced by
+    the 0.1.6 re-reduction: ZP_J changed by 7e-6 mag, `seeing_fwhm_pix` by
+    6e-7.
+- **Tests:** 10/10 pass.
+- **Remaining S6b caveats** (design section 8):
+  - The 1"/5" slit-normalisation check is deferred to a night with dark 5"
+    frames.
+  - The monitor lines stay `provisional` until the S15a freeze.
+  - The OH-line FWHM uses the interim LSF slope 0.277.
+- **For the user to commit:**
+  - both YAMLs (digest);
+  - `verify_monitor.py` (key fix);
+  - `calib_monitor.ecsv` (in-pod rows);
+  - `index.yaml`;
+  - `standards.ecsv` and `standards/LDS749B_20220409.ecsv`;
+  - this log.
