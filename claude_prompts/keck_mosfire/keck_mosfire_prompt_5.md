@@ -203,6 +203,60 @@ Part 6 step S18 needs S16.
 
 ## Q&A
 
+### S15a (2026-10-05)
+
+1. **Blocked: the KOA search has not run.** This doc's goals say
+   `koa_search_prompts.md` must first produce the candidate table, the
+   night manifests and raw frames on S3, but:
+   - its Logs section is empty;
+   - there is no `keck_etcs/data/mosfire/koa_standards_candidates.ecsv`;
+   - `nautilus/manifests/` holds only `nights_dryrun.csv`;
+   - `s3://keck-etcs/mosfire/` holds only `20220409/`.
+
+   I did the S15a work that needs no new nights (the A0V model, the driver
+   and the sensfunc changes, tests; see the log). The pilot manifest, the
+   0.2.0 image, the pilot Job, the status table, the A0V/WD comparison, the
+   sizing and the monitor-line freeze all wait for data.
+
+   *Default:* point me next at `koa_search_prompts.md` prompt 1 (census,
+   candidates, manifests including `nights_pilot.csv`), then its prompt 2
+   (downloads); then resume S15a here at the image rebuild. Rebuilding
+   0.2.0 now is possible, since the code is ready, but it can wait until the
+   pilot is ready to run.
+
+2. **Zero point of the A0V model (N3).**
+   - N3 says to scale PypeIt's Vega spectrum so that its *synthetic* 2MASS
+     J equals the star's 2MASS J.
+   - With PypeIt's `TMASS-J` response and the Cohen et al. (2003) zero
+     point, PypeIt's Vega spectrum comes out at J = **+0.024**
+     (photon-counting) or +0.013 (energy-weighted), whereas the 2MASS
+     system puts Vega at J = −0.001.
+   - Following N3 literally (photon-counting) makes every A0V model 2.3
+     percent fainter in J, and so every A0V zero point 2.3 percent higher,
+     than scaling relative to Vega's −0.001 would.
+
+   The options:
+   - (a) photon-counting synthetic, as implemented;
+   - (b) energy-weighted (1.2 percent);
+   - (c) scale relative to Vega's −0.001, independent of the response
+     curve and the zero point.
+
+   *Default:* (a). The A0V-versus-WD cross-tie on pilot nights with both
+   classes (D2) measures the offset directly. The value used is recorded in
+   every A0V sensfunc's `<NAME>_<DATE>_std_model.json`
+   (`vega_tmass_j_synthetic`).
+
+3. **Night-manifest columns for A0V nights.**
+   - The driver and `build_sensfunc.py` read four extra columns:
+     `std_class`, `jmag_2mass`, `std_ra` and `std_dec` (degrees). The night
+     job already exports every column as an environment variable, so
+     `night_job.yaml` is unchanged.
+   - The KOA doc allows "extra columns the reduction driver reads", so
+     `make_night_manifest.py` (KOA prompt 1) should write them. Rows for
+     white dwarfs can leave them empty.
+
+   *Default:* as described, unless you prefer them packed into `notes`.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -213,3 +267,118 @@ format:
 <Detailed description of the work and what you learned>
 
 ## Logs
+
+### 2026-10-05 (Prompt #1 / S15a, part 1: A0V standards and driver changes; pilot BLOCKED on the KOA search)
+
+**Prerequisite check:**
+
+- `koa_search_prompts.md` has not run (empty Logs).
+- There is no candidate table, only `nights_dryrun.csv` in
+  `nautilus/manifests/`, and `s3_sync.py ls mosfire/` shows only
+  `20220409/` (162 objects).
+- So the pilot batch, the 0.2.0 image, the status table, the A0V/WD
+  zero-point comparison, the sizing and the monitor-line freeze cannot run
+  yet (Q&A S15a-1).
+- I did the code part of S15a, which needs no new nights, and tested it on
+  2022-04-09.
+
+**`keck_etcs/calib/standards.py`** (new; PypeIt imported inside functions):
+
+- **N3 model:** PypeIt's `vega_tspectool_vacuum.dat` scaled so that its
+  synthetic 2MASS J equals the star's.
+  - Synthetic J is photon-counting with PypeIt's `TMASS-J` response
+    (`flux_calib.load_filter_file`) and the Cohen et al. (2003) zero point
+    3.129e-10 erg/s/cm^2/A.
+- **The PypeIt hook needs no PypeIt change.** `[sensfunc] star_type = A0`
+  and `star_mag = V` give `VegaStandard(V)` = Vega x 10^(0.4 (0.03 − V)), so
+  the J-scaled model is exactly PypeIt's model at
+  **V_eq = 0.03 + J − J_synth(Vega) = J + 0.0058**.
+  - Verified to 1e-10 against `VegaStandard` flux.
+  - `write_sens_par` inserts the two lines under `[sensfunc]`.
+- **Vega's synthetic J is +0.024** (photon) or +0.013 (energy), against the
+  2MASS system's −0.001, a 2.3% systematic on A0V zero points.
+  Documented, recorded per sensfunc, and put to the user (Q&A S15a-2).
+- `classify(ra, dec, sptype, std_class)` returns `archive` (PypeIt has the
+  spectrum; LDS749B → calspec), `A0V` or `unknown`. A measured archive
+  spectrum beats a manifest's A0V label.
+
+**`scripts/mosfire/build_sensfunc.py`:**
+
+- `--std-class` and `--jmag` (defaults `$STD_CLASS`, `$JMAG_2MASS`). For
+  A0V it writes `sens/<NAME>_<DATE>_A0V.sens` (base `.sens` plus `star_type
+  = A0`, `star_mag = V_eq`) and `sens/<NAME>_<DATE>_std_model.json`.
+- An A0V night without J fails with exit 1, so the job records `sens
+  failed`.
+
+**`keck_etcs/calib/harvest.py`, a bug found by the hook check:**
+
+- PypeIt records `std_cal = std_name = None` (and no coordinates) for a
+  model standard, so `std_class_of` would have labelled every A0V row
+  **WD**.
+- Now `std_class_of(std_cal, model)` returns A0V when `build_sensfunc.py`'s
+  model record exists (`std_model_record`) or `std_cal` names Vega, WD for
+  an archive file, and **unknown** (never WD) otherwise.
+- `std_model` reads `vega_tspectool_vacuum.dat J=… (V_eq …)` for A0V rows.
+
+**`scripts/mosfire/reduce_standard.py`:**
+
+- Standard record from `--std-class/--std-name/--std-ra/--std-dec/--jmag`
+  (defaults `$STD_CLASS`, `$STANDARD`, `$STD_RA`, `$STD_DEC`,
+  `$JMAG_2MASS`, which the night job exports from manifest columns
+  automatically), written to `run_manifest.json['standard']`. An A0V night
+  without coordinates or J fails as `setup failed`.
+- Frame typing:
+  - frames within 60" of an A0V position are `standard`;
+  - **Ne/Ar lamp frames** (`PWSTATA7/8 == 1`, PypeIt's `arclamp`) were
+    being typed `lampoffflats`, a latent bug for any night whose lamp arcs
+    are downloaded for the monitor. They are now `arc,tilt` on
+    `long2pos_specphot` nights and dropped from the PypeIt file otherwise
+    (kept in `raw/` for the monitor).
+- **long2pos / long2pos_specphot:** nod pairing from PypeIt's
+  `keck_mosfire.get_comb_group` (B–A pairs; for specphot the narrow-slit
+  frame is the background of the wide one) instead of our A/B time-order
+  pairing. Untested on a real long2pos night until the pilot.
+- The "no calibs" skip (no lamp-on flats) already existed. Design 4.8.6's
+  status row is already written by the night job (`status_row.py`) on
+  every outcome; it now also records the optional columns `std_class`,
+  `jmag_2mass`, `std_ra` and `std_dec`.
+- **Regression:** `--setup-only` on 2022-04-09 (scratch, linked raw) gives
+  a PypeIt data table **identical** to the pod's; the standard record is
+  `archive`.
+
+**`scripts/mosfire/check_a0v_sensfunc_hook.py`** (mechanics; LDS749B treated
+as an A0V, outputs in `<night>/a0v_hook_check/`):
+
+- `pypeit_sensfunc` accepts the A0V `.sens`.
+- The zero point rises by +1.0017 mag for +1 mag in J (the IR telluric
+  refit makes it 0.17% non-linear).
+- With the model record the class is A0V; without it, unknown → **PASS**.
+
+**Other:**
+
+- `nautilus/Dockerfile` import guard: + `keck_etcs.calib.standards`.
+- `keck_etcs/tests/test_standards.py` (7 tests):
+  - Vega's J and the model round trip; the model = PypeIt's
+    `VegaStandard` at V_eq (1e-10);
+  - classification, the `.sens` insertion and the harvest classes;
+  - the driver's typing (lamp arc, flat, A0V within 60" and beyond,
+    archive);
+  - long2pos pairing through PypeIt (`bkg_id` [2, 1, 4, 3]).
+- Suite: **95 passed**, 3 slow deselected.
+
+**Still to do in S15a, once the KOA doc has produced data:**
+
+1. `nights_pilot.csv` (3-5 public wide-slit nights with flats; not
+   2022-04-09; with the A0V columns).
+2. The user rebuilds and pushes `0.2.0` (same pin 8017f47). This also
+   brings S8's filter curves and the harvest's default filter into the
+   pods.
+3. The pilot Job (`parallelism` 4, `SPEC2D=0`), with the go-ahead.
+4. Pull, merge, `status_table.py`.
+5. The A0V/WD zero-point comparison.
+6. Wall-clock and memory into the `night_job.yaml` header.
+7. `select_monitor_lines.py` on 2022-04-09 plus the pilot → freeze →
+   rebuild → monitor re-run.
+
+**Questions:** Q&A S15a-1 (the KOA doc must run first), S15a-2 (the Vega
+zero point of the A0V model), S15a-3 (the A0V manifest columns).

@@ -26,9 +26,20 @@ first frame's too (the log reports the spread).
 
 ``--sens`` defaults to ``keck_etcs/data/pypeit_par/keck_mosfire_J.sens``.
 Each PypeIt call is logged to ``sens/<output stem>.log``.
+
+A0V standards (design D2, N3; plan S15a): with ``--std-class A0V`` and
+``--jmag`` (defaults: the night-manifest columns ``std_class`` and
+``jmag_2mass``, which the night job exports as ``STD_CLASS`` and
+``JMAG_2MASS``), the ``.sens`` file is copied to ``sens/<NAME>_<DATE>_A0V.sens``
+with ``star_type = A0`` and ``star_mag = V_eq`` added under ``[sensfunc]``:
+PypeIt's Vega model scaled to the star's 2MASS J
+(``keck_etcs.calib.standards``). The model record is written to
+``sens/<NAME>_<DATE>_std_model.json``. Archive standards (white dwarfs) need
+nothing: PypeIt finds them by position.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -50,12 +61,14 @@ def run(cmd, log, cwd):
         raise RuntimeError(f'{cmd[0]} failed (exit {rc}); see {log}')
 
 
-def main(date, standard=None, sens=None, frames_only=False):
+def main(date, standard=None, sens=None, frames_only=False, std_class=None, jmag=None):
     night = paths.night_dir('mosfire', date)
     manifest = json.loads((night / 'run_manifest.json').read_text())
     sens = Path(sens) if sens else DEFAULT_SENS
     outdir = night / 'sens'
     outdir.mkdir(parents=True, exist_ok=True)
+    std_class = std_class if std_class is not None else os.environ.get('STD_CLASS') or None
+    jmag = jmag if jmag is not None else (float(os.environ['JMAG_2MASS']) if os.environ.get('JMAG_2MASS') else None)
 
     objs = [o for o in manifest['objects'] if 'standard' in o['frametype']]
     if not objs:
@@ -67,6 +80,17 @@ def main(date, standard=None, sens=None, frames_only=False):
     airmasses = [frames[o['frame']]['airmass'] for o in objs]
     print(f'{len(objs)} standard frame(s) of {name}: exptime {exptimes} s, '
           f'airmass {min(airmasses):.4f}-{max(airmasses):.4f}')
+    if std_class and str(std_class).upper().startswith('A0'):
+        if jmag is None:
+            print('A0V standard without a 2MASS J magnitude (--jmag or JMAG_2MASS)')
+            return 1
+        from keck_etcs.calib import standards
+        text, rec = standards.write_sens_par(sens.read_text(), jmag)
+        sens = outdir / f'{name}_{date}_A0V.sens'
+        sens.write_text(text)
+        rec.update({'standard': name, 'std_class': 'A0V', 'sens_par': sens.name})
+        (outdir / f'{name}_{date}_std_model.json').write_text(json.dumps(rec, indent=1) + '\n')
+        print(f"A0V model: 2MASS J {jmag} -> PypeIt Vega model at V_eq {rec['v_equivalent']} ({sens.name})")
 
     # 1. per frame
     for o in objs:
@@ -110,4 +134,6 @@ if __name__ == '__main__':
     parser.add_argument('--standard', help='Standard name for the file names (default: TARGNAME)')
     parser.add_argument('--sens', help=f'.sens file (default {DEFAULT_SENS.relative_to(REPO)})')
     parser.add_argument('--frames-only', action='store_true', help='Skip the coadd')
+    parser.add_argument('--std-class', help='archive (WD) or A0V (default: $STD_CLASS; archive if unset)')
+    parser.add_argument('--jmag', type=float, help='2MASS J of an A0V standard (default: $JMAG_2MASS)')
     sys.exit(main(**vars(parser.parse_args())))

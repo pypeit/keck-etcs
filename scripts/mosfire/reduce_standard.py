@@ -39,10 +39,30 @@ cards instead:
 - lamps off and ``TARGNAME`` contains "FLAT", or the telescope is parked
   (``AXESTAT`` neither ``tracking`` nor ``slewing``; nodded frames read
   ``slewing``) -> ``lampoffflats``;
+- Ne or Ar lamp on (``PWSTATA7``/``PWSTATA8 == 1``, PypeIt's ``arclamp``)
+  -> ``arc,tilt`` on ``long2pos_specphot`` nights (PypeIt's wavelength
+  calibration for that mask); on other nights the lamp arcs are left out of
+  the PypeIt file (they stay in ``raw/`` for the calibration monitor, design
+  D44), since PypeIt calibrates long slits on the OH lines;
 - on sky, at a spectrophotometric standard's position
   (``pypeit.core.standard.get_archive_standard(check=True)``) -> ``standard``,
   whatever the exposure time (PypeIt types standards by ``exptime < 20 s``);
+- on sky within 60" of an A0V standard's position from the night manifest
+  (``--std-class A0V --std-ra --std-dec``; plan S15a, design N3) ->
+  ``standard``;
 - other on-sky frames -> ``arc,science,tilt`` (OH lines as the arc).
+
+Nod pairing. Long-slit nights pair A and B frames in time order (below).
+``long2pos`` and ``long2pos_specphot`` masks use PypeIt's own
+``keck_mosfire.get_comb_group`` (B-A pairs; for ``long2pos_specphot`` a
+narrow-slit frame is the background of the wide-slit one). This branch is
+untested until a long2pos night is reduced (plan S15a pilot).
+
+The standard (``--std-class``, ``--std-name``, ``--std-ra``, ``--std-dec``,
+``--jmag``; defaults from the night-manifest columns the night job exports,
+``STD_CLASS``, ``STANDARD``, ``STD_RA``, ``STD_DEC``, ``JMAG_2MASS``) is
+recorded in ``run_manifest.json`` under ``standard``; the A0V sensfunc
+itself is built by ``build_sensfunc.py``.
 
 Paths come from arguments or ``KECK_ETCS_DATA``; nothing is interactive.
 ``--scratch DIR`` uses DIR as the data root for the whole run (raw frames
@@ -144,21 +164,54 @@ def provenance_image():
 
 # ---------------------------------------------------------------- frame typing
 
-def classify(hdr, ra, dec):
-    """Frame type from the dome-lamp and telescope cards (see module docstring).
+LAMP_ARC = 'lamp_arc'
+"""Internal type of a Ne/Ar lamp frame before :func:`build_pypeit_file` decides its use."""
 
-    ``ra``, ``dec`` (deg) are PypeIt's metadata values for the frame.
+
+def separation_arcsec(ra1, dec1, ra2, dec2):
+    """Angular separation [arcsec] of two positions given in degrees."""
+    r1, d1, r2, d2 = np.radians([ra1, dec1, ra2, dec2])
+    h = np.sin((d2 - d1) / 2) ** 2 + np.cos(d1) * np.cos(d2) * np.sin((r2 - r1) / 2) ** 2
+    return float(np.degrees(2 * np.arcsin(np.sqrt(min(h, 1.0)))) * 3600.0)
+
+
+def classify(hdr, ra, dec, std=None):
+    """Frame type from the lamp and telescope cards (see module docstring).
+
+    ``ra``, ``dec`` (deg) are PypeIt's metadata values for the frame; ``std``
+    is the night's standard record (``std_class``, ``ra``, ``dec``).
     """
     from pypeit.core import standard
+    from keck_etcs.calib.standards import A0V_MATCH_ARCSEC
     lamp_on = any(str(hdr.get(k, '')).strip().lower() == 'on' for k in ('FLAMP1', 'FLAMP2'))
     if lamp_on:
         return 'pixelflat,illumflat,trace'
+    if hdr.get('PWSTATA7') == 1 or hdr.get('PWSTATA8') == 1:
+        return LAMP_ARC
     on_sky = str(hdr.get('AXESTAT', '')).strip().lower() in ('tracking', 'slewing')
     if not on_sky or 'FLAT' in str(hdr.get('TARGNAME', '')).upper():
         return 'lampoffflats'
     if standard.get_archive_standard(float(ra), float(dec), check=True):
         return 'standard'
+    if std and std.get('std_class') == 'A0V' and std.get('ra') is not None and std.get('dec') is not None \
+            and separation_arcsec(float(ra), float(dec), std['ra'], std['dec']) <= A0V_MATCH_ARCSEC:
+        return 'standard'
     return 'arc,science,tilt'
+
+
+def pair_long2pos(tbl):
+    """``comb_id``/``bkg_id`` for long2pos masks from PypeIt's ``get_comb_group``; return notes."""
+    from pypeit.spectrographs.util import load_spectrograph
+    onsky = np.array([('science' in t) or ('standard' in t) for t in tbl['frametype']])
+    tbl['comb_id'] = -1
+    tbl['bkg_id'] = -1
+    for n, i in enumerate(np.where(onsky)[0]):
+        tbl['comb_id'][i] = n + 1
+    tbl['setup'] = 'A'
+    load_spectrograph(SPECTROGRAPH).get_comb_group(tbl)
+    tbl.remove_column('setup')
+    return [f'{tbl["filename"][i]}: no background frame (PypeIt long2pos pairing)'
+            for i in np.where(onsky)[0] if tbl['bkg_id'][i] == -1]
 
 
 def pair_nods(tbl):
@@ -201,7 +254,7 @@ def pair_nods(tbl):
     return problems
 
 
-def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir):
+def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     """Merge and patch the pypeit_setup output; return (path, table, notes)."""
     from pypeit.inputfiles import PypeItFile
 
@@ -228,8 +281,20 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir):
 
     notes = []
     old = list(tbl['frametype'])
-    tbl['frametype'] = [classify(fits.getheader(Path(raw_dir) / fn), ra, dec)
+    tbl['frametype'] = [classify(fits.getheader(Path(raw_dir) / fn), ra, dec, std)
                         for fn, ra, dec in zip(tbl['filename'], tbl['ra'], tbl['dec'])]
+    specphot = any('long2pos_specphot' in str(d) for d in tbl['decker'])
+    long2pos = any('long2pos' in str(d) for d in tbl['decker'])
+    lamp = np.array([t == LAMP_ARC for t in tbl['frametype']])
+    if lamp.any():
+        if specphot:
+            tbl['frametype'][lamp] = 'arc,tilt'
+            notes.append(f'{int(lamp.sum())} Ne/Ar lamp frame(s) typed arc,tilt (long2pos_specphot)')
+        else:
+            notes.append(f'{int(lamp.sum())} Ne/Ar lamp frame(s) left out of the PypeIt file '
+                         f'(long slit: OH arcs; kept in raw/ for the monitor): {list(tbl["filename"][lamp])}')
+            old = [o for o, k in zip(old, lamp) if not k]
+            tbl = tbl[~lamp]
     for fn, o, n in zip(tbl['filename'], old, tbl['frametype']):
         if o != n:
             notes.append(f'{fn}: frametype {o} -> {n}')
@@ -243,9 +308,13 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir):
 
     tbl['calib'] = ['all' if ('flat' in t) else '1' for t in types]
     tbl.sort('mjd')
-    problems = pair_nods(tbl)
-    if problems:
-        raise StageError('setup failed', 'nod pairing: ' + '; '.join(problems))
+    if long2pos:
+        notes += pair_long2pos(tbl)
+        notes.append('long2pos mask: nod pairing from PypeIt keck_mosfire.get_comb_group')
+    else:
+        problems = pair_nods(tbl)
+        if problems:
+            raise StageError('setup failed', 'nod pairing: ' + '; '.join(problems))
 
     keep = [c for c in tbl.colnames if c != 'setup_name']
     setup_names = sorted(set(tbl['setup_name']))
@@ -310,6 +379,25 @@ def spec1d_qa(redux, tbl, platescale):
     return rows, missing
 
 
+# ---------------------------------------------------------------- standard
+
+def standard_record(args):
+    """The night's standard from the options or the night-manifest environment (see docstring)."""
+    from keck_etcs.calib import standards
+    env = lambda k: os.environ.get(k) or None
+    fl = lambda v: None if v in (None, '') else float(v)
+    rec = {'name': args.std_name or env('STANDARD'), 'ra': fl(args.std_ra or env('STD_RA')),
+           'dec': fl(args.std_dec or env('STD_DEC')), 'jmag_2mass': fl(args.jmag or env('JMAG_2MASS')),
+           'std_class_manifest': args.std_class or env('STD_CLASS')}
+    rec.update(standards.classify(rec['ra'], rec['dec'], std_class=rec['std_class_manifest']))
+    if rec['std_class'] == 'A0V':
+        if rec['ra'] is None or rec['dec'] is None:
+            raise StageError('setup failed', 'A0V standard without STD_RA/STD_DEC: cannot identify its frames')
+        if rec['jmag_2mass'] is None:
+            raise StageError('setup failed', 'A0V standard without a 2MASS J (JMAG_2MASS)')
+    return rec
+
+
 # ---------------------------------------------------------------- main
 
 def main(args):
@@ -347,6 +435,7 @@ def main(args):
         'data_root': str(root), 'command': sys.argv,
         'filter': None, 'par_block': None, 'patch_notes': [],
         'raw_sha256': {}, 'product_sha256': {}, 'pypeit_file': None, 'pypeit_file_text': None,
+        'standard': None,
         'frames': [], 'wave_qa': [], 'objects': [], 'sensfuncs': [], 'gates': None, 'monitor': None,
         'timings_s': timings,
     }
@@ -409,7 +498,9 @@ def main(args):
         par_text = Path(args.par).read_text() if args.par else DEFAULT_PAR
         manifest['par_block'] = par_text
         pfile = redux / f'{SPECTROGRAPH}_{date}.pypeit'
-        pfile, tbl, notes, filt = build_pypeit_file(setup_dir, pfile, args.filter, par_text, raw)
+        std = standard_record(args)
+        manifest['standard'] = std
+        pfile, tbl, notes, filt = build_pypeit_file(setup_dir, pfile, args.filter, par_text, raw, std)
         manifest['filter'] = filt
         manifest['patch_notes'] = notes
         manifest['pypeit_file'] = pfile.name
@@ -536,6 +627,11 @@ if __name__ == '__main__':
     parser.add_argument('--setup-only', action='store_true', help='Stop after writing the PypeIt file')
     parser.add_argument('--monitor', action='store_true',
                         help='Run the calibration monitor at the end (harvest_sens.py monitor; never fails the night)')
+    parser.add_argument('--std-class', help='Standard class: archive (WD) or A0V (default: $STD_CLASS)')
+    parser.add_argument('--std-name', help='Standard name (default: $STANDARD)')
+    parser.add_argument('--std-ra', help='Standard RA [deg] (default: $STD_RA; needed for A0V)')
+    parser.add_argument('--std-dec', help='Standard Dec [deg] (default: $STD_DEC; needed for A0V)')
+    parser.add_argument('--jmag', help='2MASS J of an A0V standard (default: $JMAG_2MASS)')
     parser.add_argument('--skip-pin-check', action='store_true',
                         help='Run even if the pin check fails (recorded in run_manifest.json)')
     sys.exit(main(parser.parse_args()))

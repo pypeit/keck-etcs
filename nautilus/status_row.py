@@ -26,6 +26,8 @@ from keck_etcs import paths
 STATUSES = ('success', 'skipped', 'no calibs', 'setup failed', 'reduce failed', 'no trace',
             'sens failed', 'gate failed', 'push failed', 'pull failed', 'pin check failed')
 MANIFEST_COLS = ('night', 'instrument', 's3_prefix', 'standard', 'slit', 'spec2d', 'notes')
+OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec')
+"""Extra night-manifest columns for A0V standards (plan S15a); empty when the manifest lacks them."""
 
 
 def main(status, error='', exit_code=0):
@@ -35,7 +37,7 @@ def main(status, error='', exit_code=0):
     job = os.environ.get('JOB_NAME') or 'local'
     index = os.environ.get('JOB_COMPLETION_INDEX', '0')
     row = {'job_name': job, 'index': int(index)}
-    row.update({c: os.environ.get(c.upper(), '') for c in MANIFEST_COLS})
+    row.update({c: os.environ.get(c.upper(), '') for c in MANIFEST_COLS + OPTIONAL_COLS})
     row.update({'status': status, 'exit_code': int(exit_code), 'error': (error or '')[:500],
                 'pod': os.environ.get('POD_NAME', ''), 'node': os.environ.get('NODE_NAME', ''),
                 'image': os.environ.get('KECK_ETCS_IMAGE', 'local'),

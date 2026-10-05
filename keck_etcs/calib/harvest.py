@@ -249,9 +249,26 @@ def slit_from_decker(decker):
         return None, None
 
 
-def std_class_of(std_cal):
-    """``A0V`` for a Vega-scaled model, else ``WD`` (the CALSPEC NIR standards used are white dwarfs)."""
-    return 'A0V' if 'vega' in str(std_cal).lower() else 'WD'
+def std_class_of(std_cal, model=None):
+    """Class of the standard behind a sensfunc.
+
+    ``A0V`` when ``build_sensfunc.py`` used the J-scaled Vega model (its
+    ``<NAME>_<DATE>_std_model.json`` record is passed as ``model``; PypeIt
+    records ``std_cal = None`` for model standards) or ``std_cal`` names a Vega
+    spectrum; ``WD`` for an archive file (the CALSPEC NIR standards used are
+    white dwarfs); ``unknown`` when there is neither.
+    """
+    if model is not None or 'vega' in str(std_cal).lower():
+        return 'A0V'
+    if std_cal is None or str(std_cal) in ('', 'None'):
+        return 'unknown'
+    return 'WD'
+
+
+def std_model_record(sens_path, standard, night):
+    """The A0V model record written by ``build_sensfunc.py`` next to the sensfunc, or None."""
+    p = Path(sens_path).parent / f'{standard}_{night}_std_model.json'
+    return json.loads(p.read_text()) if p.exists() else None
 
 
 # ------------------------------------------------------------------ harvest
@@ -305,14 +322,16 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
     uniq = lambda k: sorted({raw[f][k] for f in files})
     one = lambda vals: vals[0] if len(vals) == 1 else None
 
+    model = std_model_record(sens_path, standard, night)
     curve_file = f'{curve_dir}/{standard}_{night}.ecsv'
     row = {
         'date': date_iso,
         'mjd': float(np.mean([raw[f]['mjd'] for f in files])) if files else None,
         'koa_id': '+'.join(raw[f]['koaid'] for f in files),
         'standard': standard,
-        'std_class': std_class_of(sf['std_cal']),
-        'std_model': str(sf['std_cal']),
+        'std_class': std_class_of(sf['std_cal'], model),
+        'std_model': (f"vega_tspectool_vacuum.dat J={model['j_2mass']} (V_eq {model['v_equivalent']})"
+                      if model is not None else str(sf['std_cal'])),
         'filter': m.get('filter'),
         'slit_width': width, 'slit_length': length,
         'sampmode': one(uniq('sampmode')) if files else None,
