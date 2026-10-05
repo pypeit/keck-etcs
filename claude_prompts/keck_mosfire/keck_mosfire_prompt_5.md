@@ -275,6 +275,7 @@ Part 6 step S18 needs S16.
 
    *Default:* yes, run it once now (`--run`), then after every S15b batch
    as the prompt says.
+>A. Yes, go ahead
 
 2. **The batches are blocked on the KOA search, as in S15a-1.** You chose
    the default there: `koa_search_prompts.md` prompts 1-2 come first. S15b's

@@ -181,6 +181,7 @@ by `keck_mosfire_prompt_5.md`.
      monitor's lamp-line metrics (a few frames per night).
 
    *Default:* (b).
+   >Answer: (b).
 
 2. **A1V and other non-A0V telluric stars.** 168 rows (128 nights, 81
    stars) are HIP/HD stars that are not A0 dwarfs in SIMBAD: mostly A1V
@@ -190,6 +191,7 @@ by `keck_mosfire_prompt_5.md`.
 
    *Default:* leave them out (A0V only, as N3 says). Revisit if the
    sample proves too small.
+   >Answer: Your default
 
 3. **The 5" slit question for Josh Walawender (design 8).** The census
    answers it from the data:
@@ -203,6 +205,7 @@ by `keck_mosfire_prompt_5.md`.
 
    *Default:* record this in the design and drop the question to WMKO,
    unless you still want to ask.
+   >Answer: Your default
 
 4. **The pilot nights** (`nautilus/manifests/nights_pilot.csv`, rules in
    `make_night_manifest.py`):
@@ -216,6 +219,7 @@ by `keck_mosfire_prompt_5.md`.
    | 20250722 | GD153 | WD | LONGSLIT-46x5 | J2 | era 2025-04.. |
 
    *Default:* download and reduce these in prompt 2 and S15a.
+   >Answer: Your default
 
 ## Logging
 
