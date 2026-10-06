@@ -52,8 +52,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: download
-        # image 0.2.0, digest sha256:aa538854d3b807696821f1df89bafff31ee325176576d60663df1ed7f291d978 (keck-etcs 8ab7cb9, PypeIt pin 8017f47)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.0
+        # image 0.2.1, digest sha256:1a8e82918c8a517089cbdf87a6c2ea9cc06345c9c9d4e8a21ae081925ed3cce3 (keck-etcs 31488fa, PypeIt pin 8017f47)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.1
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -61,8 +61,8 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.0"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:aa538854d3b807696821f1df89bafff31ee325176576d60663df1ed7f291d978"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.1"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:1a8e82918c8a517089cbdf87a6c2ea9cc06345c9c9d4e8a21ae081925ed3cce3"}
         - {name: MANIFEST, value: /opt/manifest/nights.csv}
         - name: JOB_NAME
           valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}

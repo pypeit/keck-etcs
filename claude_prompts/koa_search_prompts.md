@@ -703,3 +703,21 @@ and the pilot have `spec2d = 1` exactly on the validation nights).
 - **Verify (prompt 3):** validation nights have science frames and a
   standard on S3 (checked above); the manifests carry `spec2d = 1`
   (tested); the downloads used the fallback path, as the prompt allows.
+
+### 2026-10-06 (image 0.2.1 pushed; manifests retargeted)
+
+- The user ran `bash nautilus/build_image.sh --push` and it completed:
+  `push OK: …/keck-etcs:0.2.1`, digest
+  **sha256:1a8e82918c8a517089cbdf87a6c2ea9cc06345c9c9d4e8a21ae081925ed3cce3**.
+  The image's `KECK_ETCS_GIT_SHAS` gives keck-etcs **31488fa** and PypeIt
+  **8017f47** (the pin).
+- `night_job.yaml`, `validate_job.yaml` and `koa_download_job.yaml` now
+  point at 0.2.1: image, digest comment and `KECK_ETCS_IMAGE_DIGEST`.
+  `validate_manifests.py` and `kubectl apply --dry-run=client` pass.
+- 0.2.1 contains everything since 0.2.0: the downloader's spectroscopy-only
+  and validation-science selection, the driver's manifest-only frames and
+  standard-only `no trace`, plus S8's filter curves, S15a's A0V and long2pos
+  code and the FLATSPEC/duplicate fixes (already in 0.2.0).
+- No Job was launched. The S15a pilot reduction (`keck_mosfire_prompt_5.md`
+  prompt 1, now unblocked: its 5 nights are on S3) is the next step, when
+  the user points there.
