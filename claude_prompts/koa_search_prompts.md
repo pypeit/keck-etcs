@@ -284,6 +284,8 @@ by `keck_mosfire_prompt_5.md`.
    digest. I then point `night_job.yaml` (and the download job) at 0.2.1
    for the S15a pilot.
 
+>A. Done
+
 2. **Strays in the bucket** (small, harmless):
    - `mosfire/20241229/raw/m241229_0209.fits`, the imaging-mode
      acquisition frame (MF.20241229.41741.74) that the first validation
@@ -295,6 +297,7 @@ by `keck_mosfire_prompt_5.md`.
 
    *Default:* leave them. Or delete them yourself with
    `aws --profile default --endpoint-url https://s3-west.nrp-nautilus.io s3 rm s3://keck-etcs/<key>`.
+>A. Use your default
 
 3. **More validation points?** 4 program nights have science frames but
    no reducible same-night standard: 20191119 (no standard), 20200529
@@ -304,6 +307,7 @@ by `keck_mosfire_prompt_5.md`.
 
    *Default:* not now. Design 6.1 uses the same night's standard; revisit
    after S16 if more points are wanted.
+>Answer: Your default
 
 ## Logging
 
