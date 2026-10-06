@@ -1,0 +1,43 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: night, datatype: string}
+# - {name: target, datatype: string}
+# - {name: filter, datatype: string}
+# - {name: maskname, datatype: string}
+# - {name: slit_width_arcsec, datatype: float64, format: .6g}
+# - {name: n_exposures, datatype: int64}
+# - {name: exptime_s, datatype: float64, format: .6g}
+# - {name: total_exptime_s, datatype: float64, format: .6g}
+# - {name: sampmode, datatype: string}
+# - {name: numreads, datatype: string}
+# - {name: airmass, datatype: float64, format: .6g}
+# - {name: ra, datatype: float64, format: .6g}
+# - {name: dec, datatype: float64, format: .6g}
+# - {name: progid, datatype: string}
+# - {name: progpi, datatype: string}
+# - {name: koaids, datatype: string}
+# - {name: standard, datatype: string}
+# - {name: std_class, datatype: string}
+# - {name: std_reducible, datatype: bool}
+# - {name: std_wide_slit, datatype: bool}
+# - {name: validation, datatype: bool}
+# meta: !!omap
+# - {description: 'Hennawi/Yang/Wang science exposures usable as S/N validation points (design 6.1, D9; KOA prompt 3)'}
+# - {source: KOA TAP census cache (search_mosfire_standards.py)}
+# - {selection: 'on-sky, narrow LONGSLIT, >= 55 s, priority program, not a standard; validation = a reducible same-night standard in the
+#     same filter'}
+# - {created: '2026-10-06T01:37:42Z'}
+# - {script: scripts/koa/find_validation_targets.py}
+# - {keck_etcs_version: 0.2.0}
+# schema: astropy-2.0
+night target filter maskname slit_width_arcsec n_exposures exptime_s total_exptime_s sampmode numreads airmass ra dec progid progpi koaids standard std_class std_reducible std_wide_slit validation
+20191119 HE2QSJ0916+2408 J LONGSLIT-46x1 1.0 4 178.93917 715.75668 3 16 1.2234007575 139.08705500000002 24.134165000000003 U170 Hennawi MF.20191119.47387.fits,MF.20191119.47600.fits,MF.20191119.47810.fits,MF.20191119.48021.fits "" "" False False False
+20200529 z7_J1642+2731o J LONGSLIT-46x1 1.0 4 119.29278 477.17112 3 1 1.3476633949999999 250.67154499999998 27.518455 U183 Hennawi MF.20200529.48843.fits,MF.20200529.48973.fits,MF.20200529.49104.fits,MF.20200529.49236.fits Feige110 WD False False False
+20201025 z7_J2352+2655o J LONGSLIT-46x1 1.0 4 149.84337 599.37348 3 16 1.167634125 358.01119500000004 26.919245 U031 Hennawi MF.20201025.20506.fits,MF.20201025.20688.fits,MF.20201025.20871.fits,MF.20201025.21054.fits GD71 WD False False False
+20220409 J0841+3814_OFF J2 LONGSLIT-46x1 1.0 4 149.84337 599.37348 3 16 1.076337665 130.40836000000002 38.23542 N092 Hennawi MF.20220409.24247.fits,MF.20220409.24430.fits,MF.20220409.24613.fits,MF.20220409.24797.fits LDS749B WD True True True
+20241229 rJ0933+7427 J "LONGSLIT-46x1 (align)" 1.0 5 149.84337 749.21685 3 16 1.7817359920000002 143.39872 74.45717 U418 Hennawi MF.20241229.42245.11.fits,MF.20241229.42450.13.fits,MF.20241229.42632.71.fits,MF.20241229.42815.29.fits,MF.20241229.42998.89.fits GD153 WD True True True
+20241230 J0942+6448YJ2 J2 "LONGSLIT-46x1 (align)" 1.0 16 149.84337 2397.49392 3 16 1.4287969443750002 145.58031499999998 64.799705 U418 Hennawi MF.20241230.50062.47.fits,MF.20241230.50245.50.fits,MF.20241230.50427.12.fits,MF.20241230.50610.72.fits,MF.20241230.50804.52.fits,MF.20241230.50988.12.fits,MF.20241230.51171.72.fits,MF.20241230.51354.81.fits,MF.20241230.51545.55.fits,MF.20241230.51729.15.fits,MF.20241230.51912.75.fits,MF.20241230.52095.84.fits,MF.20241230.52303.41.fits,MF.20241230.52487.10.fits,MF.20241230.52670.61.fits,MF.20241230.52852.68.fits GD153 WD True True True
+20250108 J1004+6844J2 J2 "LONGSLIT-46x1 (align)" 1.0 16 149.84337 2397.49392 3 16 1.5397198675000001 151.17559 68.734905 U418 Hennawi MF.20250108.49653.18.fits,MF.20250108.49837.80.fits,MF.20250108.50020.38.fits,MF.20250108.50205.51.fits,MF.20250108.50401.35.fits,MF.20250108.50584.95.fits,MF.20250108.50768.55.fits,MF.20250108.50952.66.fits,MF.20250108.51158.20.fits,MF.20250108.51342.82.fits,MF.20250108.51525.91.fits,MF.20250108.51709.51.fits,MF.20250108.51900.26.fits,MF.20250108.52083.35.fits,MF.20250108.52264.92.fits,MF.20250108.52451.70.fits GD153 WD False True False
+20250125 J1004+6844 J2 "LONGSLIT-46x1 (align)" 1.0 24 149.84337 3596.24088 3 16 1.5195962070833333 151.175775 68.734985 U418 Hennawi MF.20250125.42409.94.fits,MF.20250125.42592.29.fits,MF.20250125.42775.89.fits,MF.20250125.42958.99.fits,MF.20250125.43160.95.fits,MF.20250125.43343.20.fits,MF.20250125.43526.62.fits,MF.20250125.43709.94.fits,MF.20250125.43914.73.fits,MF.20250125.44097.31.fits,MF.20250125.44280.40.fits,MF.20250125.44464.00.fits,MF.20250125.44653.72.fits,MF.20250125.44836.30.fits,MF.20250125.45018.88.fits,MF.20250125.45201.97.fits,MF.20250125.45391.18.fits,MF.20250125.45573.76.fits,MF.20250125.45756.34.fits,MF.20250125.45937.39.fits,MF.20250125.46127.11.fits,MF.20250125.46309.69.fits,MF.20250125.46493.80.fits,MF.20250125.46675.36.fits GD153 WD True True True
+20250723 J1629+6831 J2 LONGSLIT-46x0.7 0.7 36 149.84337 5394.361319999998 3 16 1.5884665441666668 247.26198499999998 68.52449 N110 Hennawi MF.20250723.26557.83.fits,MF.20250723.26740.41.fits,MF.20250723.26922.48.fits,MF.20250723.27106.80.fits,MF.20250723.27292.74.fits,MF.20250723.27476.34.fits,MF.20250723.27658.41.fits,MF.20250723.27842.10.fits,MF.20250723.28028.68.fits,MF.20250723.28212.28.fits,MF.20250723.28394.86.fits,MF.20250723.28577.44.fits,MF.20250723.28770.23.fits,MF.20250723.28953.32.fits,MF.20250723.29136.41.fits,MF.20250723.29320.10.fits,MF.20250723.29512.28.fits,MF.20250723.29694.87.fits,MF.20250723.29877.45.fits,MF.20250723.30059.52.fits,MF.20250723.30268.11.fits,MF.20250723.30450.19.fits,MF.20250723.30633.79.fits,MF.20250723.30817.39.fits,MF.20250723.31013.25.fits,MF.20250723.31195.34.fits,MF.20250723.31377.93.fits,MF.20250723.31560.51.fits,MF.20250723.31747.69.fits,MF.20250723.31930.28.fits,MF.20250723.32114.40.fits,MF.20250723.32296.99.fits,MF.20250723.33586.27.fits,MF.20250723.33768.87.fits,MF.20250723.33952.47.fits,MF.20250723.34135.56.fits GD153 WD True True True

@@ -104,3 +104,10 @@ files:
     sha256: 79916ab5194ad28653f5e53ee75b4c45e410d7edf26bbc5aa80eb5efd05a2f2f
     script: scripts/koa/search_mosfire_standards.py
     provenance: KOA TAP SAMPMODE histogram of 168038 public on-sky spectroscopy frames
+  mosfire/koa_validation_targets.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-06T01:37:42Z'
+    sha256: 789bf5cc9563bf170f7b8e3995ba1908c4017246c3b49b2c6dda1c3b999b4315
+    script: scripts/koa/find_validation_targets.py
+    provenance: 9 Hennawi/Yang/Wang science targets from the KOA census; 5 with a reducible same-night
+      standard

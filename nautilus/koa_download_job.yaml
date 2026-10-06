@@ -41,7 +41,7 @@ metadata:
   labels: {app: keck-etcs, role: koa-download}
 spec:
   completionMode: Indexed
-  completions: 1             # = rows in the manifest CSV
+  completions: 19            # = rows in the manifest CSV (nights_batch1.csv)
   parallelism: 2             # politeness to KOA
   backoffLimit: 4
   activeDeadlineSeconds: 14400
@@ -52,7 +52,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: download
-        # image 0.2.0, digest TBD (set after build_image.sh --push)
+        # image 0.2.0, digest sha256:aa538854d3b807696821f1df89bafff31ee325176576d60663df1ed7f291d978 (keck-etcs 8ab7cb9, PypeIt pin 8017f47)
         image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.0
         imagePullPolicy: Always
         env:
@@ -62,6 +62,7 @@ spec:
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
         - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.0"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:aa538854d3b807696821f1df89bafff31ee325176576d60663df1ed7f291d978"}
         - {name: MANIFEST, value: /opt/manifest/nights.csv}
         - name: JOB_NAME
           valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}

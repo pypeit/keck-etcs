@@ -23,8 +23,10 @@ Steps (each failure class has its own exit code, design 4.8.6):
     spec1d per frame); a leftover frame uses the nearest opposite frame; apply the reduction parameter block (``--par``, default
     :data:`DEFAULT_PAR`, from the dev-suite ``keck_mosfire_j2_long.pypeit``).
  4. ``run_pypeit <file> -r redux/ -o``.
- 5. Check that every science and standard frame has a spec1d with at least
-    one object; report FWHM, S/N and the wavelength RMS.
+ 5. Check that every standard frame has a spec1d with at least one object
+    (else ``no trace``); a science frame without one is only recorded
+    (``science_without_objects``), since a faint validation target may escape
+    PypeIt's object finding; report FWHM, S/N and the wavelength RMS.
  6. ``--sens FILE``: ``pypeit_sensfunc`` on each standard spec1d into
     ``sens/sens_<spec1d stem>.fits``.
  7. Write ``<night>/run_manifest.json`` (design 4.8.5), on failure too.
@@ -54,7 +56,8 @@ cards instead:
 - other on-sky frames -> ``arc,science,tilt`` (OH lines as the arc).
 
 When ``raw/manifest.ecsv`` exists (written by
-``scripts/koa/download_mosfire_night.py``), its ``frame_type`` refines this:
+``scripts/koa/download_mosfire_night.py``), only the frames it lists are used,
+and its ``frame_type`` refines the typing:
 ``oh_arc`` frames (narrow-slit on-sky frames downloaded only for their OH
 lines, often of faint unrelated targets) become ``arc,tilt``, so the night
 does not fail ``no trace`` on them; ``standard`` frames are typed
@@ -311,6 +314,15 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     tbl['frametype'] = [classify(fits.getheader(Path(raw_dir) / fn), ra, dec, std)
                         for fn, ra, dec in zip(tbl['filename'], tbl['ra'], tbl['dec'])]
     koa = raw_manifest_types(raw_dir)
+    if koa:
+        # a KOA-downloaded night: use only the frames its raw/manifest.ecsv lists (a frame left in
+        # raw/ by an earlier selection, e.g. an imaging-mode acquisition, is ignored)
+        listed = np.array([str(fn) in koa for fn in tbl['filename']])
+        if not listed.all():
+            notes.append(f'{int((~listed).sum())} raw frame(s) not in raw/manifest.ecsv ignored: '
+                         f'{list(tbl["filename"][~listed])}')
+            old = [o for o, k in zip(old, listed) if k]
+            tbl = tbl[listed]
     for i, fn in enumerate(tbl['filename']):
         kt = koa.get(str(fn))
         if kt == 'oh_arc' and tbl['frametype'][i] == 'arc,science,tilt':
@@ -573,8 +585,16 @@ def main(args):
         for w in manifest['wave_qa']:
             print(f"  {w['file']} slit {w['slit']}: RMS {w['rms_pix']} pix "
                   f"(threshold {w.get('rms_thresh_pix')}) {'ok' if w['pass'] else 'FAIL'}")
-        if missing:
-            raise StageError('no trace', f'no spec1d objects for {missing}')
+        # only the standard must yield an object; a faint science (validation) target may not
+        # be found by PypeIt's object finding, which must not cost the night its sensfunc
+        std_files = {str(r['filename']) for r in tbl if 'standard' in r['frametype']}
+        miss_std = [m for m in missing if m in std_files]
+        miss_sci = [m for m in missing if m not in std_files]
+        if miss_sci:
+            manifest['science_without_objects'] = miss_sci
+            print(f'  WARNING: no spec1d object in science frame(s) {miss_sci} (spec2d kept for validation)')
+        if miss_std:
+            raise StageError('no trace', f'no spec1d objects for standard frame(s) {miss_std}')
 
         # 6. sensfunc
         if args.sens:

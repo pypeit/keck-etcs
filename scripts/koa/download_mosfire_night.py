@@ -11,7 +11,9 @@ For each night (a night-manifest row: ``standard``, ``slit`` = mask, ``filter``,
 ``std_ra``, ``std_dec``; positional nights take their row from
 ``keck_etcs/data/mosfire/koa_standards_candidates.ecsv``) the script asks KOA's
 TAP service for every MOSFIRE frame of the night (UT date of UT + 6 h, as in
-``search_mosfire_standards.py``) and selects:
+``search_mosfire_standards.py``; spectroscopy only: KOA labels some on-slit
+acquisition exposures ``gratmode = imaging``, e.g. MF.20241229.41741.74) and
+selects:
 
 - ``standard``: on-sky frames with the night's filter and mask, within 60" of
   the standard;
@@ -25,8 +27,11 @@ TAP service for every MOSFIRE frame of the night (UT date of UT + 6 h, as in
   OH), not the standard, on their most common mask, nearest in
   time to the standard. A wide slit broadens the standard's own OH lines too
   much; the driver types these frames ``arc,tilt``. Frames of the
-  Hennawi/Yang/Wang programs are marked ``priority`` (validation candidates,
-  KOA prompt 3);
+  Hennawi/Yang/Wang programs are marked ``priority``;
+- ``science`` (validation nights, manifest ``spec2d = 1``; KOA prompt 3):
+  every Hennawi/Yang/Wang science exposure of the filter on a narrow long slit
+  (>= 55 s), instead of the OH frames; they are reduced as science
+  (``arc,science,tilt``) and also serve as the OH arcs;
 - ``lamp_arc``: for ``long2pos_specphot`` standards, every Ne/Ar arc of the
   filter on a long2pos mask (PypeIt's wavelength calibration for that mask;
   required); with ``--lamp-arcs`` (the user's choice after the prompt 1
@@ -105,8 +110,8 @@ def night_frames(night):
     """Every public MOSFIRE frame of the night (KOA TAP, VOTable)."""
     d = datetime.date(int(night[:4]), int(night[4:6]), int(night[6:]))
     prev = (d - datetime.timedelta(days=1)).strftime('%Y%m%d')
-    adql = (f"SELECT {', '.join(COLUMNS)} FROM koa_mosfire WHERE koaid LIKE 'MF.{night}%' "
-            f"OR koaid LIKE 'MF.{prev}%'")
+    adql = (f"SELECT {', '.join(COLUMNS)} FROM koa_mosfire WHERE (koaid LIKE 'MF.{night}%' "
+            f"OR koaid LIKE 'MF.{prev}%') AND gratmode = 'spectroscopy'")
     body = http(KOA_TAP, {'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'votable', 'QUERY': adql})
     if b'Failed to execute' in body[:3000] or (b'QUERY_STATUS' in body[:3000] and b'value="ERROR"' in body[:3000]):
         raise RuntimeError(f'KOA TAP error: {body[:1500]!r}')
@@ -132,7 +137,19 @@ def select_frames(fr, row, lamp_arcs=False):
     t_std = float(np.median(np.asarray(fr['mjd_obs'], float)[std]))
     pick = [(i, 'standard') for i in np.flatnonzero(std)]
     oh_mask = None
-    if not l2p:
+    validation = str(row.get('spec2d', '0')) == '1'
+    sci = []
+    if validation and not l2p:
+        # validation nights (KOA prompt 3): every priority-program science exposure of the filter
+        narrow = np.array(['LONGSLIT' in m and census.slit_of(m)[0] < census.WIDE_SLIT for m in masks])
+        prio = np.array([any(p in str(x).lower() for p in census.PRIORITY_PI) for x in fr['progpi']])
+        longexp = np.asarray(fr['truitime'], float) >= census.MIN_OH_EXPTIME
+        sci = list(np.flatnonzero(on & f_ok & narrow & prio & longexp & (sep > census.MATCH_ARCSEC)))
+        pick += [(i, 'science') for i in sci]
+        if sci:
+            vals, counts = np.unique(masks[sci], return_counts=True)
+            oh_mask = vals[np.argmax(counts)]     # the science frames are the OH arcs as well
+    if not l2p and not sci:
         narrow = np.array(['LONGSLIT' in m and census.slit_of(m)[0] < census.WIDE_SLIT for m in masks])
         longexp = np.asarray(fr['truitime'], float) >= census.MIN_OH_EXPTIME
         cand = np.flatnonzero(on & f_ok & narrow & longexp & (sep > census.MATCH_ARCSEC))

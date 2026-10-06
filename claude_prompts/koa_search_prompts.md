@@ -267,6 +267,44 @@ by `keck_mosfire_prompt_5.md`.
    medians.
    >Answer: Your default
 
+### MOSFIRE prompt 3 (2026-10-05)
+
+1. **Rebuild the image before any reduction (0.2.1).**
+   - Today's driver changes are not in 0.2.0, which was built from 8ab7cb9:
+     - a science frame without an extracted object no longer fails the
+       night (a faint validation quasar must not cost the standard's
+       sensfunc);
+     - only the frames listed in `raw/manifest.ecsv` are used.
+   - The downloader's spectroscopy-only and validation-science selection
+     is also newer than 0.2.0.
+   - `keck_etcs.__version__` is bumped to **0.2.1**.
+
+   *Default:* you commit, then run `bash nautilus/build_image.sh --push`
+   (or build plus the one-line `docker push` as before) and paste the
+   digest. I then point `night_job.yaml` (and the download job) at 0.2.1
+   for the S15a pilot.
+
+2. **Strays in the bucket** (small, harmless):
+   - `mosfire/20241229/raw/m241229_0209.fits`, the imaging-mode
+     acquisition frame (MF.20241229.41741.74) that the first validation
+     pass picked up before the spectroscopy filter. It is no longer in the
+     night's manifest, and the driver ignores unlisted frames.
+   - My test status rows under `runs/local-download-test/`,
+     `runs/koa-validation-local/` and `runs/koa-refresh-local/`.
+   - `s3_sync.py` has no delete.
+
+   *Default:* leave them. Or delete them yourself with
+   `aws --profile default --endpoint-url https://s3-west.nrp-nautilus.io s3 rm s3://keck-etcs/<key>`.
+
+3. **More validation points?** 4 program nights have science frames but
+   no reducible same-night standard: 20191119 (no standard), 20200529
+   (Feige110 narrow), 20201025 (GD71 narrow) and 20250108 (GD153, no flats
+   or calibrator). They could be validated against the era-median
+   throughput instead of a same-night sensfunc.
+
+   *Default:* not now. Design 6.1 uses the same night's standard; revisit
+   after S16 if more points are wanted.
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -568,3 +606,100 @@ astropy, so it runs in the image):
 **Housekeeping:** `$CLAUDE_JOB_DIR` was unset in this shell, so some
 scratch files went to the shared `/tmp`. I moved or removed only my own
 (listed by name and time); later work uses the session scratchpad.
+
+### 2026-10-05 (MOSFIRE prompt 3: validation targets, spec2d manifests, downloads; batch 1 complete)
+
+**Answers read** (prompt 2): you did (a) the commit and (b) the build, and
+(c) applying the Job was mine; defaults for the pilot changes and the
+unreducible nights.
+- **The 0.2.0 tag was not in the registry**: the build had run but not the
+  push (`docker manifest inspect` found no `:0.2.0`, and `:latest` still had
+  0.1.6's digest).
+- You pushed it with `DOCKER_CONFIG=~/.docker-keck-etcs docker push …:0.2.0`:
+  digest **sha256:aa538854d3b807696821f1df89bafff31ee325176576d60663df1ed7f291d978**
+  (keck-etcs 8ab7cb9, PypeIt pin 8017f47, from the image's
+  `KECK_ETCS_GIT_SHAS`).
+
+**Batch 1** (`keck-etcs-koa-download`, `completions` 19, `parallelism` 2,
+image 0.2.0 with the digest set in the YAML; ConfigMap
+`keck-etcs-koa-nights` from `nights_batch1.csv`):
+- **19 of 19 succeeded:** 18 `success` and 1 `skipped` (20240721, already
+  on S3 from my test).
+- 8.56 GB in the manifests, 8.12 GB downloaded; 9-73 s per pod (about
+  10 MB/s).
+- Every night has its standard and dome flats, plus long2pos arcs (2-12)
+  or 6 OH frames.
+- The status table is `runs/keck-etcs-koa-download/download_status.ecsv`.
+
+**`scripts/koa/find_validation_targets.py`** →
+`keck_etcs/data/mosfire/koa_validation_targets.ecsv` (registered):
+
+- It lists the Hennawi/Yang/Wang (D9) science exposures on narrow J/J2/J3
+  long slits (≥ 55 s, not a standard), per night × target × filter × mask,
+  with the same-night standard in that filter. A target is a validation
+  point when that standard is reducible.
+- **9 targets on 9 nights, all Hennawi; 5 validation points:**
+
+  | Night | Target | Band | Exposures | Standard |
+  |---|---|---|---|---|
+  | 20220409 | J0841+3814_OFF | J2 | 4 × 150 s | LDS749B |
+  | 20241229 | rJ0933+7427 | J | 5 × 150 s | GD153 |
+  | 20241230 | J0942+6448YJ2 | J2 | 16 × 150 s | GD153 |
+  | 20250125 | J1004+6844 | J2 | 24 × 150 s | GD153 |
+  | 20250723 | J1629+6831 | J2 | 36 × 150 s | GD153 |
+
+  The other four nights (20191119, 20200529, 20201025, 20250108) lack a
+  reducible same-night standard (Q&A prompt 3, item 3).
+- **`nautilus/manifests/nights_validation.csv`**: the 4 new nights, each
+  the standard's row with `spec2d = 1`. **`spec2d = 1`** is now also set for
+  them in `nights_batch1.csv` (4 rows) and `nights_pilot.csv` (20241230,
+  20250723). 2022-04-09 keeps its dry-run row (already `spec2d = 1`).
+
+**Downloader:**
+
+- On validation nights (manifest `spec2d = 1`) it now takes **every**
+  priority-program science exposure of the filter as `science`. These also
+  serve as the OH arcs, so no separate `oh_arc` frames are picked.
+- **Bug found and fixed:** KOA labels some on-slit acquisition exposures
+  `gratmode = 'imaging'` (MF.20241229.41741.74, 150 s on
+  LONGSLIT-46x1 (align)). The census queries spectroscopy only, but the
+  per-night query had no filter, so the first validation pass picked the
+  frame as "science".
+  - The per-night query is now `gratmode = 'spectroscopy'`.
+  - A refresh over all 19 nights gives identical selections except
+    20241229 (science 6 → 5) and downloads nothing.
+  - The stray object stays on S3, and the driver ignores it (below).
+- The validation pass (local `--to-s3`, since 0.2.0 predates the selection)
+  added 58 science frames (0.98 GB). The validation nights now hold 5 / 16
+  / 24 / 36 science frames.
+
+**Driver** (`reduce_standard.py`, not yet in an image; Q&A prompt 3,
+item 1):
+- With a `raw/manifest.ecsv`, only the frames it lists are used (a note
+  names any ignored frame).
+- **`no trace` now applies to standard frames only.** A science frame
+  without an extracted object is recorded in
+  `run_manifest.json['science_without_objects']` with a warning, since the
+  quasars are faint and the night must not lose its sensfunc; `spec2d` is
+  kept for the validation step.
+
+**`scripts/koa/verify_raw_on_s3.py`** (read-only on the bucket): for each
+night of the given manifests it pulls `raw/manifest.ecsv`, lists the
+bucket, compares sizes, counts frame types, and requires a standard and
+dome flats (plus `science` on `spec2d = 1` nights).
+- Result over `nights_batch1.csv` and `nights_validation.csv`: **19 nights,
+  9.52 GB, ALL OK**: every frame present at the manifest size.
+- Every validation night has both science frames and a same-night
+  standard on S3; 2022-04-09 has them from the dry run.
+
+**Tests:** `test_koa_manifest.py` gains a validation test (2022-04-09 is a
+validation point; `nights_validation.csv` parses with `spec2d = 1`; batch 1
+and the pilot have `spec2d = 1` exactly on the validation nights).
+**103 passed.**
+
+**Other:**
+- `keck_etcs.__version__` → **0.2.1** for the rebuild.
+- Scratch now lives in the session scratchpad.
+- **Verify (prompt 3):** validation nights have science frames and a
+  standard on S3 (checked above); the manifests carry `spec2d = 1`
+  (tested); the downloads used the fallback path, as the prompt allows.

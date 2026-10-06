@@ -52,3 +52,17 @@ def test_night_classes_and_slits():
     assert sm.slit_length_bars('LONGSLIT-3x4') == 3
     assert sm.is_dwarf_a0('A0V') and sm.is_dwarf_a0('A0') and sm.is_dwarf_a0('A0IV/V')
     assert not sm.is_dwarf_a0('A0III') and not sm.is_dwarf_a0('A1V')
+
+
+def test_validation_targets_and_spec2d():
+    v = Table.read(REPO / 'keck_etcs' / 'data' / 'mosfire' / 'koa_validation_targets.ecsv', format='ascii.ecsv')
+    val = v[v['validation']]
+    assert '20220409' in set(val['night']) and np.all(val['std_reducible'])
+    mm = load(REPO / 'scripts' / 'koa' / 'make_night_manifest.py', 'make_night_manifest')
+    probs, n = mm.check(MANIFESTS / 'nights_validation.csv')
+    assert probs == [] and n == len(set(val['night']) - {'20220409'})
+    vn = {r['night'] for r in csv.DictReader(open(MANIFESTS / 'nights_validation.csv'))}
+    assert all(r['spec2d'] == '1' for r in csv.DictReader(open(MANIFESTS / 'nights_validation.csv')))
+    for name in ('nights_batch1.csv', 'nights_pilot.csv'):
+        for r in csv.DictReader(open(MANIFESTS / name)):
+            assert (r['spec2d'] == '1') == (r['night'] in vn), (name, r['night'])
