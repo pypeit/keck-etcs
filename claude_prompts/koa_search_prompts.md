@@ -242,6 +242,8 @@ by `keck_mosfire_prompt_5.md`.
    *Default:* yes to (c) once you have done (a) and (b). One night,
    20240721, is already on S3 from my `--to-s3` test, and the Job will skip
    it.
+   >A. I have done (a) and (b).  (c) is yours
+
 
 2. **Two pilot nights changed** after you approved the list. Both were
    unreducible, which I found here:
@@ -251,6 +253,7 @@ by `keck_mosfire_prompt_5.md`.
      (Feige110, long2pos_specphot with 2 arcs, era 2012-16).
 
    *Default:* accept.
+   >Answer: Your default
 
 3. **Unreducible wide-slit nights: 28 long2pos_specphot rows** have no
    long2pos arcs that night, and 3 LONGSLIT ones have no OH frames of 55 s
@@ -262,6 +265,7 @@ by `keck_mosfire_prompt_5.md`.
    *Default:* leave them out of batch 1. Revisit in S15b if the
    reducible sample (20 nights, 13 stars) proves too small for the era
    medians.
+   >Answer: Your default
 
 ## Logging
 
