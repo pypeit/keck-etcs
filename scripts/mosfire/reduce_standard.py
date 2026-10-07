@@ -66,8 +66,19 @@ does not fail ``no trace`` on them; ``standard`` frames are typed
 Nod pairing. Long-slit nights pair A and B frames in time order (below).
 ``long2pos`` and ``long2pos_specphot`` masks use PypeIt's own
 ``keck_mosfire.get_comb_group`` (B-A pairs; for ``long2pos_specphot`` a
-narrow-slit frame is the background of the wide-slit one). This branch is
-untested until a long2pos night is reduced (plan S15a pilot).
+narrow-slit frame is the background of the wide-slit one).
+
+long2pos_specphot (plan S15a pilot): each CSU bar is traced as its own slit
+(``use_maskdesign = False``, :data:`SPECPHOT_SLITEDGES`), the 4.0" bars are
+found from the mask's ``Mechanical_Slit_List`` (checked against the arc line
+widths, :func:`specphot_wide_slits`), and only frames whose brightest
+standard object lies in a 4.0" bar are used (``specphot_use``;
+``run_manifest.json`` ``specphot``). ``no trace`` then means no such frame.
+
+OH arcs: at most :data:`MAX_OH_ARCS` on-sky frames are typed as arcs (the
+longest, then the nearest in time to the standard); further science frames
+are typed ``science`` only (2025-07-23: 36 frames combined into the arc ran
+out of 16 GiB).
 
 The standard (``--std-class``, ``--std-name``, ``--std-ra``, ``--std-dec``,
 ``--jmag``; defaults from the night-manifest columns the night job exports,

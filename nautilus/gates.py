@@ -164,10 +164,16 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
                             f'a 4.0" bar {wide}; {len(with_obj)}/{len(onsky)} on-sky frames with objects'
                             + (f' (missing {missing}, not used)' if missing else '')))
     else:
-        ok = not missing and {'A', 'B'} <= set(std_pos)
+        # only the standard must yield objects; faint validation science targets may escape PypeIt's
+        # object finding (reduce_standard.py records them as science_without_objects)
+        std_names = {f['filename'] for f in std}
+        miss_std = [f for f in missing if f in std_names]
+        miss_sci = [f for f in missing if f not in std_names]
+        ok = not miss_std and {'A', 'B'} <= set(std_pos)
         results.append(gate('spec1d', ok, f'{len(with_obj)}/{len(onsky)} on-sky frames with objects '
                             f'({n_sci} science, {len(std)} standard at nod positions {std_pos})'
-                            + (f'; missing {missing}' if missing else '')))
+                            + (f'; standard missing {miss_std}' if miss_std else '')
+                            + (f'; {len(miss_sci)} science frame(s) without objects (not required)' if miss_sci else '')))
 
     # 2. wavelength RMS
     wq = m.get('wave_qa') or []

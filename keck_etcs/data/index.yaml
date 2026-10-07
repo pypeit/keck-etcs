@@ -23,6 +23,12 @@ files:
     sha256: bfe55129454da09f0ea810308efe5810b180581ecc3bd028923665283b23daec
     script: scripts/mosfire/measure_lsf.py --record
     provenance: 1 LSF measurement(s) from OH lines in PypeIt WaveCalib arc spectra
+  mosfire/monitor/monitor_lines_J2.ecsv:
+    calib_version: mosfire-J-2026.10-dev
+    created: '2026-10-07T15:27:00Z'
+    sha256: faedee86e3d2cd9eab6cac04f84ff0ba1b950a7868c8579048146eddc5e332d3
+    script: scripts/mosfire/select_monitor_lines.py 20220409 20241230 20250723 --band J2 --nlines 5
+    provenance: J2 OH monitor-line ranking (design 4.9.4); 4 lines frozen into MONITOR (S15a)
   mosfire/monitor/calib_monitor.ecsv:
     calib_version: mosfire-J-2026.10-dev
     created: '2026-10-05T00:20:31Z'

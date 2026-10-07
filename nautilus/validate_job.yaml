@@ -78,7 +78,7 @@ spec:
                 python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include 'redux/*' 'sens/*' 'harvest/*' run.log pod.log pypeit_pin_check.json gates.json run_manifest.json --force
               fi
               status "$1" "$2" "$3"
-              exit 1
+              case "$1" in "pull failed"|"push failed"|"reduce failed") exit 1;; *) exit 2;; esac
             }
             log PROVENANCE
             echo "image=$KECK_ETCS_IMAGE"

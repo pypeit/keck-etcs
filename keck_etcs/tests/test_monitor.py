@@ -47,6 +47,6 @@ def test_mosfire_config():
     assert cfg['flat_nodes']['J2'] == (11250.0, 11500.0, 11750.0, 12000.0, 12250.0, 12500.0)
     assert len(cfg['flat_nodes']['J']) == 8
     assert 4 <= len(cfg['monitor_lines']['OH']['J2']) <= 6
-    assert cfg['monitor_lines_status'] == 'provisional'
+    assert cfg['monitor_lines_status'] == 'frozen'
     with pytest.raises(KeyError):
         mc.get_config('keck_lris_red')

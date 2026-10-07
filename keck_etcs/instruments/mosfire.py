@@ -109,13 +109,19 @@ MONITOR = {
                    'Ar': 'Ar_IR_MOSFIRE_lines.dat'},
     'lsf_ref_wave': 12500.0,
     'band_windows': {'J2': (11170.0, 12600.0), 'J': (11530.0, 13520.0)},
-    # monitor lines (D45, 4.9.4): provisional until the S15a freeze.
-    # J2 from scripts/mosfire/select_monitor_lines.py on 2022-04-09 (rule 2 at 1",
-    # S6b): 15 lines pass rules 1, 2 and 4; the brightest per sub-window is kept.
-    # Output <night>/lsf/monitor_lines_J2.ecsv, sha256
-    # d2da532862375e5408911aa699330ee49909de73c61a76aebeefdf28bd017fba.
+    # monitor lines (D45, 4.9.4): frozen in S15a (2026-10-07).
+    # J2 from scripts/mosfire/select_monitor_lines.py 20220409 20241230 20250723
+    # --band J2 --nlines 5 (rule 2 at 1", S6b): 15 lines pass rules 1-4, every one
+    # identified on 3/3 nights; the brightest per sub-window is kept (4: one
+    # sub-window has none). Same four lines as the provisional 2022-04-09 list.
+    # Output keck_etcs/data/mosfire/monitor/monitor_lines_J2.ecsv, sha256
+    # faedee86e3d2cd9eab6cac04f84ff0ba1b950a7868c8579048146eddc5e332d3
+    # (2024-12-30 and 2025-07-23 reduced locally at PypeIt etc-fixes + the
+    # MOSFIRE (align) arc-extraction fix, pending the 0.2.2 pod rerun).
+    # J (and Ne/Ar lamp lines) are not frozen yet: no J long-slit night has
+    # been reduced (the J pilot nights are long2pos_specphot, rerun with 0.2.2).
     'monitor_lines': {'OH': {'J2': (11591.847, 11788.495, 12229.206, 12287.158), 'J': ()}},
-    'monitor_lines_status': 'provisional',
+    'monitor_lines_status': 'frozen',
 }
 
 MOSFIRE = Instrument(
