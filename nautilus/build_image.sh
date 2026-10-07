@@ -33,7 +33,9 @@ PYPEIT_REPO=${PYPEIT_REPO:-https://github.com/pypeit/PypeIt.git}
 # pypeit_cache_github_data fix; pin 8017f47 (2026-10-02) adds the refine_trace
 # extraction parameter, off for MOSFIRE; pin fb47905 (2026-10-07, S15a) moves
 # MOSFIRE arc extraction off the alignment box of LONGSLIT (align) masks
-# (Spectrograph.get_arc_extract_center). Then the pin moves to the merge
+# (Spectrograph.get_arc_extract_center); pin fb6fb62 (2026-10-07) calibrates
+# the 4-arcsec long2pos_specphot bars from their 0.7-arcsec neighbors
+# (Spectrograph.transfer_wavecal). Then the pin moves to the merge
 # commit and this goes back to develop.
 PIN_BRANCHES=${PIN_BRANCHES:-"develop etc-fixes"}
 PUSH_DOCKER_CONFIG=${PUSH_DOCKER_CONFIG:-$HOME/.docker-keck-etcs}

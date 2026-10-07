@@ -150,6 +150,9 @@ MAX_OH_ARCS = 16
 # is not reduced. Each bar is traced as its own slit instead; the 4.0" bars are the
 # spectrophotometric slits.
 SPECPHOT_SLITEDGES = ['use_maskdesign = False']
+# wavelength RMS limit for using a 4.0" bar (as nautilus/gates.py; flat-topped arc lines, so an
+# absolute limit: 0.5 pix = 0.8 A, negligible for a throughput curve)
+SPECPHOT_RMS_PIX = 0.5
 
 
 def with_slitedges(par_text, lines):
@@ -705,16 +708,28 @@ def main(args):
             for o in manifest['objects']:
                 o['wide_slit'] = o['slit'] in sp['wide']
             # a frame counts when its brightest object is in a 4.0" bar (2017-06-15: the B frames have
-            # the star in a 0.7" bar and a faint nod residual, S/N 11-15, in the 4.0" bar)
+            # the star in a 0.7" bar and a faint nod residual, S/N 11-15, in the 4.0" bar). Objects
+            # whose FWHM is outside 0.5-2x the night's median are sky-subtraction artefacts, not the
+            # star (2014-06-01 frame 0357: seven objects, the brightest 12 pix wide in a 4.0" bar)
+            # and are not candidates. A 4.0" bar counts only with a wavelength solution within
+            # SPECPHOT_RMS_PIX (the posB bar has no 0.7" neighbors to calibrate it from).
+            cand = [o for o in manifest['objects'] if 'standard' in o['frametype'] and o['sign'] == 'positive'
+                    and o['fwhm_pix'] is not None]
+            med = float(np.median([o['fwhm_pix'] for o in cand])) if cand else None
+            rms = {w['slit']: w['rms_pix'] for w in manifest['wave_qa']}
             best = {}
-            for o in manifest['objects']:
-                if 'standard' in o['frametype'] and o['sign'] == 'positive' and \
-                        (o['frame'] not in best or (o['s2n'] or 0) > (best[o['frame']]['s2n'] or 0)):
+            for o in cand:
+                if not (0.5 * med <= o['fwhm_pix'] <= 2.0 * med):
+                    continue
+                if o['frame'] not in best or (o['s2n'] or 0) > (best[o['frame']]['s2n'] or 0):
                     best[o['frame']] = o
             for o in manifest['objects']:
-                o['specphot_use'] = bool(o['wide_slit'] and best.get(o['frame']) is o)
-            wide_frames = sorted(f for f, o in best.items() if o['wide_slit'])
+                o['specphot_use'] = bool(o['wide_slit'] and best.get(o['frame']) is o
+                                         and rms.get(o['slit']) is not None
+                                         and rms[o['slit']] < SPECPHOT_RMS_PIX)
+            wide_frames = sorted(o['frame'] for o in manifest['objects'] if o['specphot_use'])
             sp['standard_frames_wide'] = wide_frames
+            sp['fwhm_median_pix'] = med
             sp['standard_frames_without_objects'] = miss_std
             manifest['specphot'] = sp
             print(f"  long2pos_specphot: 4.0\" bars {sp['wide']} ({sp['method']}; arc FWHM check "
