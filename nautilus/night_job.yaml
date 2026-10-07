@@ -7,7 +7,16 @@
 # gates.py; harvest (once S6 exists); push the products (run_manifest.json
 # last); write and push a status row; NIGHT_DONE. Any failure writes the
 # status row (and pushes run_manifest.json/run.log/pod.log for diagnosis) and
-# exits 1, so the Job reports the failed index.
+# exits non-zero, so the Job reports the failed index.
+#
+# Retries (S15a pilot, 2026-10-06): the pilot's global backoffLimit 4 was
+# exhausted by three nights failing 'no trace' (each retried), and the Job
+# then deleted the two healthy running pods. Now the backoff is per index
+# (backoffLimitPerIndex) and a data outcome (no calibs, setup failed, no
+# trace, sens failed, gate failed, pin check failed) exits 2, which the
+# podFailurePolicy turns into FailIndex: recorded, not retried, and the
+# other indexes run on. Infrastructure failures (pull/push, reduce crash,
+# OOM kill) are retried once on another pod; evictions are ignored.
 #
 # Sizing: initial guess from design 4.8.4 (cpu 4, 16Gi, 30/60Gi scratch, 6 h).
 # MEASURED (S4b dry run, 2022-04-09, 16 raw frames, SPEC2D=1, 2026-10-01):
@@ -44,7 +53,13 @@ spec:
   completionMode: Indexed
   completions: 1             # = rows in the manifest CSV
   parallelism: 4             # raise only after the pilot measures rate and memory
-  backoffLimit: 4            # idempotent: a preempted night is redone or skipped
+  backoffLimitPerIndex: 1    # one retry per night for infrastructure failures (exit 1, OOM)
+  podFailurePolicy:
+    rules:
+    - action: FailIndex      # data outcome (exit 2): recorded in the status row, not retried
+      onExitCodes: {containerName: night, operator: In, values: [2]}
+    - action: Ignore         # preemption/eviction: rerun without counting a failure
+      onPodConditions: [{type: DisruptionTarget}]
   activeDeadlineSeconds: 21600
   template:
     metadata:
@@ -96,7 +111,7 @@ spec:
                 python $SRC/scripts/nautilus/s3_sync.py push "$S3_PREFIX" --include 'redux/*' 'sens/*' 'harvest/*' run.log pod.log pypeit_pin_check.json gates.json run_manifest.json --force
               fi
               status "$1" "$2" "$3"
-              exit 1
+              case "$1" in "pull failed"|"push failed"|"reduce failed") exit 1;; *) exit 2;; esac
             }
             log PROVENANCE
             echo "image=$KECK_ETCS_IMAGE"

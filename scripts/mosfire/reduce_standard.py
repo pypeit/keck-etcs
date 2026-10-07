@@ -126,6 +126,89 @@ DEFAULT_PAR = """[calibrations]
     snr_thresh = 80.
 """
 
+# OH arcs (S15a pilot, 2026-10-06): 2025-07-23 has 36 on-sky science frames; typed as arcs, PypeIt
+# combined all 36 into the arc image and the pod was OOM-killed at 16 GiB (2022-04-09: 16 frames,
+# 6 GiB peak). At most MAX_OH_ARCS frames serve as arc/tilt (the longest, then the nearest in time
+# to the standard); the other science frames are typed science only.
+MAX_OH_ARCS = 16
+
+# long2pos_specphot (plan S15a pilot, 2026-10-06): positions A and C are each three CSU bars,
+# 0.7" | 4.0" | 0.7" wide (the raw frames' Mechanical_Slit_List), and posB is one 4.0" bar.
+# PypeIt's mask-design matching merges or drops these bars (2017-06-15: one slit kept, two bars of
+# posC; posA lost; 2024-07-21: the one slit kept fully masked), so the 4.0" bar that holds the star
+# is not reduced. Each bar is traced as its own slit instead; the 4.0" bars are the
+# spectrophotometric slits.
+SPECPHOT_SLITEDGES = ['use_maskdesign = False']
+
+
+def with_slitedges(par_text, lines):
+    """Add ``lines`` to the ``[[slitedges]]`` block of a parameter block (created if absent)."""
+    out = par_text.rstrip('\n').splitlines()
+    add = [f'    {ln}' for ln in lines]
+    for i, ln in enumerate(out):
+        if ln.strip() == '[[slitedges]]':
+            return '\n'.join(out[:i + 1] + add + out[i + 1:]) + '\n'
+    for i, ln in enumerate(out):
+        if ln.strip() == '[calibrations]':
+            return '\n'.join(out[:i + 1] + ['  [[slitedges]]'] + add + out[i + 1:]) + '\n'
+    return '\n'.join(['[calibrations]', '  [[slitedges]]'] + add + out) + '\n'
+
+
+def specphot_wide_slits(raw_file, wave_rows):
+    """The 4.0" bars of a long2pos_specphot reduction (``spat_id`` of the traced slits).
+
+    Geometry: the mask's ``Mechanical_Slit_List`` (bar widths by slit number); the
+    traced slits in increasing spatial position are the bars in decreasing slit
+    number (2017-06-15: 26, 25, ..., 20). Used when the counts agree. The arc
+    line FWHM per slit (WaveCalib) is the check: a 4.0" bar's arc lines are
+    wider than a 0.7" bar's (2017-06-15: 3.0-3.8 against 1.8-2.1 pix). Without
+    the geometry, the bars whose arc FWHM is above the midpoint of the range are
+    taken, when the range spans more than a factor 1.3.
+    """
+    fw = {int(w['slit']): w.get('fwhm_pix') for w in wave_rows}
+    slits = sorted(fw)
+    rec = {'slits': slits, 'arc_fwhm_pix': fw, 'bars': None, 'method': None, 'wide': [],
+           'fwhm_check': None}
+    bars = []
+    try:
+        with fits.open(raw_file) as hdul:
+            mech = hdul['Mechanical_Slit_List'].data
+            bars = sorted(((int(str(r['Slit_Number']).strip()), float(str(r['Slit_width']).strip()))
+                           for r in mech if str(r['Slit_Number']).strip()), reverse=True)
+    except (KeyError, ValueError, OSError):
+        bars = []
+    good = [f for f in fw.values() if f is not None]
+    if bars and len(bars) == len(slits):
+        rec['bars'] = [{'spat_id': s, 'bar': b, 'width_arcsec': w} for s, (b, w) in zip(slits, bars)]
+        rec['wide'] = [s for s, (_, w) in zip(slits, bars) if w > 2.0]
+        rec['method'] = 'geometry'
+        narrow = [fw[s] for s in slits if s not in rec['wide'] and fw[s] is not None]
+        wide = [fw[s] for s in rec['wide'] if fw[s] is not None]
+        if narrow and wide:
+            rec['fwhm_check'] = bool(min(wide) > max(narrow))
+    elif len(good) >= 2 and max(good) > 1.3 * min(good):
+        mid = 0.5 * (max(good) + min(good))
+        rec['wide'] = [s for s in slits if fw[s] is not None and fw[s] > mid]
+        rec['method'] = 'arc_fwhm'
+    return rec
+
+
+def cap_oh_arcs(tbl, nmax=MAX_OH_ARCS):
+    """Keep at most ``nmax`` on-sky frames as OH arcs; return notes (see :data:`MAX_OH_ARCS`)."""
+    oh = [i for i, t in enumerate(tbl['frametype']) if t in ('arc,science,tilt', 'arc,tilt')]
+    if len(oh) <= nmax:
+        return []
+    std = [float(m) for m, t in zip(tbl['mjd'], tbl['frametype']) if 'standard' in t]
+    t0 = float(np.median(std)) if std else float(np.median(tbl['mjd']))
+    order = sorted(oh, key=lambda i: (-float(tbl['exptime'][i]), abs(float(tbl['mjd'][i]) - t0)))
+    keep, drop = set(order[:nmax]), order[nmax:]
+    dropped = []
+    for i in drop:
+        tbl['frametype'][i] = 'science' if tbl['frametype'][i] == 'arc,science,tilt' else 'DROP'
+        dropped.append(str(tbl['filename'][i]))
+    return [f'{len(oh)} OH-arc frames: the {nmax} longest (nearest the standard) kept as arc/tilt; '
+            f'{len(drop)} retyped science only, or left out if downloaded only for OH: {dropped}']
+
 
 class StageError(RuntimeError):
     def __init__(self, status, message):
@@ -341,6 +424,11 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
                          f'(long slit: OH arcs; kept in raw/ for the monitor): {list(tbl["filename"][lamp])}')
             old = [o for o, k in zip(old, lamp) if not k]
             tbl = tbl[~lamp]
+    if not specphot:
+        notes += cap_oh_arcs(tbl)
+        keep_rows = np.array([t != 'DROP' for t in tbl['frametype']])
+        old = [o for o, k in zip(old, keep_rows) if k]
+        tbl = tbl[keep_rows]
     for fn, o, n in zip(tbl['filename'], old, tbl['frametype']):
         if o != n:
             notes.append(f'{fn}: frametype {o} -> {n}')
@@ -416,7 +504,8 @@ def spec1d_qa(redux, tbl, platescale):
             fwhm = None if so['FWHM'] is None else float(so['FWHM'])
             rows.append({'frame': row['filename'], 'spec1d': hits[0].name,
                          'frametype': row['frametype'], 'target': str(row['target']),
-                         'name': so['NAME'], 'spat_pixpos': float(so['SPAT_PIXPOS']),
+                         'name': so['NAME'], 'slit': int(so['SLITID']),
+                         'spat_pixpos': float(so['SPAT_PIXPOS']),
                          'fwhm_pix': fwhm,
                          'fwhm_arcsec': None if fwhm is None else fwhm * platescale,
                          's2n': None if so['S2N'] is None else float(so['S2N']),
@@ -542,6 +631,11 @@ def main(args):
         # 3. patch
         stage('patch')
         par_text = Path(args.par).read_text() if args.par else DEFAULT_PAR
+        koa_types = raw_manifest_types(raw)
+        specphot = any('long2pos_specphot' in str(fits.getheader(f).get('MASKNAME', '')) for f in frames
+                       if koa_types.get(f.name, 'standard') == 'standard')
+        if specphot and 'use_maskdesign' not in par_text:
+            par_text = with_slitedges(par_text, SPECPHOT_SLITEDGES)
         manifest['par_block'] = par_text
         pfile = redux / f'{SPECTROGRAPH}_{date}.pypeit'
         std = standard_record(args)
@@ -593,14 +687,41 @@ def main(args):
         if miss_sci:
             manifest['science_without_objects'] = miss_sci
             print(f'  WARNING: no spec1d object in science frame(s) {miss_sci} (spec2d kept for validation)')
-        if miss_std:
+        if specphot:
+            # the dither moves the star between the bars: only frames with the star in a 4.0" bar
+            # measure the throughput (2017: YOFFSET 0; 2014 align mask: YOFFSET +-14)
+            sp = specphot_wide_slits(raw / sorted(std_files)[0], manifest['wave_qa'])
+            for o in manifest['objects']:
+                o['wide_slit'] = o['slit'] in sp['wide']
+            # a frame counts when its brightest object is in a 4.0" bar (2017-06-15: the B frames have
+            # the star in a 0.7" bar and a faint nod residual, S/N 11-15, in the 4.0" bar)
+            best = {}
+            for o in manifest['objects']:
+                if 'standard' in o['frametype'] and o['sign'] == 'positive' and \
+                        (o['frame'] not in best or (o['s2n'] or 0) > (best[o['frame']]['s2n'] or 0)):
+                    best[o['frame']] = o
+            for o in manifest['objects']:
+                o['specphot_use'] = bool(o['wide_slit'] and best.get(o['frame']) is o)
+            wide_frames = sorted(f for f, o in best.items() if o['wide_slit'])
+            sp['standard_frames_wide'] = wide_frames
+            sp['standard_frames_without_objects'] = miss_std
+            manifest['specphot'] = sp
+            print(f"  long2pos_specphot: 4.0\" bars {sp['wide']} ({sp['method']}; arc FWHM check "
+                  f"{sp['fwhm_check']}); standard frames with the star in a 4.0\" bar: {wide_frames}")
+            if miss_std:
+                print(f'  WARNING: no spec1d object in standard frame(s) {miss_std} (not used for the sensfunc)')
+            if not wide_frames:
+                raise StageError('no trace', 'long2pos_specphot: no standard object in a 4.0" bar '
+                                 f'(wide bars {sp["wide"]}, method {sp["method"]})')
+        elif miss_std:
             raise StageError('no trace', f'no spec1d objects for standard frame(s) {miss_std}')
 
         # 6. sensfunc
         if args.sens:
             stage('sensfunc')
             sens_dir.mkdir(parents=True, exist_ok=True)
-            stds = [o['spec1d'] for o in manifest['objects'] if 'standard' in o['frametype']]
+            stds = [o['spec1d'] for o in manifest['objects'] if 'standard' in o['frametype']
+                    and o.get('specphot_use', True)]
             for spec1d in sorted(set(stds)):
                 out = sens_dir / f'sens_{Path(spec1d).stem.replace("spec1d_", "")}.fits'
                 rc = run(['pypeit_sensfunc', redux / 'Science' / spec1d, '-s', args.sens,

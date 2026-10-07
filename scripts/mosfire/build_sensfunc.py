@@ -71,6 +71,13 @@ def main(date, standard=None, sens=None, frames_only=False, std_class=None, jmag
     jmag = jmag if jmag is not None else (float(os.environ['JMAG_2MASS']) if os.environ.get('JMAG_2MASS') else None)
 
     objs = [o for o in manifest['objects'] if 'standard' in o['frametype']]
+    if manifest.get('specphot'):
+        # long2pos_specphot (reduce_standard.py): only frames whose brightest object (the star)
+        # is in a 4.0" bar measure the throughput; that object only
+        use = [o for o in objs if o.get('specphot_use')]
+        print(f'long2pos_specphot: {len(use)} of {len({o["frame"] for o in objs})} standard frame(s) '
+              f'with the star in a 4.0" bar: {[o["frame"] for o in use]}')
+        objs = use
     if not objs:
         print(f'No standard objects in {night / "run_manifest.json"}')
         return 1
@@ -99,11 +106,27 @@ def main(date, standard=None, sens=None, frames_only=False, std_class=None, jmag
         run(['pypeit_sensfunc', night / 'redux' / 'Science' / o['spec1d'], '-s', sens, '-o', out],
             out.with_suffix('.log'), outdir)
 
-    if frames_only or len(objs) < 2:
+    if frames_only:
+        return 0
+    if len(objs) < 2:
+        import shutil
+        frameno = Path(objs[0]['frame']).stem.split('_')[-1]
+        shutil.copy(outdir / f'sens_{name}_{date}_{frameno}.fits', outdir / f'sens_{name}_{date}.fits')
+        print(f'One frame: sens_{name}_{date}.fits is its per-frame sensfunc')
         return 0
     if len(exptimes) != 1:
-        print(f'Not coadding: exposure times differ ({exptimes})')
-        return 1
+        # coadd only equal-length frames (the coadd keeps one frame's EXPTIME): the exposure time
+        # with the largest total integration (S15a pilot: 2014-06-01 has 11.6 s and 21.8 s frames)
+        tot = {e: sum(frames[o['frame']]['exptime'] == e for o in objs) * e for e in exptimes}
+        keep = max(tot, key=tot.get)
+        objs = [o for o in objs if frames[o['frame']]['exptime'] == keep]
+        print(f'Exposure times differ ({exptimes}): coadding the {len(objs)} frame(s) of {keep} s')
+        if len(objs) < 2:
+            import shutil
+            frameno = Path(objs[0]['frame']).stem.split('_')[-1]
+            shutil.copy(outdir / f'sens_{name}_{date}_{frameno}.fits', outdir / f'sens_{name}_{date}.fits')
+            print(f'One frame: sens_{name}_{date}.fits is its per-frame sensfunc')
+            return 0
 
     # 2. coadd in counts, then the night's sensfunc
     coadd = outdir / f'spec1d_coadd_{name}_{date}.fits'

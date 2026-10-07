@@ -103,6 +103,10 @@ def resolve_reference(ref):
     return paths.data_root() / prefix
 
 
+# wavelength RMS limit for the 4.0" bars of long2pos_specphot (see the wave_rms gate)
+SPECPHOT_RMS_PIX = 0.5
+
+
 def spec1d_agree(night, rdir, m):
     """Median OPT_COUNTS ratio per frame, this run / reference."""
     from pypeit.specobjs import SpecObjs
@@ -150,13 +154,32 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
     std = [f for f in onsky if 'standard' in f['frametype']]
     std_pos = sorted({str(f['dithpos']).strip() for f in std if f['filename'] in with_obj})
     n_sci = sum('science' in f['frametype'] and f['filename'] in with_obj for f in onsky)
-    ok = not missing and {'A', 'B'} <= set(std_pos)
-    results.append(gate('spec1d', ok, f'{len(with_obj)}/{len(onsky)} on-sky frames with objects '
-                        f'({n_sci} science, {len(std)} standard at nod positions {std_pos})'
-                        + (f'; missing {missing}' if missing else '')))
+    sp = m.get('specphot')
+    if sp:
+        # long2pos_specphot: the sensfunc needs the star in a 4.0" bar; frames with the star in a
+        # 0.7" bar are not used, so a missing object there is reported only
+        wide = sp.get('standard_frames_wide') or []
+        ok = bool(wide)
+        results.append(gate('spec1d', ok, f'long2pos_specphot: {len(wide)} standard frame(s) with the star in '
+                            f'a 4.0" bar {wide}; {len(with_obj)}/{len(onsky)} on-sky frames with objects'
+                            + (f' (missing {missing}, not used)' if missing else '')))
+    else:
+        ok = not missing and {'A', 'B'} <= set(std_pos)
+        results.append(gate('spec1d', ok, f'{len(with_obj)}/{len(onsky)} on-sky frames with objects '
+                            f'({n_sci} science, {len(std)} standard at nod positions {std_pos})'
+                            + (f'; missing {missing}' if missing else '')))
 
     # 2. wavelength RMS
     wq = m.get('wave_qa') or []
+    if sp:
+        # long2pos_specphot: only the 4.0" bars that hold the standard in the sensfunc frames count.
+        # Their arc lines are flat-topped (a 4" slit), so 0.11 x FWHM is not a meaningful centroid
+        # limit; SPECPHOT_RMS_PIX bounds them instead (0.5 pix = 0.8 A, negligible for a throughput
+        # curve; 2017-06-15: 0.13 and 0.27 pix)
+        used = {o['slit'] for o in m['objects'] if o.get('specphot_use')}
+        wq = [dict(w, rms_thresh_pix=SPECPHOT_RMS_PIX,
+                   **{'pass': w['rms_pix'] is not None and w['rms_pix'] < SPECPHOT_RMS_PIX})
+              for w in wq if w['slit'] in used]
     ok = bool(wq) and all(w['pass'] for w in wq)
     results.append(gate('wave_rms', ok, '; '.join(
         f"slit {w['slit']} RMS {w['rms_pix']:.3f} < {w['rms_thresh_pix']:.3f} pix" if w['rms_pix'] is not None
