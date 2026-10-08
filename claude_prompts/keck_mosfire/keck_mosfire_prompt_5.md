@@ -706,3 +706,106 @@ stays; CPU could drop to 2; parallelism 4 suits batch 1.
   rebuilds the era curves; 103 other tests pass.
 - The in-pod harvest gets the flag with the next image (0.2.4), which batch
   1 (S15b) should use.
+
+### 2026-10-08 (Prompt #2 / S15b, batch 1: 19/19 nights success after one sweep; two more fixes; backup complete)
+
+**Batch 1** (`nautilus/manifests/nights_batch1.csv`, 19 reducible wide-slit
+nights; Job `keck-etcs-nights`, image 0.2.4, parallelism 4, launched by the
+user 2026-10-07):
+
+- 4 new success (20141005, 20160417, 20241229, 20250125); 5 skipped (the
+  pilot nights, already success); 9 `no trace` and 1 `reduce failed`, all
+  long2pos_specphot.
+- **`no trace` (9 nights):** on these nights the flats show no gap between
+  the three bars of a position, so `use_maskdesign = False` traced 3 slits
+  (about 127 pixels each) for 7 bars and the 4.0" bars could not be told
+  apart. Raising the edge sensitivity does not help (`edge_thresh` 50 to 5
+  on 2015-09-04: still 3 slits).
+  Fix (`reduce_standard.py`, `split_merged_bars`): a pre-pass runs
+  `pypeit_trace_edges`. If there are fewer slits than mask bars, each slit
+  holding k bars (width plus one bar gap over the CSU pitch, 44 px) is
+  replaced through PypeIt's `rm_slits`/`add_slits` by k equal bars; the
+  record goes in `run_manifest.json` (`specphot_bar_split`). Tested locally
+  on 2015-09-04: 7 slits, 4" bars RMS 0.06/0.04 px, gates PASS.
+- **`reduce failed` (20150428):** the KOA target `HIP85871/7.25` became part
+  of PypeIt's output file name, and the `/` made it a missing directory.
+  **PypeIt fix (bc18a3b):** `outputfiles.construct_basename` replaces `/` and
+  `\` in the target name by `-`; a test is in `test_outputfiles.py`.
+- Image **0.2.5**: digest
+  sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4,
+  keck-etcs 10a469f, PypeIt pin bc18a3b.
+- **Sweep:** `night_failures.py keck-etcs-nights` first also listed
+  20240721 and 20140601, from the pilot's stale `gate failed` rows under the
+  same Job name. Fixed: only each night's latest status row counts. The
+  sweep (`sweep_batch1.csv`, 10 nights, Job `keck-etcs-nights-sweep1`, image
+  0.2.5): **10/10 success, gates PASS**; every night needed the bar split.
+
+**Verify:**
+
+- Every batch-1 night has exactly one latest status: **19 success** (14 new,
+  5 pilot). No data failures remain.
+- `verify_nights.py` on the 14 new nights: ALL OK (products match their
+  sha256; images 0.2.4/0.2.5 with their pins).
+- No pod near `activeDeadlineSeconds` (21600 s): the longest night is
+  4819 s (20250723).
+- Peak memory 6.1-13.6 GiB (13.55 GiB on 20211027, 85 percent of the
+  16 Gi limit; watch it).
+- Backup (`backup_products.py --run`): 1010 files copied; `rclone check
+  --one-way`: 1070 match, 0 missing, 0 differ, 0 errors, COMPLETE (177.7 MB;
+  summary `runs/backup/backup_20261008T141541Z_run.json`).
+- `git status`: besides the manifests (`sweep_batch1.csv`) it shows code
+  fixes (`reduce_standard.py`, `night_failures.py`), the merged tables and
+  this doc. The fixes are part of this batch.
+
+**Status table** (`status_table.py`; image, PypeIt sha, wall-clock s, peak GiB):
+
+| Night | Image | PypeIt | Wall | Peak |
+|---|---|---|---|---|
+| 20140601 | 0.2.3 | fb6fb62 | 2617 | 11.74 |
+| 20141005 | 0.2.4 | fb6fb62 | 636 | 9.41 |
+| 20141123 | 0.2.5 | bc18a3b | 332 | 6.76 |
+| 20150428 | 0.2.5 | bc18a3b | 761 | 6.64 |
+| 20150904 | 0.2.5 | bc18a3b | 416 | 6.75 |
+| 20151022 | 0.2.5 | bc18a3b | 1399 | 6.76 |
+| 20160417 | 0.2.4 | fb6fb62 | 1182 | 7.79 |
+| 20170615 | 0.2.3 | fb6fb62 | 587 | 7.74 |
+| 20171105 | 0.2.5 | bc18a3b | 321 | 7.71 |
+| 20171106 | 0.2.5 | bc18a3b | 607 | 7.78 |
+| 20201126 | 0.2.5 | bc18a3b | 403 | 7.69 |
+| 20210928 | 0.2.5 | bc18a3b | 680 | 7.87 |
+| 20210930 | 0.2.5 | bc18a3b | 402 | 7.68 |
+| 20211027 | 0.2.5 | bc18a3b | 464 | 13.55 |
+| 20240721 | 0.2.3 | fb6fb62 | 330 | 7.63 |
+| 20241229 | 0.2.4 | fb6fb62 | 1052 | 6.06 |
+| 20241230 | 0.2.3 | fb6fb62 | 1702 | 8.68 |
+| 20250125 | 0.2.4 | fb6fb62 | 2212 | 8.81 |
+| 20250723 | 0.2.2 | fb47905 | 4819 | 11.22 |
+
+**Science notes** (from the merged `standards.ecsv`, 20 rows; for S16):
+
+- **The A0V model works.** The 9 unsaturated A0V nights in J give zp_1250
+  19.77-19.83 mag, against 19.76/19.77 (Feige110) and 19.90 (GD153) for the
+  WDs in J. So the S15a A0V/WD check is met once saturated nights are
+  excluded.
+- `excluded_nonlinear` (harvest flag, 26k ADU) marks 4 nights: 20150428,
+  20160417, 20170615, 20210928 (zp 19.28-19.50, except 20150428 at 19.82).
+- **Not flagged but low:** 55 Dra (20141005, J = 6.2, 1.45 s frames) at
+  19.52. Possibly nonlinearity below 26k ADU, or the timing of the minimum
+  exposure; to look at in S16.
+- **J against J2 is a filter effect:** GD153 on consecutive nights gives
+  median throughput 0.224 in J (2024-12-29) and 0.176 in J2 (2024-12-30),
+  same star and slit. The J2 filter curve divided out at harvest (or J2's
+  real throughput) is the place to look; the curves' median transmissions
+  (0.93 against 0.86) explain only 8 of the 27 percent.
+- Most J-filter rows carry `pwv_extrapolated`: the PWV fit runs to the edge
+  of the grid for these short-exposure standards.
+
+**What I learned about the repository:**
+
+- Reusing a Job name keeps earlier status rows under
+  `runs/<JOB_NAME>/status/`. Every consumer must take each night's latest
+  row (now `night_failures.py`; `status_table.py` reads the manifests and
+  was already right).
+- The long2pos_specphot bar gaps are visible in the flats on some nights
+  (2014-06-01, 2017, 2024) and not on others (2014-11 to 2021). The traced
+  slit count, not the date, decides whether the split is needed.

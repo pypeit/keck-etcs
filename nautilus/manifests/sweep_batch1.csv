@@ -1,0 +1,11 @@
+night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,std_ra,std_dec,filter
+20150904,mosfire,mosfire/20150904,HD18571,long2pos_specphot,0,A0V simbad A0V; J; 7 frames; flats 11; lamp arcs 2; prog C227M Steidel; era 2012-04..2016-09,A0V,8.504,44.819832,1.244576,J
+20151022,mosfire,mosfire/20151022,HD54601,long2pos_specphot,0,A0V simbad A0V; J; 7 frames; flats 11; lamp arcs 2; prog C227M Steidel; era 2012-04..2016-09,A0V,8.457,107.234845,-12.319239,J
+20141123,mosfire,mosfire/20141123,HD95126,long2pos_specphot (align),0,A0V simbad A0V; J; 7 frames; flats 11; lamp arcs 2; prog C230M Steidel; era 2012-04..2016-09,A0V,8.874,164.917531,45.788580,J
+20150428,mosfire,mosfire/20150428,HD159008,long2pos_specphot (align),0,A0V simbad A0V; J; 7 frames; flats 11; lamp arcs 2; prog C224M Steidel; era 2012-04..2016-09,A0V,6.822,263.211291,-13.482099,J
+20171105,mosfire,mosfire/20171105,HD74721,long2pos_specphot,0,A0V simbad A0V; J; 6 frames; flats 13; lamp arcs 6; prog C432 Kirby; era 2017-02..2025-02,A0V,8.521,131.496923,13.263498,J
+20171106,mosfire,mosfire/20171106,HD74721,long2pos_specphot,0,A0V simbad A0V; J; 12 frames; flats 13; lamp arcs 6; prog C432 Kirby; era 2017-02..2025-02,A0V,8.521,131.496923,13.263498,J
+20201126,mosfire,mosfire/20201126,HD65158,long2pos_specphot,0,A0V simbad A0V; J; 6 frames; flats 13; lamp arcs 6; prog C263 Steidel; era 2017-02..2025-02,A0V,7.093,119.357749,-0.635876,J
+20210928,mosfire,mosfire/20210928,HD21379,long2pos_specphot,0,A0V simbad A0Vs; J; 7 frames; flats 13; lamp arcs 6; prog C257 Steidel; era 2017-02..2025-02,A0V,6.282,51.827816,12.735283,J
+20210930,mosfire,mosfire/20210930,HD21379,long2pos_specphot,0,A0V simbad A0Vs; J; 6 frames; flats 13; lamp arcs 6; prog C257 Steidel; era 2017-02..2025-02,A0V,6.282,51.827816,12.735283,J
+20211027,mosfire,mosfire/20211027,HD210501,long2pos_specphot,0,A0V simbad A0V; J; 6 frames; flats 26; lamp arcs 6; prog N118 Strom; era 2017-02..2025-02,A0V,7.615,332.615503,16.708125,J

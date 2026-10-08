@@ -70,8 +70,13 @@ def main(job, out=None, no_pull=False):
 
     counts = Counter(str(s) for s in tbl['status'])
     print(f'job {job}: {len(tbl)} rows; ' + ', '.join(f'{k} {v}' for k, v in sorted(counts.items())))
+    # one row per night, its latest (S15b, 2026-10-08): a job name reused for a later run keeps the
+    # earlier run's status rows, and a night that failed then and succeeded since must not be retried
+    latest = {}
+    for r in sorted(tbl, key=lambda r: str(r['time'])):
+        latest[str(r['night'])] = r
     retry, dead = [], []
-    for r in tbl:
+    for r in latest.values():
         if r['status'] in ('success', 'skipped'):
             continue
         if r['status'] in DATA_REASONS and history[str(r['night'])] >= 2:
