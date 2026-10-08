@@ -291,6 +291,7 @@ Part 6 step S18 needs S16.
 
    *Default:* (a). The curve the ETC ships stays the one validated in S10,
    and the failing test documents the pending rebuild.
+   >A. Use your default
 
 ### S15b (2026-10-05)
 
