@@ -10,10 +10,13 @@ For one instrument era, on the common 1 A grid of the harvest
   cases only the filter's half-power band is kept, because outside it the
   division amplifies any mismatch between the filter curve and the
   instrument's real cut-on and cut-off;
-- each night's band median (the median of its filter-free curve) is
-  compared with the era median of band medians; nights more than 3 MAD away
-  are excluded whole (D22). This needs at least 3 nights, since the MAD of
-  fewer is not meaningful;
+- each night's band median is compared with the era median of band
+  medians; nights more than 3 MAD away are excluded whole (D22). This needs
+  at least 3 nights, since the MAD of fewer is not meaningful. The band
+  median is taken over :data:`COMMON_WINDOW` (inside both the J and the J2
+  half-power bands), so that nights through different filters are compared
+  over the same wavelengths (plan S16); a curve without samples there uses
+  its whole band;
 - per pixel: the median of the remaining curves (``thru_median``), their
   median absolute deviation (``thru_mad``, NaN with one curve) and the count
   (``n_std``);
@@ -27,6 +30,8 @@ No PypeIt import; the inputs are the committed ECSV tables.
 import numpy as np
 from astropy.table import Table
 
+# inside both the J and the J2 bands and redward of the J cut-on and A0V systematics (keck_etcs.calib.trend)
+COMMON_WINDOW = (11900.0, 12450.0)
 PROVENANCE = ('image', 'image_digest', 'pypeit_git_sha', 'keck_etcs_git_sha', 'pypeit_version')
 MAD_CLIP = 3.0
 MIN_FOR_CLIP = 3
@@ -82,8 +87,10 @@ def combine_era(rows, curves, era, filters):
     for r in sel:
         fw, ft, hp = filters[str(r['filter'])]
         w, t, how = filter_free(curves[str(r['thru_curve_file'])], fw, ft, hp)
+        common = (w >= COMMON_WINDOW[0]) & (w <= COMMON_WINDOW[1]) & np.isfinite(t)
+        use = common if common.any() else np.isfinite(t)
         per_row.append({'row': r, 'wave': w, 'thru': t, 'how': how,
-                        'band_median': float(np.nanmedian(t)) if np.any(np.isfinite(t)) else np.nan})
+                        'band_median': float(np.median(t[use])) if use.any() else np.nan})
     per_row = [p for p in per_row if np.isfinite(p['band_median'])]
     info = {'excluded': [], 'used': []}
     if not per_row:

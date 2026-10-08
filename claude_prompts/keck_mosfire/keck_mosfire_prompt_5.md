@@ -314,6 +314,72 @@ Part 6 step S18 needs S16.
 
    *Default:* point me next at `koa_search_prompts.md` prompt 1.
 
+### S16 (2026-10-08)
+
+1. **Which part of each standard's curve enters the era curves?** S16
+   found two systematics blueward of about 11900 A
+   (`scripts/mosfire/compare_filter_pair.py` and the per-row values in the
+   log):
+   - **The J filter's cut-on.** The same white dwarf through J is below
+     its J2 curve by 10 percent at 11650 A, 3 percent at 11800 A and 0 at
+     12000 A, so the tabulated J transmission on its edge (11530-11800 A)
+     is too high. A slightly shifted cold-filter edge would do this.
+   - **A depression of every A0V curve blueward of about 11900 A:** 0.10-0.13
+     at 11600 A, against 0.14-0.17 for white dwarfs in the same filter and
+     0.18-0.19 in J2. They agree at 12000 A. Suspects: the Vega model, or
+     the telluric fit in the 1.13-1.16 um water band (all A0V rows are
+     `pwv_extrapolated`).
+
+   With the S10 rule (each row's half-power band), 8 of the 9 rows of
+   2017-2025 are J and mostly A0V, and the curve at 11600 A falls to 0.138,
+   against 0.186 shipped now and 0.187 from the independent J2-only 2025
+   era. The options:
+   - (a) keep the S10 rule (half-power band for every row);
+   - (b) J rows only where the J transmission is >= 0.9 of its peak (from
+     about 11620 A); J2 rows keep the half-power band; A0V rows only
+     redward of 11900 A. 2017-2025 then gives 0.186 at 11600 A and 0.204
+     at 11700 A, against 0.205 for the 2025 J2-only era;
+   - (c) as (b), and also the J2 rows only where T >= 0.9 of peak. This
+     loses 11170-11550 A, which the J2 band of the ETC needs.
+
+   *Default:* (b), with the cuts in `combine.py` as constants, the reason
+   in its docstring, and both systematics listed in `CHANGES.md` and design
+   4.6. The 3-MAD exclusion already compares nights over 11900-12450 A
+   (done), which then excludes 55 Dra (2014-10-05) and HD65158
+   (2020-11-26).
+>A. Ok, use (b)
+
+2. **A remaining J/J2 offset of about 5 percent in 11900-12450 A.**
+   - In 2017-2025 the J2 nights' filter-free throughput is 0.262-0.285,
+     the J nights' 0.247-0.272 (GD153: 0.248 in J, 0.262 in J2 the next
+     night). The filter curves agree with the measured J2/J ratio to
+     3-9 percent.
+   - The era curves take the pixel-wise median of both, so the offset adds
+     about 2-3 percent of scatter, not a bias.
+
+   *Default:* accept it for this release and list it in `CHANGES.md` as a
+   known systematic. Measuring the cold filter curves (or fitting an edge
+   shift to J/J2 pairs of the same star) is a follow-up.
+   >A. Use your default
+
+3. **Proposals from the monitor trends (design 4.6; not applied).**
+   - **D25 (LSF):** the line FWHM at 12500 A is 3.56-3.61 pix in a 1"
+     slit (4 nights) and 2.63 pix in 0.7" (1 night). The current
+     `max(slit / 0.277, 2.2)` is +0.5 percent at 1" and -3.8 percent at
+     0.7". Proposed: `FWHM = sqrt((slit / 0.292)^2 + 1.08^2)` pix, which
+     fits both (only two slit widths so far).
+   - **D14 (`sky_scale`):** OH lines over the Gemini model, science-slit
+     frames, per night: 0.91, 0.77, 0.86, 0.43 (median 0.82; OH varies
+     from night to night by 2x). The continuum between lines is not
+     monitored (S11: x1.14-1.33). Proposed: keep `SKY_SCALE_DEFAULT = 1.0`
+     until lines and continuum can have separate scales; document 0.8
+     (0.4-0.9) as the typical OH-line level.
+
+   *Default:* apply the D25 refit with the release (it changes the ETC's
+   LSF by less than 4 percent at >= 0.7", and the regression fixtures are
+   regenerated anyway); leave D14 as is.
+>A. Use your default
+
 ## Logging
 
 The "Logs" section will record Claude's work. Please use the following
@@ -879,3 +945,64 @@ plus 2022-04-09):
 - 55 Dra at zp 19.52, unflagged.
 - `pwv_extrapolated` on most short J exposures.
 - The `*55Dra` file names (the KOA target name kept its `*`).
+
+### 2026-10-08 (Prompt #4 / S16, part 1: trend analysis and monitor trends; the release waits for Q&A S16-1..3)
+
+Done so far (nothing of the release is written yet: no era files, no
+`calib_version` bump, no `CHANGES.md`, no fixtures, no release backup):
+
+**The "J against J2" offset was a summary-column artefact.**
+
+- `harvest.median_in` defaults to `thru_raw`, so a row's
+  `thru_median_1117_1260` includes the filter, over a window that crosses
+  both filters' edges. Likewise `zp_1250` sits on J2's red cut-off (half
+  power 12463 A).
+- The filter-divided curves agree:
+  - `scripts/mosfire/compare_filter_pair.py` (new) on GD153 in J
+    (2024-12-29) and J2 (2024-12-30): measured `thru_raw` J2/J 0.944
+    against 0.915 from the filter curves over 11536-12452 A (3 percent);
+    with the other J2 nights 5-9 percent.
+- Two real systematics blueward of about 11900 A, and a 5 percent J/J2
+  offset: Q&A S16-1 and S16-2.
+
+**New code:**
+
+- `keck_etcs/calib/trend.py` (tests `test_trend.py`):
+  - `curve_common_median` gives `thru_common`, the filter-free median over
+    `COMMON_WINDOW` = 11900-12450 A;
+  - `era_stats` (median, MAD, slope %/yr with error);
+  - `correlation` (Pearson; residuals after era medians);
+  - `monitor_flags` (per-era 3-MAD night flags `trend_3mad`; rows flagged
+    `nonlinear`/`monitor_failed` skipped; dome-flat series split by lamp
+    `FPOWER`).
+- `keck_etcs/calib/combine.py`: the 3-MAD exclusion compares nights over
+  `COMMON_WINDOW`, not over each row's own band.
+- `scripts/mosfire/plot_throughput_trend.py` writes
+  `docs/figures/mosfire_throughput_trend.png`.
+- `scripts/mosfire/plot_monitor_trends.py` writes the flags into
+  `calib_monitor.ecsv` (169 rows `trend_3mad`, 19 group/era sets) and the
+  figures `docs/figures/mosfire_monitor_{fwhm,flat_rate,lsf,sky_scale}.png`.
+
+**Throughput trend** (16 usable rows):
+
+| Quantity | 2012-04..2016-09 | 2017-02..2025-02 | 2025-04.. |
+|---|---|---|---|
+| `thru_common` median (MAD) | 0.253 (4.3 %) | 0.258 (3.3 %) | 0.270 (1 night) |
+| `thru_common` slope | +5 +- 10 %/yr | +0.2 +- 0.6 %/yr | - |
+| `zp_1250` in J | 19.79 mag | 19.81 mag (MAD 0.3 %, +0.4 +- 0.6 %/yr) | - |
+
+- Residual correlations of `thru_common` (era medians removed): airmass
+  0.6 sigma, PWV 0.9 sigma, slit width 1.1 sigma.
+- `zp_1250` against airmass in J: 2.4 sigma, but driven by 55 Dra
+  (airmass 1.44, 0.3 mag low), which the 3-MAD rule excludes once the
+  combine runs. To recheck then (release check).
+
+**Monitor trends:**
+
+- FWHM: 20 nights, median 0.74" (0.39-1.35").
+- Dome-flat rate at 12000 and 12500 A against `zp_1250`: only the J2
+  nights have unsaturated flats (4 nights, FPOWER 4/9/9/13.5): r = -0.78,
+  1.2 sigma. That is not meaningful while the lamp power changes.
+- The 19 flagged group/era sets are listed by the script; I have not yet
+  checked each one, so they are flags to look at, not findings.
+- D25 and D14 proposals: Q&A S16-3.

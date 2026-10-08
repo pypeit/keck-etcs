@@ -32,7 +32,7 @@ files:
   mosfire/monitor/calib_monitor.ecsv:
     calib_version: mosfire-J-2026.10-dev
     created: '2026-10-08T14:44:42Z'
-    sha256: 85cc88ce1e3246d6b07807a48ecb36b0c11583fa9de5eca565de7b1e23bff239
+    sha256: ca0fd0a8114b1cf3094b77b81d3d942069c5b2bf3fa8fb6cbfe9279edbe96b04
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 2456 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
   mosfire/filters/mosfire_Y.ecsv:
