@@ -32,7 +32,7 @@
 # - {description: MOSFIRE calibration monitor (design 4.9); never read by compute()}
 # - {calib_version: mosfire-J-2026.10-dev}
 # - {script: scripts/mosfire/harvest_sens.py --merge}
-# - {merged: '2026-10-08T02:33:27Z'}
+# - {merged: '2026-10-08T03:50:06Z'}
 # schema: astropy-2.0
 night mjd instrument metric source frame target decker slit_width filter wave_A line_id value unit err n airmass pwv_fit cards flag image image_digest pypeit_git_sha keck_etcs_git_sha job_name s3_prefix keck_etcs_version
 20140601 "" keck_mosfire flat_rate dome group:A_all_DET01 "DOME FLATS" long2pos_specphot "" J 11500.0 "" 783.9785921141448 "electron / (s pix)" "" 10854 "" "" "{""FLAMP1"": null, ""FLAMP2"": null, ""FPOWER"": null, ""FLATSPEC"": 1, ""DOMEPOSN"": 140.50558, ""TRUITIME"": 10.18353, ""SAMPMODE"": 2, ""NUMREADS"": 1, ""n_on"": 22, ""n_off"": 0, ""peak_adu_p9999"": 36771.5}" nonlinear gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3 sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf fb6fb62c46383b09c5c13f1edcad97d3367fa0cd fdfb1d7 keck-etcs-nights-rerun mosfire/20140601 0.2.3

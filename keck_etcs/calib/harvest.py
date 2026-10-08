@@ -33,7 +33,13 @@ Conventions:
 - ``seeing_fwhm_pix``: the median PypeIt spatial FWHM of the standard's
   extracted objects.
 - ``flag``: comma-separated; ``ok`` if empty. ``nofilter`` when no filter
-  curve was divided out (``thru`` is then masked).
+  curve was divided out (``thru`` is then masked). ``excluded_nonlinear``
+  when the standard's raw counts (99.9th percentile in a 15-pixel band
+  around its trace, in the frames the sensfunc used) exceed the detector's
+  1 percent non-linearity level (``NONLINEAR_ADU``, 26k ADU): the zero
+  point is then too faint, and ``combine.py`` skips rows flagged
+  ``excluded`` (plan S15a: HD133772 on 2017-06-15 at 40k ADU, 0.35 mag
+  fainter than Feige110 in the same era).
 """
 import datetime
 import hashlib
@@ -209,6 +215,32 @@ def read_sensfunc(path):
     return out
 
 
+def standard_peak_adu(manifest, files, raw_dir):
+    """Largest 99.9th-percentile raw count of the standard among ``files`` (None without raw frames).
+
+    The objects are the positive standard objects of ``files`` in
+    ``run_manifest.json`` (on ``long2pos_specphot`` nights only those with
+    ``specphot_use``, the ones the sensfunc used); for each, a 15-pixel band
+    of raw rows around ``spat_pixpos`` over the central 80 percent of the
+    spectral axis (MOSFIRE raw frames: rows are spatial).
+    """
+    objs = [o for o in manifest.get('objects', []) if o['frame'] in files and o.get('sign') == 'positive']
+    if manifest.get('specphot'):
+        objs = [o for o in objs if o.get('specphot_use')]
+    peaks = []
+    for o in objs:
+        f = Path(raw_dir) / o['frame']
+        if not f.exists():
+            continue
+        d = fits.getdata(f)
+        n = d.shape[1]
+        s = int(round(o['spat_pixpos']))
+        band = np.asarray(d[max(0, s - 7):s + 8, int(0.1 * n):int(0.9 * n)], dtype=float)
+        if band.size:
+            peaks.append(float(np.percentile(band, 99.9)))
+    return max(peaks) if peaks else None
+
+
 def standard_frames(manifest, standard=None):
     """Frame-table rows of the standard (``frametype`` contains ``standard``)."""
     rows = [f for f in manifest['frames'] if 'standard' in f['frametype']]
@@ -318,6 +350,10 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
             flags.append('pwv_extrapolated')
     fwhm = [o['fwhm_pix'] for o in m.get('objects', [])
             if o['frame'] in files and o.get('fwhm_pix') is not None]
+    from keck_etcs.instruments.mosfire import NONLINEAR_ADU
+    peak = standard_peak_adu(m, files, raw_dir or night_dir / 'raw')
+    if peak is not None and peak > NONLINEAR_ADU:
+        flags.append('excluded_nonlinear')
     width, length = slit_from_decker(frames[0]['decker']) if frames else (None, None)
     uniq = lambda k: sorted({raw[f][k] for f in files})
     one = lambda vals: vals[0] if len(vals) == 1 else None

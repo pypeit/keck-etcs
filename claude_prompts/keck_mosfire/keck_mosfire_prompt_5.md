@@ -685,3 +685,24 @@ stays; CPU could drop to 2; parallelism 4 suits batch 1.
 - `conda run` does not forward stdin: edit scripts written to a heredoc
   and piped to `conda run python -` never ran (my error early in this
   session; caught when `git status` showed a clean tree).
+
+### 2026-10-07 (S15a follow-up: Q&A S15a-4 answered (a), nonlinear standards flagged at harvest)
+
+- `keck_etcs/calib/harvest.py`: new `standard_peak_adu(manifest, files,
+  raw_dir)`, the largest 99.9th-percentile raw count in a 15-pixel band
+  around the standard's trace, over the frames the sensfunc used
+  (`specphot_use` on long2pos_specphot nights). `harvest()` adds
+  `excluded_nonlinear` to the row's `flag` when it exceeds
+  `NONLINEAR_ADU` (26k ADU); `combine.py` already skips `excluded` rows.
+  A unit test is in `keck_etcs/tests/test_harvest.py`.
+- The five pilot nights were re-harvested locally (rows keep the pod's
+  image provenance, from `run_manifest.json`) and re-merged. Only
+  HD133772 2017-06-15 is flagged
+  (`pwv_extrapolated,excluded_nonlinear`); no zero point changed.
+- Lesson: a local harvest needs `raw/manifest.ecsv` (KOA IDs, read mode)
+  or every standard frame's header in `raw/`; pull the manifest first.
+- As agreed, `mosfire_thru_2017-2025.ecsv` is not rebuilt, and
+  `test_shipped_era_file_provenance_matches_its_rows` fails until S16
+  rebuilds the era curves; 103 other tests pass.
+- The in-pod harvest gets the flag with the next image (0.2.4), which batch
+  1 (S15b) should use.

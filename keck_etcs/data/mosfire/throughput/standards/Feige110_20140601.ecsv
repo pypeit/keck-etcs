@@ -33,7 +33,7 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_Feige110_20140601.fits}
 # - {sens_sha256: c996e520ad7b3c41b3013830b27e4bfdbb9d2e8769b909ac1017ae62f9ecd4ff}
-# - {run_manifest_sha256: a95b437ea3f9f7f83fc1f276dabf875e0097252fded4d14bbec19c2e9306c76b}
+# - {run_manifest_sha256: 19d67c00fe799a3ed9c5b2af9362e690d5f02f7e8067656cf73ac052d7d7033f}
 # - telluric: {chi2: 16103.774053594163, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1944.706202924202, success: true,
 #     teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
@@ -41,7 +41,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T02:01:57Z'}
+# - {created: '2026-10-08T03:49:54Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
