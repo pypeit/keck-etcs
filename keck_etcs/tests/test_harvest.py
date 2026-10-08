@@ -68,3 +68,17 @@ def test_standard_peak_adu(tmp_path):
     m = {'specphot': {'wide': [1]}, 'objects': [obj('a.fits', 1002.5, specphot_use=False),
                                                 obj('b.fits', 502.5, specphot_use=True)]}
     assert hv.standard_peak_adu(m, ['a.fits', 'b.fits'], tmp_path) == pytest.approx(9000.0)
+
+
+def test_slit_of_night_and_narrow_threshold():
+    frames = [{'decker': 'LONGSLIT-46x5'}]
+    assert hv.slit_of_night({}, frames) == (5.0, 46.0)
+    assert hv.slit_of_night({}, [{'decker': 'LONGSLIT-46x0.7'}])[0] < hv.WIDE_SLIT_ARCSEC
+    sp = {'specphot': {'bars': [{'spat_id': 945, 'bar': 25, 'width_arcsec': 4.0},
+                                {'spat_id': 902, 'bar': 26, 'width_arcsec': 0.7}]},
+          'objects': [{'slit': 945, 'specphot_use': True}, {'slit': 902, 'specphot_use': False}]}
+    assert hv.slit_of_night(sp, [{'decker': 'long2pos_specphot'}]) == (4.0, 1.0)
+    # bar table missing (arc-FWHM method): a used 4" bar is still a 4" bar
+    sp['specphot']['bars'] = None
+    assert hv.slit_of_night(sp, [{'decker': 'long2pos_specphot'}]) == (4.0, 1.0)
+    assert hv.slit_from_decker('long2pos_specphot') == (None, None)

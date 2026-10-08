@@ -21,7 +21,7 @@
 #     zp_1200: 19.639179313086817, zp_1250: 18.503590140212435, zp_1300: null}
 # - {pypeit_version: 2.0.2.dev1219+gfb4790520}
 # - {keck_etcs_version: 0.2.2}
-# - {harvest_keck_etcs_version: 0.2.3}
+# - {harvest_keck_etcs_version: 0.2.5}
 # - {image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2'}
 # - {image_digest: 'sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138'}
 # - {pypeit_git_sha: fb4790520e4ccd49d39d42ed8438a614f307030b}
@@ -40,7 +40,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T03:50:03Z'}
+# - {created: '2026-10-08T14:44:32Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

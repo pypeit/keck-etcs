@@ -4,7 +4,7 @@
 Usage:
     python scripts/nautilus/s3_sync.py ls   PREFIX
     python scripts/nautilus/s3_sync.py push PREFIX [--include GLOB ...] [--force] [--dry-run] [--jobs N]
-    python scripts/nautilus/s3_sync.py pull PREFIX [--include GLOB ...] [--dry-run] [--jobs N]
+    python scripts/nautilus/s3_sync.py pull PREFIX [--include GLOB ...] [--calibs] [--dry-run] [--jobs N]
 
 PREFIX is a bucket key prefix such as ``mosfire/20220409/raw``; the matching
 local directory is ``$KECK_ETCS_DATA/PREFIX`` (``keck_etcs.paths``), so the
@@ -217,7 +217,15 @@ def main(argv=None):
                         help='push/pull only keys (relative to PREFIX) matching these globs')
     parser.add_argument('--force', action='store_true',
                         help='push/pull: transfer even when the other side has a file of the same size')
+    parser.add_argument('--calibs', action='store_true',
+                        help="pull: also the night's redux/Calibrations/WaveCalib* files (not in the backup "
+                             "set; part 2's S13 measures line widths in them); adds to --include")
     args = parser.parse_args(argv)
+    if args.calibs:
+        if args.command != 'pull':
+            parser.error('--calibs is for pull')
+        if args.include:
+            args.include = list(args.include) + ['redux/Calibrations/WaveCalib*']
 
     prefix = args.prefix.strip('/')
     if not prefix or '..' in prefix.split('/'):

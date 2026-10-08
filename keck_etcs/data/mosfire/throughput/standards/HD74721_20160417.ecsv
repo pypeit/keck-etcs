@@ -17,12 +17,12 @@
 #     image_digest: 'sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b', job_name: keck-etcs-nights, keck_etcs_git_sha: 58d5652,
 #     keck_etcs_version: 0.2.4, koa_id: MF.20160417.20235.fits+MF.20160417.20268.fits+MF.20160417.20299.fits+MF.20160417.20399.fits+MF.20160417.20416.fits+MF.20160417.20433.fits+MF.20160417.20457.fits+MF.20160417.20475.fits+MF.20160417.20488.fits+MF.20160417.21181.fits+MF.20160417.21200.fits+MF.20160417.21218.fits+MF.20160417.21243.fits+MF.20160417.21261.fits+MF.20160417.21280.fits,
 #     mjd: 57495.239864611336, numreads: 1, pwv_fit: 4.387496178378221, pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd, pypeit_version: 2.0.2.dev1220+gfb6fb62c4,
-#     s3_prefix: mosfire/20160417, sampmode: 2, seeing_fwhm_pix: 2.6785979225218792, slit_length: null, slit_width: null, standard: HD74721,
+#     s3_prefix: mosfire/20160417, sampmode: 2, seeing_fwhm_pix: 2.6785979225218792, slit_length: 1.0, slit_width: 4.0, standard: HD74721,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=8.521 (V_eq 8.52682), thru_curve_file: standards/HD74721_20160417.ecsv, thru_median_1117_1250: 0.18388626160894597,
 #     thru_median_1117_1260: 0.18520472759509385, zp_1200: 19.473917558899945, zp_1250: 19.49860192594652, zp_1300: 19.59231517456324}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.4}
-# - {harvest_keck_etcs_version: 0.2.4}
+# - {harvest_keck_etcs_version: 0.2.5}
 # - {image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4'}
 # - {image_digest: 'sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b'}
 # - {pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd}
@@ -33,7 +33,7 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_HD74721_20160417.fits}
 # - {sens_sha256: 96c231cd6314031e38b2276933f191481849341338a5986fc46f4cf2140fc5e3}
-# - {run_manifest_sha256: c4f37fd83f2f3e2bc1e278af0e73bea3d2901370a7d496e11d8860c8f60926fd}
+# - {run_manifest_sha256: 8af57e3070976c7d7503c3c25756f4360480096bef32dea5658e742c448ead01}
 # - telluric: {chi2: 6957.5674979718315, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1957.1225389214615, success: true,
 #     teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
@@ -41,7 +41,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T04:32:03Z'}
+# - {created: '2026-10-08T14:43:13Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

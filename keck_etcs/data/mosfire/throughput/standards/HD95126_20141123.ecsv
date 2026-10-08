@@ -17,7 +17,7 @@
 #     image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4', job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f,
 #     keck_etcs_version: 0.2.5, koa_id: MF.20141123.57043.fits+MF.20141123.57122.fits+MF.20141123.57139.fits+MF.20141123.57157.fits+MF.20141123.57180.fits+MF.20141123.57197.fits+MF.20141123.57214.fits,
 #     mjd: 56984.661471937136, numreads: 1, pwv_fit: 5.492802716530591, pypeit_git_sha: bc18a3ba46d1d331da0875424c63999e578a4937, pypeit_version: 2.0.2.dev1221+gbc18a3ba4,
-#     s3_prefix: mosfire/20141123, sampmode: 2, seeing_fwhm_pix: 3.689452927770522, slit_length: null, slit_width: null, standard: HD95126,
+#     s3_prefix: mosfire/20141123, sampmode: 2, seeing_fwhm_pix: 3.689452927770522, slit_length: 1.0, slit_width: 4.0, standard: HD95126,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=8.874 (V_eq 8.87982), thru_curve_file: standards/HD95126_20141123.ecsv, thru_median_1117_1250: 0.2123613011587964,
 #     thru_median_1117_1260: 0.22351709443769224, zp_1200: 19.7245409156514, zp_1250: 19.787540006521883, zp_1300: 19.88155090630982}
 # - {pypeit_version: 2.0.2.dev1221+gbc18a3ba4}
@@ -33,7 +33,7 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_HD95126_20141123.fits}
 # - {sens_sha256: 4369d80f1f5b9df8ac985088380381a0cdbfbd0ab09053caeaa04a8a6ce984d5}
-# - {run_manifest_sha256: 8e5ad01bb0eee8659aa57428589d98b806eb1f4db40394914326626f8940637c}
+# - {run_manifest_sha256: 11d9561a89ce3ac870b5a51582e56751dc6756820010f634d9288e67363e1149}
 # - telluric: {chi2: 9765.789714199129, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1918.1282081675174, success: true,
 #     teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
@@ -41,7 +41,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T13:51:55Z'}
+# - {created: '2026-10-08T14:42:47Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

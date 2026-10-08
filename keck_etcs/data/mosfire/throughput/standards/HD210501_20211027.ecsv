@@ -17,7 +17,7 @@
 #     image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4', job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f,
 #     keck_etcs_version: 0.2.5, koa_id: MF.20211027.16923.fits+MF.20211027.16936.fits+MF.20211027.16949.fits+MF.20211027.16978.fits+MF.20211027.16991.fits+MF.20211027.17005.fits,
 #     mjd: 59514.196343758325, numreads: 1, pwv_fit: 10.000000000000002, pypeit_git_sha: bc18a3ba46d1d331da0875424c63999e578a4937, pypeit_version: 2.0.2.dev1221+gbc18a3ba4,
-#     s3_prefix: mosfire/20211027, sampmode: 2, seeing_fwhm_pix: 2.1830683770580523, slit_length: null, slit_width: null, standard: HD210501,
+#     s3_prefix: mosfire/20211027, sampmode: 2, seeing_fwhm_pix: 2.1830683770580523, slit_length: 1.0, slit_width: 4.0, standard: HD210501,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=7.615 (V_eq 7.62082), thru_curve_file: standards/HD210501_20211027.ecsv,
 #     thru_median_1117_1250: 0.21435602425347275, thru_median_1117_1260: 0.22561167800544252, zp_1200: 19.73808906956891, zp_1250: 19.805347050556396,
 #     zp_1300: 19.87791141388583}
@@ -34,7 +34,7 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_HD210501_20211027.fits}
 # - {sens_sha256: 0bb191215cc93bd69257f580dbfe3278e2a33b1d13cc6940296da5bd512016f0}
-# - {run_manifest_sha256: 76cedc69cebf28ff3cd15ca1c1cbe6ad0b2905ae87b8b51a7824de34bf320178}
+# - {run_manifest_sha256: 77cc724b2271f6f6bc722cec0e45c0d8726ffad5f85da43a85412ffd1083001e}
 # - telluric: {chi2: 9064.174307950067, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1910.3768627737334, success: true,
 #     teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
@@ -42,7 +42,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T14:12:51Z'}
+# - {created: '2026-10-08T14:43:55Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

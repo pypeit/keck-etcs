@@ -21,7 +21,7 @@
 #     zp_1200: 19.671278053264533, zp_1250: 19.89474411617545, zp_1300: 19.837370141917578}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.4}
-# - {harvest_keck_etcs_version: 0.2.4}
+# - {harvest_keck_etcs_version: 0.2.5}
 # - {image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4'}
 # - {image_digest: 'sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b'}
 # - {pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd}
@@ -32,14 +32,14 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_GD153_20241229.fits}
 # - {sens_sha256: d953a1b6230c801b24823b5684a6a61b1aeaaaecab808b99477a1a69cf5f4ca1}
-# - {run_manifest_sha256: b45ad8c76ab7effc92c928f2a6c9808f4ddf577795998cad18bb66c6514a2793}
+# - {run_manifest_sha256: f17b7932131004a4e78ee419e2f3a2a56e3942a0d73ea131b73caf064f378219}
 # - telluric: {chi2: 6359.961063615781, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1925.289088822977, success: true, teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
 # - pwv_detail: {at_search_edge: false, extrapolated: false, pwv_mm: 1.2592759804536295, rms_resid: 0.017239233294035705}
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T04:50:06Z'}
+# - {created: '2026-10-08T14:44:14Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

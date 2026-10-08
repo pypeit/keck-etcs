@@ -17,7 +17,7 @@
 #     image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4', job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f,
 #     keck_etcs_version: 0.2.5, koa_id: MF.20151022.56504.fits+MF.20151022.56564.fits+MF.20151022.56582.fits+MF.20151022.56600.fits+MF.20151022.56621.fits+MF.20151022.56637.fits+MF.20151022.56656.fits,
 #     mjd: 57317.655043417144, numreads: 1, pwv_fit: 7.598693322433003, pypeit_git_sha: bc18a3ba46d1d331da0875424c63999e578a4937, pypeit_version: 2.0.2.dev1221+gbc18a3ba4,
-#     s3_prefix: mosfire/20151022, sampmode: 2, seeing_fwhm_pix: 4.731810641222541, slit_length: null, slit_width: null, standard: HD54601,
+#     s3_prefix: mosfire/20151022, sampmode: 2, seeing_fwhm_pix: 4.731810641222541, slit_length: 1.0, slit_width: 4.0, standard: HD54601,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=8.457 (V_eq 8.46282), thru_curve_file: standards/HD54601_20151022.ecsv, thru_median_1117_1250: 0.21337577279844433,
 #     thru_median_1117_1260: 0.22429985298312935, zp_1200: 19.726304041157686, zp_1250: 19.795212225033843, zp_1300: 19.88198613750723}
 # - {pypeit_version: 2.0.2.dev1221+gbc18a3ba4}
@@ -33,14 +33,14 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_HD54601_20151022.fits}
 # - {sens_sha256: 2023d53d27a29dcc8d076a09901b63394fff91d888027076698b4976d878483d}
-# - {run_manifest_sha256: 54c56542462327e931c047005a7ad0c81ccf3819d2426f356a22887a1a631769}
+# - {run_manifest_sha256: f327bd76a73fd1d19419ac9846dd4903c199d3c3db4b8bc98198685d4d485416}
 # - telluric: {chi2: 9213.641817241194, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1927.819928856245, success: true, teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
 # - pwv_detail: {at_search_edge: false, extrapolated: true, pwv_mm: 7.598693322433003, rms_resid: 0.012578592778932349}
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T14:10:23Z'}
+# - {created: '2026-10-08T14:43:07Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

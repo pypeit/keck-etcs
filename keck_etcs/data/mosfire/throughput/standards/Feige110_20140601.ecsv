@@ -17,12 +17,12 @@
 #     image_digest: 'sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf', job_name: keck-etcs-nights-rerun, keck_etcs_git_sha: fdfb1d7,
 #     keck_etcs_version: 0.2.3, koa_id: MF.20140601.51138.fits+MF.20140601.51165.fits+MF.20140601.51191.fits+MF.20140601.51222.fits+MF.20140601.51248.fits+MF.20140601.51279.fits+MF.20140601.51449.fits+MF.20140601.51485.fits+MF.20140601.51521.fits+MF.20140601.51563.fits+MF.20140601.51599.fits+MF.20140601.51636.fits,
 #     mjd: 56809.59462233584, numreads: 1, pwv_fit: 10.000000000000002, pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd, pypeit_version: 2.0.2.dev1220+gfb6fb62c4,
-#     s3_prefix: mosfire/20140601, sampmode: 2, seeing_fwhm_pix: 4.294443706778765, slit_length: null, slit_width: null, standard: Feige110,
+#     s3_prefix: mosfire/20140601, sampmode: 2, seeing_fwhm_pix: 4.294443706778765, slit_length: 1.0, slit_width: 4.0, standard: Feige110,
 #     std_class: WD, std_model: fFeige110.dat, thru_curve_file: standards/Feige110_20140601.ecsv, thru_median_1117_1250: 0.24634745263997304,
 #     thru_median_1117_1260: 0.24745062944108995, zp_1200: 19.824606206715178, zp_1250: 19.76136801168052, zp_1300: 19.917370792045084}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.3}
-# - {harvest_keck_etcs_version: 0.2.3}
+# - {harvest_keck_etcs_version: 0.2.5}
 # - {image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3'}
 # - {image_digest: 'sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf'}
 # - {pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd}
@@ -41,7 +41,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T03:49:54Z'}
+# - {created: '2026-10-08T14:42:30Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

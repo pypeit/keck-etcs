@@ -17,13 +17,13 @@
 #     image_digest: 'sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf', job_name: keck-etcs-nights-rerun, keck_etcs_git_sha: fdfb1d7,
 #     keck_etcs_version: 0.2.3, koa_id: MF.20170615.25243.fits+MF.20170615.25262.fits+MF.20170615.25281.fits+MF.20170615.25311.fits+MF.20170615.25328.fits+MF.20170615.25346.fits,
 #     mjd: 57919.292776655, numreads: 1, pwv_fit: 10.000000000000002, pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd, pypeit_version: 2.0.2.dev1220+gfb6fb62c4,
-#     s3_prefix: mosfire/20170615, sampmode: 2, seeing_fwhm_pix: 3.0908290252417165, slit_length: null, slit_width: null, standard: HD133772,
+#     s3_prefix: mosfire/20170615, sampmode: 2, seeing_fwhm_pix: 3.0908290252417165, slit_length: 1.0, slit_width: 4.0, standard: HD133772,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=7.242 (V_eq 7.24782), thru_curve_file: standards/HD133772_20170615.ecsv,
 #     thru_median_1117_1250: 0.1719603730163888, thru_median_1117_1260: 0.17209477353015246, zp_1200: 19.415291980788663, zp_1250: 19.418951367336074,
 #     zp_1300: 19.5068299999286}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.3}
-# - {harvest_keck_etcs_version: 0.2.3}
+# - {harvest_keck_etcs_version: 0.2.5}
 # - {image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3'}
 # - {image_digest: 'sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf'}
 # - {pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd}
@@ -42,7 +42,7 @@
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T03:49:44Z'}
+# - {created: '2026-10-08T14:43:19Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

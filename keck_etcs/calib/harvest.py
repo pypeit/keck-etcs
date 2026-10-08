@@ -32,7 +32,12 @@ Conventions:
   (:func:`estimate_pwv`).
 - ``seeing_fwhm_pix``: the median PypeIt spatial FWHM of the standard's
   extracted objects.
-- ``flag``: comma-separated; ``ok`` if empty. ``nofilter`` when no filter
+- ``slit_width``, ``slit_length``: arcsec and CSU bars, from the mask name
+  (``LONGSLIT-46x5``: 5", 46 bars); for ``long2pos_specphot`` the 4.0" bar
+  the standard was in (``run_manifest.json`` ``specphot``), one bar long.
+- ``flag``: comma-separated; ``ok`` if empty. ``narrow`` when the slit is
+  narrower than :data:`WIDE_SLIT_ARCSEC` (such a row measures slit loss, not
+  throughput; plan S15c). ``nofilter`` when no filter
   curve was divided out (``thru`` is then masked). ``excluded_nonlinear``
   when the standard's raw counts (99.9th percentile in a 15-pixel band
   around its trace, in the frames the sensfunc used) exceed the detector's
@@ -272,6 +277,22 @@ def raw_info(raw_dir, filenames):
     return info
 
 
+WIDE_SLIT_ARCSEC = 3.0
+"""Slits at least this wide are wide-slit standards (as the KOA census, ``search_mosfire_standards.WIDE_SLIT``)."""
+
+
+def slit_of_night(manifest, frames):
+    """(width arcsec, length in CSU bars) of the standard's slit; see the module docstring."""
+    sp = manifest.get('specphot')
+    if sp:
+        used = {o['slit'] for o in manifest.get('objects', []) if o.get('specphot_use')}
+        widths = [b['width_arcsec'] for b in (sp.get('bars') or []) if b['spat_id'] in used]
+        if widths:
+            return float(min(widths)), 1.0
+        return (4.0, 1.0) if used else (None, None)
+    return slit_from_decker(frames[0]['decker']) if frames else (None, None)
+
+
 def slit_from_decker(decker):
     """(width arcsec, length in CSU bars) from a MOSFIRE long-slit mask name, e.g. LONGSLIT-46x5."""
     try:
@@ -354,7 +375,9 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
     peak = standard_peak_adu(m, files, raw_dir or night_dir / 'raw')
     if peak is not None and peak > NONLINEAR_ADU:
         flags.append('excluded_nonlinear')
-    width, length = slit_from_decker(frames[0]['decker']) if frames else (None, None)
+    width, length = slit_of_night(m, frames)
+    if width is not None and width < WIDE_SLIT_ARCSEC:
+        flags.append('narrow')
     uniq = lambda k: sorted({raw[f][k] for f in files})
     one = lambda vals: vals[0] if len(vals) == 1 else None
 

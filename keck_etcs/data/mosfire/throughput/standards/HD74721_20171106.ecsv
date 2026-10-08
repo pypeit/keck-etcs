@@ -17,7 +17,7 @@
 #     image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4', job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f,
 #     keck_etcs_version: 0.2.5, koa_id: MF.20171106.55613.fits+MF.20171106.55631.fits+MF.20171106.55648.fits+MF.20171106.55681.fits+MF.20171106.55697.fits+MF.20171106.55716.fits+MF.20171106.56372.fits+MF.20171106.56391.fits+MF.20171106.56410.fits+MF.20171106.56447.fits+MF.20171106.56466.fits+MF.20171106.56487.fits,
 #     mjd: 58063.64869312, numreads: 1, pwv_fit: 8.60891659331735, pypeit_git_sha: bc18a3ba46d1d331da0875424c63999e578a4937, pypeit_version: 2.0.2.dev1221+gbc18a3ba4,
-#     s3_prefix: mosfire/20171106, sampmode: 2, seeing_fwhm_pix: 2.741969122226739, slit_length: null, slit_width: null, standard: HD74721,
+#     s3_prefix: mosfire/20171106, sampmode: 2, seeing_fwhm_pix: 2.741969122226739, slit_length: 1.0, slit_width: 4.0, standard: HD74721,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=8.521 (V_eq 8.52682), thru_curve_file: standards/HD74721_20171106.ecsv, thru_median_1117_1250: 0.2169970279111057,
 #     thru_median_1117_1260: 0.22806137346238148, zp_1200: 19.744119588209205, zp_1250: 19.810462166855967, zp_1300: 19.899597921999884}
 # - {pypeit_version: 2.0.2.dev1221+gbc18a3ba4}
@@ -33,14 +33,14 @@
 # - {pin_check_pass: true}
 # - {sens_file: sens_HD74721_20171106.fits}
 # - {sens_sha256: a664e44a12b1396281a7e1434f5a329f605913ede7662598331c7a60ff3b9d16}
-# - {run_manifest_sha256: d4eba8b859b3dfa3f14aba7d2e076c1efee8db40d29f23d1fdcab699a88e396b}
+# - {run_manifest_sha256: 2d7ba967de600afa7cdbee872cf02c99ede7b6cc1485009a435128bd0d973362}
 # - telluric: {chi2: 9136.861928694547, grid: TellPCA_3000_26000_R10000.fits, npca: 3, resolution: 1919.448025286354, success: true, teltype: pca}
 # - {pwv_method: Gemini ATRAN grid matched to the PypeIt telluric model (keck_etcs.calib.harvest.estimate_pwv)}
 # - pwv_detail: {at_search_edge: false, extrapolated: true, pwv_mm: 8.60891659331735, rms_resid: 0.014433690815962179}
 # - {eff_aperture_m2: 72.3674}
 # - {grid: '9000 + k A, 1 A steps, vacuum'}
 # - {filter_divided: true}
-# - {created: '2026-10-08T14:03:47Z'}
+# - {created: '2026-10-08T14:43:31Z'}
 # - {script: keck_etcs.calib.harvest}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru

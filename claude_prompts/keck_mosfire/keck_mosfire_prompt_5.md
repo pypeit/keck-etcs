@@ -809,3 +809,73 @@ user 2026-10-07):
 - The long2pos_specphot bar gaps are visible in the flats on some nights
   (2014-06-01, 2017, 2024) and not on others (2014-11 to 2021). The traced
   slit count, not the date, decides whether the split is needed.
+
+### 2026-10-08 (Prompt #3 / S15c: sync of the 20 success nights, re-harvest and merge; all checks pass, milestone met)
+
+**Sync.** For each of the 20 `success` nights in `status_table.py` (batch 1
+plus 2022-04-09):
+
+- `s3_sync.py pull mosfire/<night> --include 'sens/*' 'harvest/*'
+  'redux/Science/spec1d_*' run_manifest.json gates.json raw/manifest.ecsv
+  --calibs`.
+- The raw standard frames the sensfunc used (the harvest's saturation check
+  reads them).
+- Everything is under `$KECK_ETCS_DATA/mosfire/<night>/`; every night has
+  its sens, harvest files and one `WaveCalib`.
+- New: `s3_sync.py pull --calibs` adds `redux/Calibrations/WaveCalib*` to
+  `--include`. The prompt named the option, but it did not exist.
+
+**Harvest changes** (`keck_etcs/calib/harvest.py`, tests in `test_harvest.py`):
+
+- `slit_of_night(manifest, frames)`: a `long2pos_specphot` row now records
+  the 4.0" bar the standard was in (width from the manifest's `specphot`
+  bar table) and a length of one CSU bar. These rows had an empty
+  `slit_width`, so the narrow-slit rule could not apply to them.
+- `flag = narrow` below `WIDE_SLIT_ARCSEC = 3.0` (the census's
+  `WIDE_SLIT`).
+
+**Re-harvest and merge.**
+
+- All 20 nights were re-harvested locally (rows keep the pod's provenance
+  from `run_manifest.json`), then `harvest_sens.py --merge` ran over the 20
+  `harvest/` directories.
+- Differences from the table before:
+  - the 15 long2pos rows gained `slit_width = 4.0`, `slit_length = 1`;
+  - LDS749B 2022-04-09 lost the stale `nofilter` flag (harvested before
+    filter division existed);
+  - no zero point or throughput changed;
+  - all four `excluded_nonlinear` flags are kept.
+
+**Verify** (`scripts/mosfire/check_standards_table.py`, new and re-runnable):
+
+- 20 `success` nights, 20 rows, one per night; no recorded failures remain
+  (every processed night is a row).
+- Provenance: 120/120 cells filled (`image`, `image_digest`,
+  `pypeit_git_sha`, `keck_etcs_git_sha`, `job_name`, `s3_prefix`).
+- Wide-slit rows: 20 of 20 (no narrow-slit standard was reduced, so no
+  `narrow` row yet). Usable for era curves: 16 rows, 11 distinct
+  standards:
+  - 2012-04..2016-09: 5 rows (Feige110, 55 Dra, HD95126, HD18571, HD54601;
+    all J);
+  - 2017-02..2025-02: 10 rows (HD74721 x2, HD65158, HD21379, HD210501,
+    Feige110, GD153 in J; LDS749B, GD153 x2 in J2);
+  - 2025-04..: 1 row (GD153, J2).
+- **Milestone (>= 10 standards over >= 2 eras): met** (11 over 3).
+- Flags: `pwv_extrapolated` 13, `excluded_nonlinear` 4, `ok` 5.
+- Monitor: 2456 rows on all 20 nights; `monitor_failed` 0.
+- `git status`: the ECSV files (`standards.ecsv`, `calib_monitor.ecsv`,
+  the 20 curves, `index.yaml`) plus the code of this step (`s3_sync.py`,
+  `harvest.py` and its test, the check script) and this doc. That is more
+  than "only the ECSV files", because the slit-width/`narrow` support and
+  `--calibs` had to be added.
+- Tests: 104 pass; `test_shipped_era_file_provenance_matches_its_rows`
+  still fails, as agreed in Q&A S15a-4, until S16 rebuilds the era curves.
+
+**For S16:**
+
+- Both filters are now in each era: the J-against-J2 offset (about
+  25 percent at the same star) must be resolved before an era median mixes
+  them.
+- 55 Dra at zp 19.52, unflagged.
+- `pwv_extrapolated` on most short J exposures.
+- The `*55Dra` file names (the KOA target name kept its `*`).
