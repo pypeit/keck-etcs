@@ -168,6 +168,58 @@ def with_slitedges(par_text, lines):
     return '\n'.join(['[calibrations]', '  [[slitedges]]'] + add + out) + '\n'
 
 
+def split_merged_bars(pfile, redux, raw_file, log, env):
+    """Trace a long2pos_specphot night's slit edges once and split slits that hold several bars.
+
+    On some nights the flats show no gap between the three bars of a position
+    (2015-09-04: three slits, 127 pixels wide, for seven bars), so PypeIt
+    traces one slit per position and the 4.0" bar cannot be told apart. This
+    runs ``pypeit_trace_edges`` on ``pfile``; if it finds fewer slits than the
+    mask has bars (``Mechanical_Slit_List``), every slit wider than one bar is
+    replaced, through PypeIt's ``rm_slits``/``add_slits`` (removed first, then
+    added), by ``k`` equal bars, ``k`` = the slit width plus one bar gap over
+    the CSU pitch (bar length plus gap, from the mask's plate scale). The two
+    lines are written into the ``[[slitedges]]`` block of ``pfile``. Returns a
+    record for ``run_manifest.json`` (``None`` when nothing is changed).
+    """
+    from pypeit.slittrace import SlitTraceSet
+    from pypeit.spectrographs.keck_mosfire import KeckMOSFIRESpectrograph as K
+    work = Path(redux) / 'edge_check'
+    rc = run(['pypeit_trace_edges', '-f', pfile, '-p', work, '-o', '--log_file', 'None'], log, env=env, cwd=redux)
+    files = sorted((work / 'Calibrations').glob('Slits_*'))
+    if rc != 0 or not files:
+        return {'action': 'none', 'reason': f'pypeit_trace_edges exit {rc}'}
+    slits = SlitTraceSet.from_file(files[0])
+    left, right, _ = slits.select_edges()
+    with fits.open(raw_file) as hdul:
+        nbars = sum(1 for r in hdul['Mechanical_Slit_List'].data if str(r['Slit_Number']).strip())
+        ps = hdul[0].header['PSCALE']
+    shutil.rmtree(work, ignore_errors=True)
+    row = left.shape[0] // 2
+    edges = sorted((float(left[row, i]), float(right[row, i])) for i in range(slits.nslits))
+    rec = {'traced': [[round(a, 1), round(b, 1)] for a, b in edges], 'nbars': nbars, 'row': row}
+    if len(edges) >= nbars:
+        return dict(rec, action='none', reason=f'{len(edges)} slits for {nbars} bars')
+    gap = K._slit_gap(ps)
+    pitch = K._CSUlength(ps) + gap
+    rm, add, n = [], [], 0
+    for a, b in edges:
+        k = max(1, int(round((b - a + gap) / pitch)))
+        n += k
+        if k == 1:
+            continue
+        rm.append(f'1:{row}:{0.5 * (a + b):.0f}')
+        step = (b - a + gap) / k
+        add += [f'1:{row}:{a + i * step:.0f}:{a + i * step + step - gap:.0f}' for i in range(k)]
+    if n != nbars or not rm:
+        return dict(rec, action='none', reason=f'split gives {n} slits for {nbars} bars')
+    text = Path(pfile).read_text()
+    block = f"    rm_slits = {'; '.join(rm)}\n    add_slits = {'; '.join(add)}\n"
+    assert text.count('  [[slitedges]]\n') == 1
+    Path(pfile).write_text(text.replace('  [[slitedges]]\n', '  [[slitedges]]\n' + block, 1))
+    return dict(rec, action='split', rm_slits=rm, add_slits=add)
+
+
 def specphot_wide_slits(raw_file, wave_rows):
     """The 4.0" bars of a long2pos_specphot reduction (``spat_id`` of the traced slits).
 
@@ -674,6 +726,14 @@ def main(args):
         if args.setup_only:
             status = 'success'
             return 0
+
+        if specphot:
+            # long2pos_specphot: one slit per CSU bar, even when the flats show no bar gaps
+            stage('bar_split')
+            std_raw = [r['filename'] for r in tbl if 'standard' in r['frametype']]
+            manifest['specphot_bar_split'] = split_merged_bars(pfile, redux, raw / std_raw[0], log, env)
+            print(f"  long2pos_specphot bar split: {manifest['specphot_bar_split']}")
+            manifest['pypeit_file_text'] = pfile.read_text()
 
         # 4. reduce
         stage('run_pypeit')
