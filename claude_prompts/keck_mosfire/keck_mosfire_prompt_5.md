@@ -263,6 +263,35 @@ Part 6 step S18 needs S16.
 
 >A. Use your default
 
+4. **(2026-10-07) The shipped 2017-2025 curve is now out of date; one test
+   fails.** `harvest_sens.py --merge` added four 2017-2025 rows to
+   `standards.ecsv` (HD133772 2017-06-15, Feige110 2024-07-21, GD153
+   2024-12-30 and 2025-07-23). `test_shipped_era_file_provenance_matches_its_rows`
+   requires `mosfire_thru_2017-2025.ecsv` to be built from exactly the
+   era's non-excluded rows, so it fails until the curve is rebuilt
+   (`combine.py`, an S16 step). Two rows should not enter any era curve
+   as they stand:
+   - HD133772 (A0V, 2017-06-15) is saturated: 99.9th-percentile raw counts
+     of about 40k ADU against the 26k linearity limit
+     (`scripts/mosfire/check_std_peaks.py`), so its zero point is 0.35 mag
+     too faint.
+   - The J-filter long2pos Feige110 nights give a median throughput of
+     about 0.24 against about 0.18 for the J2 LONGSLIT nights. The filters
+     account for only 8 percent of that (median transmission 0.93 against
+     0.86), so about 25 percent is not yet understood.
+
+   The options:
+   - (a) flag the HD133772 row `excluded_nonlinear`, and teach the harvest
+     to flag any standard above the linearity limit; leave the era curve
+     and the failing test for S16, which rebuilds the curve once batch 1
+     adds more J and J2 standards;
+   - (b) as (a), and also rebuild `mosfire_thru_2017-2025.ecsv` now, with
+     LDS749B + GD153 x2 + Feige110 2024, so the tests pass;
+   - (c) take the four new rows out of `standards.ecsv` again until S16.
+
+   *Default:* (a). The curve the ETC ships stays the one validated in S10,
+   and the failing test documents the pending rebuild.
+
 ### S15b (2026-10-05)
 
 1. **May I run the first real backup now?**
@@ -501,3 +530,157 @@ then S15a's pilot, then S15b's batches.
   batch-1 download manifest (19 reducible nights) and Job are ready, waiting
   for image 0.2.0 and the user's go-ahead. Pilot changes (20250722 →
   20250723, 20131225 → 20140601) are explained in `koa_search_prompts.md`.
+
+### 2026-10-07 (Prompt #1 / S15a, part 2: pilot batch, three PypeIt/driver fixes, monitor-line freeze)
+
+**Result:** all five pilot nights are `success` with passed gates, verified
+against their manifests; the J2 OH monitor lines are frozen. It took four
+images (0.2.1 to 0.2.3) and three rounds of fixes.
+
+**Images** (registry `gitlab-registry.nrp-nautilus.io/profx/keck-etcs`):
+
+| Tag | Digest | keck-etcs | PypeIt pin (`etc-fixes`) | Change |
+|---|---|---|---|---|
+| 0.2.1 | sha256:1a8e8291...1cce3 | 31488fa | 8017f47 | first pilot run |
+| 0.2.2 | sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138 | 09e9eee | fb47905 | long2pos bars, OH-arc cap, align-box fix, frozen lines |
+| 0.2.3 | sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf | fdfb1d7 | fb6fb62 | 4" bar wavelength transfer, object filter |
+
+**Status table** (`nautilus/status_table.py`; one status per night; products
+checked by the new `nautilus/verify_nights.py`, ALL OK):
+
+| Night | Standard | Mask, filter | Image | Gates | Wall [s] | Peak [GiB] | Median thru | zp_1250 |
+|---|---|---|---|---|---|---|---|---|
+| 20140601 | Feige110 | long2pos_specphot (align), J | 0.2.3 | PASS | 2617 | 11.74 | 0.248 | 19.76 |
+| 20170615 | HD133772 (A0V) | long2pos_specphot, J | 0.2.3 | PASS | 587 | 7.74 | 0.172 | 19.42 |
+| 20240721 | Feige110 | long2pos_specphot, J | 0.2.3 | PASS | 330 | 7.63 | 0.233 | 19.77 |
+| 20241230 | GD153 | LONGSLIT-46x5, J2 | 0.2.3 | PASS | 1702 | 8.68 | 0.176 | 18.46 |
+| 20250723 | GD153 | LONGSLIT-46x5, J2 | 0.2.2 | PASS | 4819 | 11.22 | 0.181 | 18.50 |
+
+20250723 stays on 0.2.2: pin fb47905 lacks only the long2pos transfer, which
+does not apply to a LONGSLIT night. Every `run_manifest.json` carries its
+image digest and `pypeit_git_sha` equal to the pin of that image.
+
+**What failed, and the fixes** (in order):
+
+1. *Pilot on 0.2.1: the three long2pos nights failed `no trace`, and the two
+   GD153 nights were killed.*
+   - Each long2pos_specphot position is three CSU bars, 0.7" | 4.0" | 0.7"
+     (`Mechanical_Slit_List`); the star sits in the 4.0" bar in some dither
+     positions (2017: YOFFSET 0; 2014 align mask: +-14").
+   - PypeIt's mask-design matching merged or dropped the bars (2017-06-15
+     kept one two-bar slit; 2024-07-21's kept slit was fully masked).
+   - Fix in `reduce_standard.py`: `use_maskdesign = False` (one slit per
+     bar); the 4.0" bars from the mask table, checked against the arc line
+     widths; only frames whose brightest object is in a 4.0" bar count
+     (`specphot_use`), so `no trace` means no such frame.
+   - The Job's global `backoffLimit: 4` was used up by the long2pos
+     retries and the Job then deleted the healthy GD153 pods. Fix in
+     `night_job.yaml`: `backoffLimitPerIndex: 1` and a `podFailurePolicy`
+     (data outcomes exit 2 -> FailIndex, not retried; evictions ignored).
+2. *20250723 was OOM-killed at 16 GiB three times.* All 36 science frames
+   were typed as OH arcs and combined into one arc image. Fix: at most
+   `MAX_OH_ARCS = 16` arc frames (longest, then nearest the standard); the
+   rest are `science` only. Locally the night then peaked at 8.4 GB.
+3. *20241230 failed `wave_rms` (0.85 px).* Its science frames are on
+   `LONGSLIT-46x1 (align)`, whose bar 23 is a 4" alignment box in the
+   middle of the slit; PypeIt extracted the arc there, where the OH lines
+   are 16 px wide instead of 4. **PypeIt fix (fb47905):**
+   `Spectrograph.get_arc_extract_center` gets the arc frames, and MOSFIRE
+   moves the extraction to the adjacent bar
+   (`KeckMOSFIRESpectrograph.alignment_box_rows`). Result: cc 0.52 -> 0.88,
+   RMS 0.85 -> 0.13 px.
+4. *20240721 and 20140601 failed `wave_rms` in the 4.0" bars (0.7-1.5 px).*
+   Flat-topped 22-px arc lines defeat `full_template`. **PypeIt fix
+   (fb6fb62):** a new `Spectrograph.transfer_wavecal` hook; MOSFIRE refits
+   the identified lines of the two 0.7" neighbours, moved by their
+   cross-correlation shifts (1.5-3.6 px, cc 0.90-0.93). RMS 0.05-0.11 px.
+   The posB 4" bar has no neighbours, so `specphot_use` also requires a
+   wavelength RMS below 0.5 px (`SPECPHOT_RMS_PIX`).
+5. *20140601 frame 0357 counted as a wide-bar frame* because of a bogus
+   12-px "object". Fix: objects with FWHM outside 0.5-2x the night's median
+   are not candidates.
+6. *Gates:* the spec1d gate now requires objects only in standard frames
+   (faint validation targets may have none); the long2pos wave gate checks
+   the used 4" bars against 0.5 px.
+7. *`build_sensfunc.py`:* frames of different exposure times are no longer
+   refused; the exposure time with the largest total is coadded
+   (20140601: 11.6 and 21.8 s). A single frame's sensfunc is the night's.
+8. *Stale products on the bucket* (found by `verify_nights.py`): a night
+   whose earlier run failed kept that run's same-size `sens`/`WaveCalib`
+   objects, because the success path pushed without `--force` and
+   `s3_sync` skips equal sizes. Fix: products are always force-pushed.
+   20240721, 20140601, 20241230 (and 20170615, to move it to 0.2.3) were
+   rerun with `REPLACE=1`. Two harmless leftovers remain on S3, not in any
+   manifest: `sens_Feige110_20240721_0089.fits`,
+   `sens_Feige110_20140601_0357.fits`.
+
+**A0V check (D2): failed, difference explained.** HD133772's zero point at
+1.25 um is 0.35 mag (38 percent) fainter than Feige110's in the same era and
+filter. The A0V frames are saturated: 99.9th-percentile raw counts of
+39.9k-40.1k ADU (peak 41.5k) against the 26k linearity limit, where every
+WD frame is below 6k (`scripts/mosfire/check_std_peaks.py`). The A0V sensfunc
+was built with the J-scaled Vega model (V_eq 7.248 from J = 7.242,
+`HD133772_20170615_std_model.json`), but this star at 8.7 s cannot test it.
+
+**Open: J against J2.** The J-filter Feige110 nights give about 0.24, the
+J2 LONGSLIT nights about 0.18 (LDS749B 2022 included: 0.180). The archive
+spectra agree with CALSPEC to 2-3 percent in J
+(`scripts/mosfire/compare_std_spectra.py`); read mode and exposure time are
+not the cause; the filters explain 8 percent. Batch 1 adds both kinds. The
+merge makes the shipped 2017-2025 curve stale and one test fails; Q&A
+S15a-4 asks how to proceed.
+
+**Monitor-line freeze** (`select_monitor_lines.py 20220409 20241230 20250723
+--band J2`, the three J2 OH nights; the long2pos nights have no OH frames):
+
+- 74 candidate lines; 15 pass rules 1, 2 and 4, all identified on 3/3
+  nights; rule 3 passes (raw p99.9 5.6k ADU).
+- Frozen (one per sub-window, one window empty): **11591.847, 11788.495,
+  12229.206, 12287.158 A**, the same as the provisional list.
+- Written to `keck_etcs/data/mosfire/monitor/monitor_lines_J2.ecsv`
+  (sha256 faedee86e3d2cd9eab6cac04f84ff0ba1b950a7868c8579048146eddc5e332d3,
+  in `index.yaml`); `MONITOR['monitor_lines_status'] = 'frozen'`.
+- The J band and the Ne/Ar lists are not frozen: no J long-slit night yet.
+- The freeze went into 0.2.2, so every pilot monitor file already uses the
+  frozen list: no `lines=provisional` flag and no `monitor_failed` row in
+  any of them. No separate monitor rerun was needed.
+
+**Dome-flat rates** (`flat_rate_per_arcsec`, e-/s/pix/arcsec, median over
+frames, at 11250 11500 11750 12000 12250 12500 A):
+
+- 20220409 (FPOWER 9.0): 877 1431 1988 2493 2854 951
+- 20241230 (FPOWER 13.5): 3672 5892 8003 10131 11647 3851
+- 20250723 (FPOWER 4.0): 937 1517 2080 2600 2958 986
+- 20140601, 20170615, 20240721: flagged `nonlinear` (long2pos flats peak at
+  36.8-41.1k ADU in the 4" bars), no rate.
+
+The rates follow the lamp power, so their trend (S16) needs a normalisation
+by `FPOWER`.
+
+**OH fluxes** (`line_flux`, e-/s/arcsec^2, median over frames, at the frozen
+lines 11591.8 11788.5 12229.2 12287.2 A):
+
+- 20220409: 345 93 600 711
+- 20241230: 369 92 654 765
+- 20250723: 219 40 444 486
+
+**Merge:** `harvest_sens.py --merge` added five rows to
+`keck_etcs/data/mosfire/throughput/standards.ecsv` (six in all) with their
+curves, and 1385 rows to `calib_monitor.ecsv`. For long2pos nights the
+row's KOA-ID list names every standard frame, not only the 4" frames used,
+and `slit_width` is empty; both are follow-ups.
+
+**Sizing:** `night_job.yaml`'s header has the table above. Memory 16 Gi
+stays; CPU could drop to 2; parallelism 4 suits batch 1.
+
+**What I learned about the repository:**
+
+- The night job's YAML script is not in the image, so a job fix needs no
+  rebuild; driver or PypeIt fixes do.
+- PypeIt's MOSFIRE support assumes `use_maskdesign` for long2pos, which
+  does not work for `long2pos_specphot`; the bar geometry comes from the raw
+  frames' `Mechanical_Slit_List` and `Alignment_Slit_List` extensions, and
+  bar 1 is at the top of the detector (`find_longslit_pos` geometry).
+- `conda run` does not forward stdin: edit scripts written to a heredoc
+  and piped to `conda run python -` never ran (my error early in this
+  session; caught when `git status` showed a clean tree).

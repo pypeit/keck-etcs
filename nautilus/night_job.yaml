@@ -29,9 +29,20 @@
 #   Image 0.1.4 (2026-10-02/04): 1682 s on gpu-14.nrp.mghpcc.org, 800 s on
 #   exp-19-11.sdsc (run_pypeit 10-22 min); peak memory 6.07 GiB; scratch
 #   1.78 GB; push 1.5 GB with spec2d.
-#   => the requests below over-provision CPU (4 -> 1-2) and memory
-#   (16 -> 8 Gi); revisit after the pilot (design 4.8.4) before raising
-#   parallelism.
+#   S15a pilot (2026-10-07, images 0.2.2/0.2.3, cgroup memory.peak):
+#     night     mask                 frames  SPEC2D  wall [s]  peak [GiB]  scratch [GB]
+#     20170615  long2pos_specphot    6 std      0       587       7.74        0.85
+#     20240721  long2pos_specphot    7 std      0       330       7.63        0.75
+#     20140601  long2pos (align)    12 std      0      2617      11.74        0.94
+#     20241230  LONGSLIT           2+16 sci     1      1702       8.68        4.29
+#     20250723  LONGSLIT           2+36 sci     1      4819      11.22        8.13
+#   CPU about 1.0 core throughout; wall-clock varies about 2x between nodes
+#   (20140601: 1158 s, then 2617 s on a slower node). Before the OH-arc cap
+#   (reduce_standard.py MAX_OH_ARCS = 16), 20250723 combined 36 arc frames
+#   and was OOM-killed at 16 GiB.
+#   => memory 16 Gi stays (peak 11.7 GiB, ratio 1.36); CPU could drop to 2
+#   (not changed yet); parallelism 4 is fine for the 19-night batch 1
+#   (4 x 16 Gi), and a SPEC2D night needs up to 8 GB of scratch (60Gi limit).
 #
 # Set spec.completions to the number of rows in the manifest. Usage:
 #   kubectl -n pypeit create configmap keck-etcs-nights \
