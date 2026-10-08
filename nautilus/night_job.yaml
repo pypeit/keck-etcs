@@ -68,8 +68,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: night
-        # image 0.2.2, digest sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138 (keck-etcs 09e9eee, PypeIt pin fb47905)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2
+        # image 0.2.3, digest sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf (keck-etcs fdfb1d7, PypeIt pin fb6fb62)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -77,8 +77,8 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "0"}
         - {name: REPLACE, value: "0"}
@@ -127,7 +127,10 @@ spec:
             [ -n "${NIGHT:-}" ] || fail "setup failed" "no row $JOB_COMPLETION_INDEX in $MANIFEST" 11
             [ "$SPEC2D_ENV" = 1 ] && export SPEC2D=1
             NIGHT_DIR="$KECK_ETCS_DATA/$S3_PREFIX"
-            FORCE=""; [ "$REPLACE" = 1 ] && FORCE="--force"
+            # products are always pushed with --force (S15a, 2026-10-07): a same-size object left by an
+            # earlier failed run of the night is otherwise skipped by s3_sync, and the bucket keeps stale
+            # sens/WaveCalib files under a run_manifest.json that describes the new ones
+            FORCE="--force"
             echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
             log SKIP_CHECK
             # done = run_manifest.json on the bucket with status success and passed gates;
