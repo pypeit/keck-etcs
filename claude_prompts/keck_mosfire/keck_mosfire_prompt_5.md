@@ -1006,3 +1006,85 @@ Done so far (nothing of the release is written yet: no era files, no
 - The 19 flagged group/era sets are listed by the script; I have not yet
   checked each one, so they are flags to look at, not findings.
 - D25 and D14 proposals: Q&A S16-3.
+
+### 2026-10-08 (Prompt #4 / S16, part 2: first calibration release mosfire-J-2026.10)
+
+Applied the answers to Q&A S16-1 (b), S16-2 (accept) and S16-3 (D25 refit;
+D14 unchanged), then built the release.
+
+**Code:**
+
+- `keck_etcs/calib/combine.py`: J rows only where the J filter is >= 0.9
+  of its peak (`EDGE_TRIM_FRAC`); A0V rows only redward of 11900 A
+  (`A0V_MIN_WAVE`); rows without `std_class` are tolerated. Test
+  `test_edge_trim_and_a0v_cut`.
+- `keck_etcs/core/lsf.py`, `instruments/base.py`, `instruments/mosfire.py`:
+  D25 as `sqrt((w / 0.292)^2 + 1.08^2)` pix (new `Instrument.lsf_form`,
+  `'max'` stays the default for other instruments). The monitor's own LSF
+  constants are unchanged; they define its fixed measurement windows.
+- `Instrument.throughput_for_window` (used by `etc.compute`): an era's
+  curve is completed over the band window from the nearest era that
+  measured the rest, scaled by the median ratio over 11900-12450 A, with a
+  warning.
+  - Needed because the 2025-04.. curve comes from one J2 night
+    (11171-12462 A), so the default J calculation would otherwise hold the
+    throughput constant over 12462-13457 A.
+  - Scales applied: 2025-on over J x 1.024; 2012-2016 over J2 x 1.005.
+  - Tests: `test_throughput_for_window_splices_uncovered_wavelengths`; the
+    era fallback is now tested by monkeypatching a missing file.
+- `scripts/mosfire/combine_throughput.py`: `CALIB_VERSION =
+  mosfire-J-2026.10`.
+- `scripts/mosfire/verify_release.py` (new): the S16 checks.
+
+**Release products:**
+
+- Era curves (`combine_throughput.py`):
+  - 2012-04..2016-09: 4 standards, 11633-13457 A; excluded 55 Dra
+    2014-10-05 (3 MAD);
+  - 2017-02..2025-02: 9 standards, 11172-13457 A; excluded GD153
+    2025-01-25 (3 MAD; 0.285, the J2 nights sit about 5 % high);
+  - 2025-04..: 1 standard (GD153 2025-07-23, J2).
+- Curve medians over 11900-12450 A: 0.257 / 0.255 / 0.270 (S10's
+  2017-2025 curve from LDS749B alone: 0.273).
+- `excluded_3mad` written into `standards.ecsv`.
+- `index.yaml`: all 18 MOSFIRE entries now `calib_version:
+  mosfire-J-2026.10`.
+- Regression fixtures regenerated (`regen_regression_fixtures.py --regen`).
+  The differences were the version, the default era (now 2025-04..), the
+  LSF (+3.9 % at 0.7") and the throughput (about 1 %).
+- `CHANGES.md` release section: era curves before and after, the standards
+  added and excluded, method changes, known systematics, and the 5 image |
+  digest | PypeIt pin triplets.
+- `docs/keck_mosfire_design.md` 4.6.1: results.
+
+**Verify** (`verify_release.py`: ALL CHECKS PASS; tests: 111 passed):
+
+- `compute` with `throughput.date` in each era (J and J2) returns that era
+  (`meta.era`) and `calib_version mosfire-J-2026.10`.
+- 2012-2016 against XTcalc 2012 (x 75 / 72.37 m^2): +3.6 % over
+  11633-13457 A (bins -10 to +15 %), within the 10 % target.
+- No residual correlation of `zp_1250` with airmass beyond 2 sigma: J
+  1.88 sigma (n = 11); J2 untestable (n = 3).
+- Every row in an era curve has `image_digest` and a 40-character
+  `pypeit_git_sha`; `CHANGES.md` lists the 5 distinct triplets.
+- Final trend (14 rows): `thru_common` 0.258 (MAD 2.2 %, -1.0 +- 2.7 %/yr)
+  and 0.257 (2.7 %, -0.3 +- 0.5 %/yr); residual correlations airmass
+  1.8 sigma, PWV 0.2, slit width 0.6. No era-to-era change beyond the
+  scatter.
+- Release backup (`backup_products.py --run --release mosfire-J-2026.10`):
+  801 files (126.2 MB, the D39 set of the 14 nights in the era curves)
+  copied to `AIOcean:keck-etcs/releases/mosfire-J-2026.10/`; `rclone check
+  --one-way`: 801 match, 0 missing, 0 differ, 0 errors, COMPLETE (summary
+  `runs/backup/backup_20261008T151511Z_run.json`).
+- Release diff: the data, `CHANGES.md`, fixtures and design doc form the
+  release commit. The code changes above must go in a separate, earlier
+  commit, so the release commit touches only `keck_etcs/data/`,
+  `CHANGES.md`, `keck_etcs/tests/data/` and `docs/keck_mosfire_design.md`.
+
+**What I learned about the repository:**
+
+- `harvest.median_in` defaults to `thru_raw`, so the row columns
+  `thru_median_*` include the filter. Fine for the gate, misleading across
+  filters.
+- `band_median_era` in an era file's meta is computed before the 3-MAD
+  clipping; quote the curve's own median.

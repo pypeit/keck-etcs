@@ -10,7 +10,9 @@ Method (design 5.3): on the sky grid's uniform 0.5 A vacuum grid around the
 band window, the source photon rate N0 (5.3.2) is multiplied by the
 atmospheric transmission (5.3.3) and the system throughput (5.3.4, the
 filter-free era curve times the band's filter times ``throughput.scale``;
-held constant beyond the curve's measured range, with a warning),
+completed from the nearest era that measured the rest of the window,
+scaled to this era in 11900-12450 A, else held constant beyond the curve's
+measured range, with a warning),
 convolved with the Gaussian LSF (5.3.6) and sampled at the pixel centres.
 The product is convolved, rather than each factor separately, so that a
 line on a telluric feature is handled correctly; for a smooth source the two
@@ -179,10 +181,10 @@ def compute(inputs):
     f_filt = np.interp(fw, filt['wave_A'], filt['transmission'], left=0.0, right=0.0)
     era, w2 = inst.era_for_date(p['throughput']['date'])
     warnings += w2
-    th = inst.throughput(era)
+    th = inst.throughput_for_window(era, lo, hi, margin=fwhm_A)
     warnings += th['warnings']
     era = th['era']
-    t_lo, t_hi = th['valid_range_A']
+    t_lo, t_hi = th['covered_A']
     if lo < t_lo - fwhm_A or hi > t_hi + fwhm_A:          # more than one LSF FWHM uncovered
         warnings.append(f'throughput measured over {t_lo:.0f}-{t_hi:.0f} A ({th["file"]}); held constant at the edge '
                         f'value over the rest of the {band} window ({lo:.0f}-{hi:.0f} A)')

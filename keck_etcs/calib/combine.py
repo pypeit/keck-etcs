@@ -9,7 +9,10 @@ For one instrument era, on the common 1 A grid of the harvest
   nofilter``) it is ``thru_raw`` divided here by the band's filter. In both
   cases only the filter's half-power band is kept, because outside it the
   division amplifies any mismatch between the filter curve and the
-  instrument's real cut-on and cut-off;
+  instrument's real cut-on and cut-off. Since the first release (plan S16)
+  a J row is further limited to where the J filter is at least 0.9 of its
+  peak, and an A0V row to wavelengths redward of 11900 A
+  (:data:`EDGE_TRIM_FRAC`, :data:`A0V_MIN_WAVE`);
 - each night's band median is compared with the era median of band
   medians; nights more than 3 MAD away are excluded whole (D22). This needs
   at least 3 nights, since the MAD of fewer is not meaningful. The band
@@ -35,6 +38,13 @@ COMMON_WINDOW = (11900.0, 12450.0)
 PROVENANCE = ('image', 'image_digest', 'pypeit_git_sha', 'keck_etcs_git_sha', 'pypeit_version')
 MAD_CLIP = 3.0
 MIN_FOR_CLIP = 3
+# Wavelength cuts per row (plan S16, Q&A S16-1 (b)). The same white dwarf through J falls below its J2
+# curve by 10 % at 11650 A, 3 % at 11800 A and 0 at 12000 A, so the tabulated J transmission on its
+# cut-on is too high: a J row is kept only where the J filter is at least EDGE_TRIM_FRAC of its peak.
+# Every A0V curve is depressed blueward of about 11900 A (0.10-0.13 at 11600 A against 0.14-0.19 for the
+# white dwarfs) while the classes agree at 12000 A: an A0V row is kept only redward of A0V_MIN_WAVE.
+EDGE_TRIM_FRAC = {'J': 0.9}
+A0V_MIN_WAVE = 11900.0
 
 
 def in_era(date, era):
@@ -43,7 +53,7 @@ def in_era(date, era):
     return d >= era.start and (era.end is None or d < era.end)
 
 
-def filter_free(curve, filter_wave, filter_trans, half_power):
+def filter_free(curve, filter_wave, filter_trans, half_power, edge_frac=None, min_wave=None):
     """The filter-free throughput of one harvested curve, masked outside the half-power band.
 
     Args:
@@ -51,13 +61,22 @@ def filter_free(curve, filter_wave, filter_trans, half_power):
             optionally an unmasked ``thru``).
         filter_wave, filter_trans (array): the band's filter curve.
         half_power (tuple): (lo, hi) half-power wavelengths [A].
+        edge_frac (float, optional): also mask where the filter is below this
+            fraction of its peak (:data:`EDGE_TRIM_FRAC`).
+        min_wave (float, optional): also mask blueward of this wavelength
+            (:data:`A0V_MIN_WAVE` for A0V rows).
 
     Returns:
-        tuple: ``(wave, thru, how)``; ``thru`` is NaN outside the half-power
-        band, and ``how`` says whether the filter was divided at harvest or here.
+        tuple: ``(wave, thru, how)``; ``thru`` is NaN outside the kept range,
+        and ``how`` says whether the filter was divided at harvest or here.
     """
     wave = np.asarray(curve['wave'], float)
     inside = (wave >= half_power[0]) & (wave <= half_power[1])
+    if edge_frac is not None:
+        fw, ftr = np.asarray(filter_wave, float), np.asarray(filter_trans, float)
+        inside &= np.interp(wave, fw, ftr, left=0.0, right=0.0) >= edge_frac * np.nanmax(ftr)
+    if min_wave is not None:
+        inside &= wave >= min_wave
     if 'thru' in curve.colnames and not np.all(np.ma.getmaskarray(curve['thru'])):
         thru = np.ma.filled(np.ma.asarray(curve['thru'], float), np.nan)
         how = 'filter divided at harvest'
@@ -86,7 +105,10 @@ def combine_era(rows, curves, era, filters):
     per_row = []
     for r in sel:
         fw, ft, hp = filters[str(r['filter'])]
-        w, t, how = filter_free(curves[str(r['thru_curve_file'])], fw, ft, hp)
+        w, t, how = filter_free(curves[str(r['thru_curve_file'])], fw, ft, hp,
+                                edge_frac=EDGE_TRIM_FRAC.get(str(r['filter'])),
+                                min_wave=A0V_MIN_WAVE if ('std_class' in r.colnames
+                                                          and str(r['std_class']) == 'A0V') else None)
         common = (w >= COMMON_WINDOW[0]) & (w <= COMMON_WINDOW[1]) & np.isfinite(t)
         use = common if common.any() else np.isfinite(t)
         per_row.append({'row': r, 'wave': w, 'thru': t, 'how': how,

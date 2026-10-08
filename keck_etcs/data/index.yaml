@@ -3,7 +3,7 @@
 # build scripts named in each entry; do not edit them by hand.
 files:
   sky/gemini_mk_sky_grid.fits:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-09-30T20:11:54'
     sha256: 5383f6f7d621e4ca18a6d245f7596ab666bee301afa4d3c0f2f7598fb4e5714a
     script: scripts/mosfire/build_gemini_sky_grid.py
@@ -11,32 +11,32 @@ files:
     provenance: Gemini Observatory IR sky background and ATRAN transmission, as redistributed in Keck
       XTcalc v2.3; 12 (airmass, PWV) grids, flux-conserving rebin to 0.05 nm over 950-2450 nm
   mosfire/throughput/standards.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-08T14:44:42Z'
-    sha256: 28578248dd23b59de47084a30a94b8da8f040056517d42eb65e1694d1d78bb77
+    sha256: a5c32310848ec64563f14782d68610045a515433263b54fb1043a2e88a13a9c7
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 20 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
       in mosfire/throughput/standards/
   mosfire/lsf_measurements.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-04T15:08:00Z'
     sha256: bfe55129454da09f0ea810308efe5810b180581ecc3bd028923665283b23daec
     script: scripts/mosfire/measure_lsf.py --record
     provenance: 1 LSF measurement(s) from OH lines in PypeIt WaveCalib arc spectra
   mosfire/monitor/monitor_lines_J2.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-07T15:27:00Z'
     sha256: faedee86e3d2cd9eab6cac04f84ff0ba1b950a7868c8579048146eddc5e332d3
     script: scripts/mosfire/select_monitor_lines.py 20220409 20241230 20250723 --band J2 --nlines 5
     provenance: J2 OH monitor-line ranking (design 4.9.4); 4 lines frozen into MONITOR (S15a)
   mosfire/monitor/calib_monitor.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-08T14:44:42Z'
     sha256: ca0fd0a8114b1cf3094b77b81d3d942069c5b2bf3fa8fb6cbfe9279edbe96b04
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 2456 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
   mosfire/filters/mosfire_Y.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:11Z'
     sha256: 6c2d2da122617d7cba190499ce32b5353a53e354148a296053361a4edf067cec
     script: scripts/mosfire/fetch_keck_filter_curves.py
@@ -44,7 +44,7 @@ files:
     provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_Y.txt
       (downloaded 2026-10-05, sha256 062fe47e9c3f); AB-Vega 0.655 from PypeIt vega_tspectool_vacuum.dat
   mosfire/filters/mosfire_J.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:11Z'
     sha256: 46ed8a523b14f08289c91f9187be9d7f531e1cdf9a9702ea17e9b97f33c63979
     script: scripts/mosfire/fetch_keck_filter_curves.py
@@ -52,7 +52,7 @@ files:
     provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_J.txt
       (downloaded 2026-10-05, sha256 5410e4e790af); AB-Vega 0.930 from PypeIt vega_tspectool_vacuum.dat
   mosfire/filters/mosfire_J2.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:11Z'
     sha256: cce274c7868506b042dc809ade549b07973f36967752e799cf202d90f4a67567
     script: scripts/mosfire/fetch_keck_filter_curves.py
@@ -60,7 +60,7 @@ files:
     provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/J2_center_corr.txt
       (downloaded 2026-10-05, sha256 3e3fe8ba1b53); AB-Vega 0.833 from PypeIt vega_tspectool_vacuum.dat
   mosfire/filters/mosfire_J3.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:11Z'
     sha256: 06d8156c6cb69dbc092b34037e4dd4f241289ec13c60df2a44f530d781857949
     script: scripts/mosfire/fetch_keck_filter_curves.py
@@ -68,7 +68,7 @@ files:
     provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/J3_center_corr.txt
       (downloaded 2026-10-05, sha256 9c8cd6013706); AB-Vega 0.989 from PypeIt vega_tspectool_vacuum.dat
   mosfire/filters/mosfire_H.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:11Z'
     sha256: 214c81b298bc819e14fb3e62d0c4313553096cb60d704e0f0c318e0c381d0d40
     script: scripts/mosfire/fetch_keck_filter_curves.py
@@ -76,7 +76,7 @@ files:
     provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_H.txt
       (downloaded 2026-10-05, sha256 919daf2bd924); AB-Vega 1.365 from PypeIt vega_tspectool_vacuum.dat
   mosfire/filters/mosfire_K.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:11Z'
     sha256: 416903ac78029fbf4f63dc43d3cd54a6bd129d165778d4915c984ec352f3ce04
     script: scripts/mosfire/fetch_keck_filter_curves.py
@@ -84,36 +84,58 @@ files:
     provenance: Keck MOSFIRE filters page https://www2.keck.hawaii.edu/inst/mosfire/data/filter/mosfire_K.txt
       (downloaded 2026-10-05, sha256 cce475d988d5); AB-Vega 1.845 from PypeIt vega_tspectool_vacuum.dat
   mosfire/detector.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T01:36:43Z'
     sha256: a6cefb64cded1c70a4b833c067434586e105f07061177c3f410c55d303b80544
     script: scripts/mosfire/build_detector_table.py
     provenance: 'Keck MOSFIRE detector page https://www2.keck.hawaii.edu/inst/mosfire/detector.html: read
       noise vs reads, gain, dark, linearity, minimum integration; plate scales from PypeIt and XTcalc'
   mosfire/throughput/mosfire_thru_2017-2025.ecsv:
-    calib_version: mosfire-J-2026.10-dev
-    created: '2026-10-05T02:15:07Z'
-    sha256: 60c4da88ededa8b60fbd7776771093acd74bb4ac50a8f2a571f2190d2d6f0837
+    calib_version: mosfire-J-2026.10
+    created: '2026-10-08T15:09:59Z'
+    sha256: a673039b2fa702aa6108e9a81198c56905cd163ce5481611f88b9dd1c5141305
     script: scripts/mosfire/combine_throughput.py
-    pypeit_version: 2.0.2.dev1218+g8017f4799
-    provenance: 'era 2017-02..2025-02: median of 1 standard(s) (LDS749B 2022-04-09); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6;
-      PypeIt 8017f47997d6417d797be6d0a0358d7acb8918b5'
+    pypeit_version: 2.0.2.dev1218+g8017f4799,2.0.2.dev1220+gfb6fb62c4,2.0.2.dev1221+gbc18a3ba4
+    provenance: 'era 2017-02..2025-02: median of 9 standard(s) (HD74721 2017-11-05, HD74721 2017-11-06,
+      HD65158 2020-11-26, HD21379 2021-09-30, HD210501 2021-10-27, LDS749B 2022-04-09, Feige110 2024-07-21,
+      GD153 2024-12-29, GD153 2024-12-30); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.5; PypeIt 8017f47997d6417d797be6d0a0358d7acb8918b5,
+      bc18a3ba46d1d331da0875424c63999e578a4937, fb6fb62c46383b09c5c13f1edcad97d3367fa0cd'
   mosfire/koa_standards_candidates.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T22:55:38Z'
     sha256: c194a931da5618d7afc110012f4f3a16266527aaea7404dba8743d9c9178185f
     script: scripts/koa/search_mosfire_standards.py
     provenance: KOA TAP census, 12769 public frames; SIMBAD A0 V<11; 2MASS J (II/246)
   mosfire/koa_sampmode_census.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-05T22:55:38Z'
     sha256: 79916ab5194ad28653f5e53ee75b4c45e410d7edf26bbc5aa80eb5efd05a2f2f
     script: scripts/koa/search_mosfire_standards.py
     provenance: KOA TAP SAMPMODE histogram of 168038 public on-sky spectroscopy frames
   mosfire/koa_validation_targets.ecsv:
-    calib_version: mosfire-J-2026.10-dev
+    calib_version: mosfire-J-2026.10
     created: '2026-10-06T01:37:42Z'
     sha256: 789bf5cc9563bf170f7b8e3995ba1908c4017246c3b49b2c6dda1c3b999b4315
     script: scripts/koa/find_validation_targets.py
     provenance: 9 Hennawi/Yang/Wang science targets from the KOA census; 5 with a reducible same-night
       standard
+  mosfire/throughput/mosfire_thru_2012-2016.ecsv:
+    calib_version: mosfire-J-2026.10
+    created: '2026-10-08T15:09:59Z'
+    sha256: 0e3fbd78e98c71f6c0a3ce895a52c35346dc24e114eff628027405d294959e41
+    script: scripts/mosfire/combine_throughput.py
+    pypeit_version: 2.0.2.dev1220+gfb6fb62c4,2.0.2.dev1221+gbc18a3ba4
+    provenance: 'era 2012-04..2016-09: median of 4 standard(s) (Feige110 2014-06-01, HD95126 2014-11-23,
+      HD18571 2015-09-04, HD54601 2015-10-22); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.5; PypeIt bc18a3ba46d1d331da0875424c63999e578a4937,
+      fb6fb62c46383b09c5c13f1edcad97d3367fa0cd'
+  mosfire/throughput/mosfire_thru_2025-on.ecsv:
+    calib_version: mosfire-J-2026.10
+    created: '2026-10-08T15:09:59Z'
+    sha256: d0a61dfa6d5a0f32b33b4bffce3273ed0a79329f6ebc9b95537314f8ee5083c4
+    script: scripts/mosfire/combine_throughput.py
+    pypeit_version: 2.0.2.dev1219+gfb4790520
+    provenance: 'era 2025-04..: median of 1 standard(s) (GD153 2025-07-23); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2;
+      PypeIt fb4790520e4ccd49d39d42ed8438a614f307030b'

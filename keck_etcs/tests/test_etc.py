@@ -33,12 +33,11 @@ def test_output_matches_schema_and_is_json(default):
     for k in ('throughput', 'atm_transmission', 'filter_transmission', 'signal_e', 'sky_e', 'noise_e',
               'snr_pixel', 'snr_resel', 'resolving_power'):
         assert len(out[k]) == n, k
-    # no standards yet in the latest era: the nearest era with a curve is used and reported
-    assert out['meta']['era'] == '2017-02..2025-02' and out['meta']['inputs']['band'] == 'J'
-    assert out['meta']['calib_version'] == 'mosfire-J-2026.10-dev'
-    assert out['meta']['pypeit_version'] == '2.0.2.dev1218+g8017f4799'
-    assert any('no throughput curve yet for era 2025-04..' in w for w in out['warnings'])
-    assert any('held constant' in w for w in out['warnings'])            # J extends past the J2 standard
+    # the latest era's curve (one J2 night) is completed over the J window from the 2017-2025 era (S16)
+    assert out['meta']['era'] == '2025-04..' and out['meta']['inputs']['band'] == 'J'
+    assert out['meta']['calib_version'] == 'mosfire-J-2026.10'
+    assert any('from era 2017-02..2025-02 scaled by' in w for w in out['warnings'])
+    assert not any('no throughput curve yet' in w for w in out['warnings'])
     assert not any('PROVISIONAL' in w for w in out['warnings'])
 
 
@@ -46,8 +45,9 @@ def test_window_lsf_and_aperture(default):
     lo, hi = MOSFIRE.band_window('J')
     wave = np.array(default['wave_A'])
     assert wave[0] == lo and wave[-1] <= hi and np.allclose(np.diff(wave), MOSFIRE.bands['J'].dispersion_A_per_pix)
-    assert default['n_spec_per_resel'] == pytest.approx(0.7 / 0.277)
-    assert default['lsf_fwhm_A'] == pytest.approx(0.7 / 0.277 * 1.2922)
+    fw = np.hypot(0.7 / 0.292, 1.08)                           # D25 quadrature rule (S16)
+    assert default['n_spec_per_resel'] == pytest.approx(fw)
+    assert default['lsf_fwhm_A'] == pytest.approx(fw * 1.2922)
     assert default['n_spatial_pix'] == 6                       # ceil(1.5 x 0.7 / 0.1798)
     assert default['slit_fraction'] == pytest.approx(0.6567, abs=1e-4)
 
@@ -134,8 +134,8 @@ def test_clipping_and_era_warnings():
     out = etc.compute({'airmass': 2.4, 'pwv_mm': 0.6, 'throughput': {'date': '2016-12-01'}})
     w = ' | '.join(out['warnings'])
     assert 'airmass 2.4 clipped' in w and 'pwv_mm 0.6 clipped' in w and 'offline' in w
-    assert out['meta']['era'] == '2017-02..2025-02'
-    assert any('no throughput curve yet for era 2012-04..2016-09' in x for x in out['warnings'])
+    assert out['meta']['era'] == '2012-04..2016-09'                  # the gap takes the era before it
+    assert not any('no throughput curve yet' in x for x in out['warnings'])
 
 
 def test_seeing_wavelength_scaling():

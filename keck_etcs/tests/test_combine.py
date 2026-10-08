@@ -71,4 +71,20 @@ def test_shipped_era_file_provenance_matches_its_rows():
     assert t.meta['images'] == sorted({str(r['image']) for r in used})
     assert t.meta['pypeit_git_shas'] == sorted({str(r['pypeit_git_sha']) for r in used})
     assert t.colnames == ['wave', 'thru_median', 'thru_mad', 'n_std']
-    assert t.meta['calib_version'] == 'mosfire-J-2026.10-dev' and t.meta['era'] == era.name
+    assert t.meta['calib_version'] == 'mosfire-J-2026.10' and t.meta['era'] == era.name
+
+
+def test_edge_trim_and_a0v_cut():
+    w = np.arange(11172.0, 12600.0, 1.0)
+    c = Table({'wave': w, 'thru_raw': np.interp(w, FW, FT) * 0.25,
+               'thru': MaskedColumn(np.full(w.size, 0.25), mask=np.zeros(w.size, bool))})
+    # FT is 0.9 (its peak) in 11200-12400: a 0.9-of-peak trim keeps exactly that band
+    _, t1, _ = combine.filter_free(c, FW, FT, (11200.0, 12400.0), edge_frac=0.9)
+    assert np.isnan(t1[w < 11200]).all() and np.isfinite(t1[(w >= 11200) & (w <= 12400)]).all()
+    _, t2, _ = combine.filter_free(c, FW, FT, (11200.0, 12400.0), min_wave=11900.0)
+    assert np.isnan(t2[w < 11900]).all() and np.isfinite(t2[(w >= 11900) & (w <= 12400)]).all()
+    rows, curves = make(3, 0.25, divided=True)
+    rows['std_class'] = ['WD', 'A0V', 'WD']
+    t, info = combine.combine_era(rows, curves, ERA, FILTERS)
+    blue = t['wave'] < 11900
+    assert np.all(t['n_std'][blue] == 2) and np.all(t['n_std'][~blue & (t['wave'] <= 12400)] == 3)

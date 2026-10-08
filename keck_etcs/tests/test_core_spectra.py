@@ -93,6 +93,9 @@ def test_lsf_width_rules():
     assert lsf.fwhm_pix(1.0, 0.277, 2.2) == pytest.approx(1.0 / 0.277)
     assert lsf.fwhm_pix(0.3, 0.277, 2.2) == 2.2
     assert lsf.fwhm_pix(1.0, 0.277, 2.2, measured=3.606) == 3.606
+    assert lsf.fwhm_pix(0.7, 0.292, 1.08, form='quadrature') == pytest.approx(np.hypot(0.7 / 0.292, 1.08))
+    with pytest.raises(ValueError):
+        lsf.fwhm_pix(0.7, 0.292, 1.08, form='other')
     assert lsf.resolving_power(12500.0, 3.606 * 1.3) == pytest.approx(12500.0 / (3.606 * 1.3))
     assert lsf.observed_line_fwhm(3.0, 4.0) == pytest.approx(5.0)
     g = lsf.pixel_grid(11530.0, 13520.0, 1.3)

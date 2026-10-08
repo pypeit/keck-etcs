@@ -46,12 +46,19 @@ GAPS = (
                                  'using the era before the repair'),
 )
 
-LSF_SLOPE = 0.277
-"""Slit width per pixel of LSF FWHM [arcsec/pix] (D25, interim): 2022-04-09 OH lines, 1" slit
-FWHM 3.61 px (S13, 2026-10-04). Was 0.24 (XTcalc)."""
+LSF_FORM = 'quadrature'
+"""D25 since the first calibration release (plan S16, Q&A S16-3): ``FWHM_pix = sqrt((w / LSF_SLOPE)^2 +
+LSF_FLOOR_PIX^2)``, fitted to OH lines at 12500 A on 5 nights (1" slit: 3.56-3.61 pix on 4 nights;
+0.7": 2.63 pix; scripts/mosfire/plot_monitor_trends.py). It matches both widths; the earlier
+``max(w / 0.277, 2.2)`` was +0.5 % at 1" and -3.8 % at 0.7"."""
 
-LSF_FLOOR_PIX = 2.2
-"""Minimum LSF FWHM [pix] (D25); not constrained by a 1" slit."""
+LSF_SLOPE = 0.292
+"""Slit width per pixel of LSF FWHM [arcsec/pix] in the D25 quadrature rule (S16). Was 0.277
+(``max`` rule, S13) and 0.24 (XTcalc)."""
+
+LSF_FLOOR_PIX = 1.08
+"""Instrumental LSF FWHM [pix] added in quadrature (D25, S16); set by the single 0.7" night. Was a
+2.2 pix floor in the ``max`` rule."""
 
 MOFFAT_BETA = 3.5
 """Moffat index for slit loss (D26)."""
@@ -133,6 +140,7 @@ MOSFIRE = Instrument(
     gaps=GAPS,
     lsf_slope=LSF_SLOPE,
     lsf_floor_pix=LSF_FLOOR_PIX,
+    lsf_form=LSF_FORM,
     detector_file='mosfire/detector.ecsv',
     sky_grid_file='sky/gemini_mk_sky_grid.fits',
     lsf_file='mosfire/lsf_measurements.ecsv',

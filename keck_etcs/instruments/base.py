@@ -58,6 +58,7 @@ class Instrument:
     throughput_pattern: str = None      # per-era curve, e.g. 'mosfire/throughput/mosfire_thru_{tag}.ecsv' (S10)
     moffat_beta: float = 3.5
     gaps: tuple = ()                    # (start, end, warning) periods inside or between eras
+    lsf_form: str = 'max'               # D25 rule: 'max' or 'quadrature' (keck_etcs.core.lsf.fwhm_pix)
     monitor: dict = None
     _cache: dict = field(default_factory=dict, repr=False, compare=False)
 
@@ -152,6 +153,72 @@ class Instrument:
                     'valid_range_A': tuple(t.meta.get('valid_range_A', (float(t['wave'][0]), float(t['wave'][-1]))))}
         return self._load(('throughput', era.name), load)
 
+    SPLICE_WINDOW = (11900.0, 12450.0)
+    """Where an era's curve and a donor era's curve are compared to scale the donor (as
+    ``keck_etcs.calib.trend.COMMON_WINDOW``)."""
+
+    def throughput_for_window(self, era, lo, hi, margin=0.0):
+        """The era's throughput (:meth:`throughput`), completed over ``lo``-``hi`` where it is not measured.
+
+        An era's curve covers only its standards' filters (2025-04..: one J2
+        night, 11171-12462 A; 2012-04..2016-09: J only, from 11633 A). Where
+        the window extends more than ``margin`` beyond the curve's
+        ``valid_range_A``, the uncovered wavelengths are taken from the
+        nearest other era whose curve covers them, scaled by the median ratio
+        of the two curves over :data:`SPLICE_WINDOW`, with a warning. Without
+        such an era the edge value is held (the caller warns).
+
+        Returns:
+            dict: as :meth:`throughput`, plus ``spliced`` (list of
+            ``(era name, lo, hi, scale)``) and ``covered_A`` (the range now
+            covered).
+        """
+        th = dict(self.throughput(era))
+        th['warnings'] = list(th['warnings'])
+        th['spliced'] = []
+        t_lo, t_hi = th['valid_range_A']
+        if lo >= t_lo - margin and hi <= t_hi + margin:
+            th['covered_A'] = (t_lo, t_hi)
+            return th
+        wave, thru = th['wave_A'], th['thru']
+        i = self.eras.index(th['era'])
+        order = sorted((j for j in range(len(self.eras)) if j != i), key=lambda j: (abs(j - i), j > i))
+        s_lo, s_hi = self.SPLICE_WINDOW
+        mine = (wave >= s_lo) & (wave <= s_hi)
+        for j in order:
+            other = self.eras[j]
+            if not (DATA_DIR / self.throughput_file(other)).exists():
+                continue
+            d = self.throughput(other)
+            if d['era'] != other or not mine.any():
+                continue
+            o_lo, o_hi = d['valid_range_A']
+            need_lo = lo < t_lo - margin and o_lo < t_lo
+            need_hi = hi > t_hi + margin and o_hi > t_hi
+            if not (need_lo or need_hi):
+                continue
+            ref = np.interp(wave[mine], d['wave_A'], d['thru'], left=np.nan, right=np.nan)
+            ok = np.isfinite(ref) & (ref > 0)
+            if not ok.any():
+                continue
+            scale = float(np.median(thru[mine][ok] / ref[ok]))
+            grid = np.arange(min(t_lo, o_lo if need_lo else t_lo), max(t_hi, o_hi if need_hi else t_hi) + 0.5, 1.0)
+            own = (grid >= t_lo) & (grid <= t_hi)
+            new = np.where(own, np.interp(grid, wave, thru), scale * np.interp(grid, d['wave_A'], d['thru']))
+            for side, a, b in (('blue', grid[0], t_lo), ('red', t_hi, grid[-1])):
+                if (side == 'blue' and need_lo) or (side == 'red' and need_hi):
+                    th['spliced'].append((other.name, float(a), float(b), scale))
+                    th['warnings'].append(f'throughput of era {th["era"].name} measured over {t_lo:.0f}-{t_hi:.0f} A; '
+                                          f'{a:.0f}-{b:.0f} A from era {other.name} scaled by {scale:.3f} '
+                                          f'(median ratio over {s_lo:.0f}-{s_hi:.0f} A)')
+            wave, thru = grid, new
+            t_lo, t_hi = float(grid[0]), float(grid[-1])
+            mine = (wave >= s_lo) & (wave <= s_hi)
+            if lo >= t_lo - margin and hi <= t_hi + margin:
+                break
+        th['wave_A'], th['thru'], th['covered_A'] = wave, thru, (t_lo, t_hi)
+        return th
+
     # ---------------------------------------------------------------- derived
     def band_window(self, band):
         """ETC wavelength window (N2): the filter half-power band intersected with the detector footprint."""
@@ -176,8 +243,9 @@ class Instrument:
             fw = float(np.median([r['fwhm_pix'] for r in rows]))
             return fw, f'measured ({len(rows)} row(s) of {self.lsf_file})'
         from keck_etcs.core.lsf import fwhm_pix
-        return fwhm_pix(slit_width, self.lsf_slope, self.lsf_floor_pix), \
-            f'max(w / {self.lsf_slope}, {self.lsf_floor_pix}) (D25)'
+        rule = (f'sqrt((w / {self.lsf_slope})^2 + {self.lsf_floor_pix}^2) (D25)' if self.lsf_form == 'quadrature'
+                else f'max(w / {self.lsf_slope}, {self.lsf_floor_pix}) (D25)')
+        return fwhm_pix(slit_width, self.lsf_slope, self.lsf_floor_pix, form=self.lsf_form), rule
 
     def era_for_date(self, date=None):
         """``(Era, warnings)`` for an ISO date; None gives the latest era.

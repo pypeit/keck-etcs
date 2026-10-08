@@ -60,8 +60,9 @@ def test_lsf_measured_row_takes_precedence():
     fw, src = MOSFIRE.lsf_fwhm_pix(1.0)
     assert fw == pytest.approx(3.6064) and src.startswith('measured')
     fw, src = MOSFIRE.lsf_fwhm_pix(0.7)
-    assert fw == pytest.approx(0.7 / 0.277) and 'D25' in src
-    assert MOSFIRE.lsf_fwhm_pix(0.4)[0] == 2.2
+    assert fw == pytest.approx(np.hypot(0.7 / 0.292, 1.08)) and 'D25' in src and 'sqrt' in src
+    assert fw == pytest.approx(2.627, abs=0.01)          # the 0.7" OH-line width it was fitted to (S16)
+    assert MOSFIRE.lsf_fwhm_pix(0.4)[0] == pytest.approx(np.hypot(0.4 / 0.292, 1.08))
 
 
 def test_eras():
@@ -78,11 +79,24 @@ def test_eras():
 def test_throughput_era_file_and_fallback():
     t = MOSFIRE.throughput(MOSFIRE.eras[1])
     assert t['file'] == 'mosfire/throughput/mosfire_thru_2017-2025.ecsv' and t['warnings'] == []
-    assert t['calib_version'] == 'mosfire-J-2026.10-dev' and t['era'] is MOSFIRE.eras[1]
-    # eras without standards use the nearest era that has a curve
-    for e in (MOSFIRE.eras[0], MOSFIRE.eras[2]):
+    assert t['calib_version'] == 'mosfire-J-2026.10' and t['era'] is MOSFIRE.eras[1]
+    # since the first release (mosfire-J-2026.10) every era has its own curve
+    for e in MOSFIRE.eras:
         f = MOSFIRE.throughput(e)
+        assert f['era'] is e and f['warnings'] == [] and f['file'] == MOSFIRE.throughput_file(e)
+
+
+def test_throughput_falls_back_to_nearest_era(monkeypatch):
+    from keck_etcs.instruments import base
+    real = base.Path.exists
+    missing = base.DATA_DIR / MOSFIRE.throughput_file(MOSFIRE.eras[0])
+    monkeypatch.setattr(base.Path, 'exists', lambda self: False if self == missing else real(self))
+    MOSFIRE._cache.pop(('throughput', MOSFIRE.eras[0].name), None)
+    try:
+        f = MOSFIRE.throughput(MOSFIRE.eras[0])
         assert f['era'] is MOSFIRE.eras[1] and 'no throughput curve yet' in f['warnings'][0]
+    finally:
+        MOSFIRE._cache.pop(('throughput', MOSFIRE.eras[0].name), None)
 
 
 def test_sky_grid_loads():
@@ -130,3 +144,17 @@ def test_recorded_defaults_match_the_schema():
     assert props['aperture']['properties']['length_fwhm']['default'] == mosfire.APERTURE_LENGTH_FWHM_DEFAULT
     lo, hi = mosfire.VALIDATION_J0841['aperture_length_fwhm']['within_1pct']
     assert lo <= mosfire.APERTURE_LENGTH_FWHM_DEFAULT <= hi
+
+
+def test_throughput_for_window_splices_uncovered_wavelengths():
+    era = MOSFIRE.eras[-1]                                   # 2025-04..: one J2 night
+    own = MOSFIRE.throughput(era)
+    lo, hi = MOSFIRE.band_window('J')
+    th = MOSFIRE.throughput_for_window(era, lo, hi)
+    assert th['era'] is era and th['spliced'] and th['spliced'][0][0] == '2017-02..2025-02'
+    assert th['covered_A'][1] > own['valid_range_A'][1]
+    w = np.asarray(th['wave_A'])
+    inside = (w >= own['valid_range_A'][0]) & (w <= own['valid_range_A'][1])
+    np.testing.assert_allclose(th['thru'][inside], np.interp(w[inside], own['wave_A'], own['thru']))
+    lo2, hi2 = MOSFIRE.band_window('J2')
+    assert MOSFIRE.throughput_for_window(era, lo2, hi2, margin=5.0)['spliced'] == []

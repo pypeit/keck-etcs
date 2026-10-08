@@ -383,6 +383,66 @@ empirical `sky_scale` distribution (D14, 8). Compare the
 chain (they should agree at the 10 percent level once the 75 vs 72.4 m^2
 aperture is accounted for).
 
+#### 4.6.1 Results of the first release, `mosfire-J-2026.10` (plan S16, 2026-10-08)
+
+Code: `keck_etcs/calib/trend.py`, `scripts/mosfire/plot_throughput_trend.py`,
+`plot_monitor_trends.py`, `verify_release.py`; figures
+`docs/figures/mosfire_throughput_trend.png` and
+`mosfire_monitor_{fwhm,flat_rate,lsf,sky_scale}.png`. 20 standard-star
+nights, 16 usable, 14 in the era curves (`CHANGES.md` lists them).
+
+**Metric.** `zp_1250` and `thru_median_1117_1260` include the filter, and
+their windows cross the J and J2 edges (J2's red cut-off is at 12463 A), so
+they are compared only within one filter. The trend metric is
+`thru_common`: the median filter-free throughput over 11900-12450 A,
+inside both filters and redward of two systematics found here:
+
+- the tabulated J cut-on is too high (the same white dwarf through J is
+  10 percent below J2 at 11650 A, 0 at 12000 A);
+- every A0V curve is depressed blueward of about 11900 A.
+
+The era curves therefore use J rows only where the J filter is >= 0.9 of
+its peak, and A0V rows only redward of 11900 A (`combine.py`). A J/J2
+offset of about 5 percent remains in 11900-12450 A.
+
+**Throughput.**
+
+| Era | n | `thru_common` median | MAD | slope |
+|---|---|---|---|---|
+| 2012-04..2016-09 | 4 | 0.258 | 2.2 % | -1.0 +- 2.7 %/yr (1.4 yr) |
+| 2017-02..2025-02 | 9 | 0.257 | 2.7 % | -0.3 +- 0.5 %/yr |
+| 2025-04.. | 1 | 0.270 | - | - |
+
+(The 14 rows in the era curves, after the nonlinearity and 3-MAD
+exclusions.)
+
+- No era-to-era change beyond the 3-4 percent per-standard scatter
+  expected in 4.7.
+- Residual correlations of `thru_common` (era medians removed): airmass
+  1.8 sigma, PWV 0.2 sigma, slit width 0.6 sigma.
+- `zp_1250` against airmass in J: 1.9 sigma over the rows in the curves.
+- **A0V model (N3):** unsaturated A0V nights give `zp_1250` 19.77-19.83 in
+  J, against 19.76-19.90 for the white dwarfs. Saturated A0V frames
+  (> 26k ADU) are flagged at harvest and excluded; 55 Dra (19.52) is the one
+  unexplained low night.
+- **XTcalc:** 2012-2016 is +3.6 percent above XTcalc's 2012 curve over
+  11633-13457 A after the 75/72.37 m^2 correction (-10 to +15 percent in
+  250 A bins): the whole chain agrees at the 10 percent level.
+
+**Monitor (D47).**
+
+- 169 rows on 19 metric/era sets carry `trend_3mad`. Rows already
+  `nonlinear` take no part, and dome-flat series are split by lamp power
+  `FPOWER`, which changes between nights (4.0, 9.0, 13.5): the flat rate is
+  only comparable at one lamp power.
+- Dome-flat rate at 12000/12500 A against `zp_1250`: 4 J2 nights, r = -0.78
+  (1.2 sigma), not meaningful across lamp powers.
+- **LSF (D25):** OH lines at 12500 A are 3.56-3.61 pix in 1" (4 nights)
+  and 2.63 pix in 0.7". D25 is now `sqrt((w / 0.292)^2 + 1.08^2)` pix.
+- **Sky (D14):** OH lines over the Gemini model are 0.43-0.91 per night
+  (median 0.82). `sky_scale` stays 1.0, since the continuum between lines
+  (S11: x1.14-1.33) is not monitored.
+
 ### 4.7 Uncertainties
 
 Per-standard zero point: CALSPEC NIR models 1-2 percent; Vega + 2MASS J 3-4

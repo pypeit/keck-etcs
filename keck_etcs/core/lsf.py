@@ -1,7 +1,9 @@
 """Line-spread function, resolving power and sampling on the pixel grid (design 5.3.6, D25).
 
-The LSF is a Gaussian of ``FWHM_pix = max(w / slope, floor)`` pixels, or the
-measured width for that slit where the instrument has one. Source spectrum,
+The LSF is a Gaussian of ``FWHM_pix = max(w / slope, floor)`` pixels (form
+``'max'``) or ``sqrt((w / slope)^2 + floor^2)`` (form ``'quadrature'``; MOSFIRE
+since the first calibration release, D25), or the measured width for that
+slit where the instrument has one. Source spectrum,
 sky, transmission and throughput are all convolved with it and then sampled
 at the pixel centres ``wave_A``.
 """
@@ -11,8 +13,11 @@ SIGMA_PER_FWHM = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 KERNEL_HALFWIDTH_SIGMA = 5.0
 
 
-def fwhm_pix(slit_width, slope, floor, measured=None):
-    """LSF FWHM in pixels: ``measured`` if given, else ``max(slit_width / slope, floor)``.
+def fwhm_pix(slit_width, slope, floor, measured=None, form='max'):
+    """LSF FWHM in pixels: ``measured`` if given, else the D25 rule of ``form``.
+
+    ``form = 'max'``: ``max(slit_width / slope, floor)``; ``form = 'quadrature'``:
+    ``sqrt((slit_width / slope)^2 + floor^2)``.
 
     Args:
         slit_width (float): Slit width [arcsec].
@@ -20,9 +25,14 @@ def fwhm_pix(slit_width, slope, floor, measured=None):
             (MOSFIRE interim 0.277).
         floor (float): Minimum FWHM [pix] (MOSFIRE 2.2).
         measured (float, optional): Measured FWHM for this slit width [pix].
+        form (str): ``'max'`` or ``'quadrature'``.
     """
     if measured is not None:
         return float(measured)
+    if form == 'quadrature':
+        return float(np.hypot(float(slit_width) / slope, float(floor)))
+    if form != 'max':
+        raise ValueError(f'unknown LSF form {form!r}')
     return max(float(slit_width) / slope, float(floor))
 
 

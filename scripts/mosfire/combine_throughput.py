@@ -31,7 +31,7 @@ from keck_etcs.instruments.mosfire import MOSFIRE
 REPO = Path(__file__).resolve().parents[2]
 THRU = DATA_DIR / 'mosfire' / 'throughput'
 INDEX = DATA_DIR / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-J-2026.10'
 SCRIPT = 'scripts/mosfire/combine_throughput.py'
 
 
