@@ -145,3 +145,207 @@ format:
 <Detailed description of the work and what you learned>
 
 ## Logs
+
+### 2026-10-08 (S17: PypeIt MOSFIRE `ronoise` from SAMPMODE/NUMREADS, prepared as a patch)
+
+**Empirical CDS read noise.** `scripts/mosfire/measure_read_noise.py` uses the
+2022-04-09 lamp-off dome flats m220409_0022-0026: CDS (`SAMPMODE = 2`,
+`NUMREADS = 1`), 8.7 s, one coadd, `BUNIT = 'ADU per coadd'`, median levels
+6-16 ADU. It differences consecutive frames and divides by sqrt(2). It takes
+the 4-sigma-clipped standard deviation in 64 x 64 tiles whose level is at or
+below 10 ADU (2398 tiles over the four pairs), multiplies by gain 2.15, and
+removes the residual photon noise per tile.
+
+- Result: **21.4 e-** (16-84 percent of tiles 20.3-22.8; 21.6 before the
+  photon correction), against Keck's CDS value of **21 e-** (ratio 1.018).
+  The per-pair values are 21.0-21.7 e-.
+- The Keck CDS value holds. The lab value of 17.2 e- (Kulas+12) is not what
+  the detector gives on the sky.
+- A first version used 1.4826 MAD and returned discrete values (20.29,
+  22.54). The raw CDS frames come in 0.5 ADU steps, which quantize a MAD of a
+  few ADU, so the script now uses a clipped standard deviation.
+- Without the tile selection, a pair's whole data section gives 23-26 e-.
+  The dome-light structure does not cancel completely there.
+- Summary written to `$KECK_ETCS_DATA/mosfire/20220409/read_noise_cds.json`.
+
+**Pin check.** `scripts/check_pypeit_pin.py` passes. The checkout is at the
+pin bc18a3ba4 (`etc-fixes`, which descends from `develop` f3a1f1d27), with an
+empty diff.
+
+- `get_detector_par` is the same at the pin, at local `develop` and at
+  `origin/develop` (8f7ce9866, 28 commits ahead of local `develop`; none of
+  them touch `keck_mosfire.py` or the tests).
+- `etc-fixes` changes `keck_mosfire.py` only further down: it adds
+  `alignment_box_rows`, `long2pos_bar_widths` and `transfer_wavecal`.
+
+**The change** is in `nautilus/patches/pypeit_mosfire_ronoise.patch`, a `git
+diff` against the pin, 111 lines added and 1 removed. I made it in a scratch
+copy (`git archive` of the pin); the PypeIt checkout was not touched. It
+creates the new test file, so no separate copy is needed.
+
+- **`pypeit/spectrographs/keck_mosfire.py`:**
+  - new module constant `MOSFIRE_READ_NOISE = {1: 21.0, 4: 10.8, 8: 7.7,
+    16: 5.8, 32: 4.2, 64: 3.5, 128: 3.0}`, with the Keck detector-page URL in
+    its docstring;
+  - `MOSFIRE_DEFAULT_READ_NOISE`, the MCDS-16 value;
+  - new function `mosfire_read_noise(sampmode, numreads)`. CDS is N = 1
+    whatever `NUMREADS` says. MCDS uses N = `NUMREADS`, interpolated linearly
+    in log2 N and held at the end values. Single, UTR and missing or
+    non-positive cards return None.
+  - `get_detector_par(det, hdu)` reads `SAMPMODE` and `NUMREADS` from
+    `hdu[0]`. It keeps 5.8 e- when `hdu` is None, and also when the mode is
+    not tabulated, with a `log.warning` in that case.
+- **`pypeit/tests/test_keck_mosfire.py`** (new): the table, the
+  interpolation (MCDS-2, MCDS-12), clipping above the table (MCDS-256), the
+  None cases, and `get_detector_par` with synthetic headers (none, CDS,
+  MCDS-16, MCDS-4, UTR, no cards).
+- `git apply --check` passes against the pin, local `develop` and
+  `origin/develop`.
+- The release-notes line (`doc/releases/2.1.0dev.rst` on `develop`) is not in
+  the patch, because that file changes often on `develop`. Add it when
+  committing.
+
+**Verification.**
+
+- `scripts/mosfire/check_ronoise_patch.py`, run with the scratch copy first
+  on `PYTHONPATH`: `get_detector_par(1, hdu)` returns 21.00 e- for all ten
+  CDS flats (m220409_0017-0026) and 5.80 e- for the six MCDS-16 science and
+  standard frames (0036-0039, 0218-0219). ALL FRAMES AGREE.
+- The same script against the unpatched pin gives MISMATCH on the ten CDS
+  frames (5.8 e-), as expected.
+- PypeIt unit tests on the patched copy: the new file and
+  `test_spectrographs.py` give 15 passed. The full suite gives 742 passed and
+  1 failed. The failure, `test_pkgdata.py::test_github_contents`, is an
+  artifact of the scratch copy: it looks up the scratch repo's branch name
+  (`master`) on GitHub. It passes in the real checkout.
+
+**Dev-suite expectations.** No dev-suite unit test checks the MOSFIRE read
+noise (`unit_tests/test_spectrographs.py` only counts the J2_long files).
+`scripts/mosfire/devsuite_sampmode_census.py` reads the
+`RAW_DATA/keck_mosfire` headers:
+
+- **Every setup has CDS frames.** In most they are the flats and arcs, whose
+  `ronoise` changes from 5.8 to 21 e-.
+- **Science frames are CDS too** in `long2pos1_H`, `long2pos2_H`,
+  `longslit_3x0.7_H` and `longslit_3x0.7_K`. Their 2D variance, object
+  finding and optimal weights change, and those reference outputs may move
+  most.
+- `J_multi` has 52 frames with `SAMPMODE = 3`, `NUMREADS = 1` (MCDS-1, the
+  same as CDS: 21 e-).
+- `mask2_H_with_continuum` science is MCDS-8 (7.7 e-).
+
+**Effect on our own products (not re-reduced).** In `standards.ecsv`, 15 of
+the 20 standard rows are CDS (everything 2014-2021, and Feige110 2024-07-21),
+and 10 of the 14 that enter the era curves are among them. Their variance was computed with 5.8 e-
+where 21 e- is right.
+
+- Boxcar fluxes do not depend on this. Optimal extraction is unbiased for a
+  correct profile; only the weights change.
+- So the throughput is expected to change at well below the 1 percent level.
+  This is not measured: it needs one CDS night reduced with the patch.
+
+**Pin recommendation: wait. Do not pin the `mosfire_ronoise` branch.**
+
+- The branch comes off `develop`, so it lacks the `etc-fixes` commits the
+  MOSFIRE reductions need: `get_arc_extract_center`, `alignment_box_rows`,
+  `transfer_wavecal`, `long2pos_bar_widths` and the `construct_basename`
+  fix. Pinning it would undo those.
+- The pin should move once both `etc-fixes` and `mosfire_ronoise` are merged
+  into `develop`, to a `develop` commit with both, with a tag bump. If it is
+  needed sooner, the patch also applies cleanly on `etc-fixes` at the pin.
+- Correction to the prompt and plan: `build_image.sh` has no
+  `--allow-branch` flag. It accepts a pin on any branch in `PIN_BRANCHES`
+  (default `"develop etc-fixes"`) and warns when that is not `develop`.
+- Either way, a pin that changes `keck_mosfire.py` makes the local
+  `check_pypeit_pin.py` fail by design until the checkout is updated (D35).
+  Here, that means updating the workstation checkout to the new pin.
+
+**Commit message (PypeIt, branch `mosfire_ronoise` off `develop`):**
+
+```
+MOSFIRE read noise from the readout mode (SAMPMODE/NUMREADS)
+
+keck_mosfire.get_detector_par hard-coded ronoise = 5.8 e-, the MCDS-16
+value, for every frame. CDS frames (SAMPMODE=2), common for MOSFIRE flats,
+arcs and short exposures, have 21 e-. The read noise is now taken from the
+Keck detector-page table (CDS 21; MCDS-4/8/16/32/64/128 10.8/7.7/5.8/4.2/
+3.5/3.0 e-), interpolated in log2(NUMREADS). The 5.8 e- default is kept
+without a header and for untabulated modes (Single, UTR), with a warning.
+Adds pypeit/tests/test_keck_mosfire.py.
+```
+
+**PR description (short):**
+
+> **Summary.** `KeckMOSFIRESpectrograph.get_detector_par` now sets `ronoise`
+> from the `SAMPMODE` and `NUMREADS` header cards, using the Keck MOSFIRE
+> detector table, instead of always 5.8 e- (MCDS-16):
+> - CDS = 21 e-;
+> - MCDS-N: 10.8 / 7.7 / 5.8 / 4.2 / 3.5 / 3.0 e- for N = 4 / 8 / 16 / 32 /
+>   64 / 128;
+> - linear in log2 N in between.
+>
+> Without a header, or for Single and UTR reads, it stays at 5.8 e- and logs
+> a warning.
+>
+> **Check.** The difference of two CDS lamp-off dome flats (2022-04-09)
+> gives 21.4 e- against the table's 21 e-.
+>
+> **Tests.** New `pypeit/tests/test_keck_mosfire.py` (synthetic headers).
+>
+> **Dev-suite impact.** Every keck_mosfire setup has CDS calibration frames.
+> long2pos1_H, long2pos2_H and longslit_3x0.7_H/K also have CDS science
+> frames, so their 2D variance and extraction weights change; expect small
+> shifts in those reference outputs.
+
+**Files.**
+
+- New in keck-etcs:
+  - `scripts/mosfire/measure_read_noise.py`
+  - `scripts/mosfire/check_ronoise_patch.py`
+  - `scripts/mosfire/devsuite_sampmode_census.py`
+  - `nautilus/patches/pypeit_mosfire_ronoise.patch`
+- The patch sits under `nautilus/`, so the image build copies it in. It is
+  not applied there and is harmless.
+- The user's steps on the workstation:
+
+  ```
+  git switch develop && git pull
+  git switch -c mosfire_ronoise
+  git apply <keck-etcs>/nautilus/patches/pypeit_mosfire_ronoise.patch
+  pytest pypeit/tests/test_keck_mosfire.py
+  ```
+
+  Then commit and push. Switch back to `etc-fixes` afterwards, so the
+  checkout stays at the pin.
+
+### 2026-10-09 (S17 follow-up: patch applied in the PypeIt checkout)
+
+At the user's request, `nautilus/patches/pypeit_mosfire_ronoise.patch` is
+applied in `/mnt/tank/Astronomy/PypeIt/PypeIt`. The user chose to stay on
+`etc-fixes` (HEAD bc18a3ba4, the pin), not to make a separate branch off
+`develop`. A release-notes item is added under "Instrument-specific Updates"
+in `doc/releases/2.1.0dev.rst`. The user commits and pushes.
+
+Checks on the real checkout:
+
+- `test_keck_mosfire.py` plus `test_spectrographs.py`: 15 passed.
+- `scripts/mosfire/check_ronoise_patch.py`: ALL FRAMES AGREE (CDS 21 e-,
+  MCDS-16 5.8 e-).
+
+Because the fix is on `etc-fixes`, it can be pinned directly once
+committed: no merge to `develop` is needed first, and `build_image.sh`
+already accepts `etc-fixes`. Pinning that commit needs:
+
+1. `nautilus/pypeit_pin.txt` set to the new SHA;
+2. an image tag bump to 0.2.6;
+3. `check_pypeit_pin.py` rerun.
+
+Until the commit is pinned, `check_pypeit_pin.py` fails here by design (D35):
+`keck_mosfire.py` differs from the pin. Nights reduced after the bump carry
+the new `pypeit_git_sha`. The mosfire-J-2026.10 products stay as they are
+(expected change well under 1 percent; not measured).
+
+The user committed and pushed the fix on 2026-10-09 as `etc-fixes`
+38bb1b747d55a5b9205cbeb62734b0e870223990 ("readnoise fix"). The pin stays at
+bc18a3b for now. It moves to 38bb1b7, with image 0.2.6, before the next
+Nautilus reduction.
