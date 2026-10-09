@@ -7,6 +7,31 @@ standards added, the era medians before and after, any detector-table
 change, and the image tags (with digests) of the Nautilus reductions that
 fed it.
 
+## Code (unreleased, after 0.2.5)
+
+- **Packaging (S18):**
+  - `install_requires` is now what `keck_etcs.core` and `keck_etcs.etc`
+    import: numpy, scipy, astropy, jsonschema and pyyaml;
+  - PypeIt, matplotlib, IPython and boto3 move to the `calib` extra, and
+    pytest to `test`;
+  - `package_data` now also ships the per-standard curves
+    (`keck_etcs/data/mosfire/throughput/standards/`), so a wheel holds all
+    40 files of `keck_etcs/data/`.
+- **PypeIt (S17):** `KeckMOSFIRESpectrograph.get_detector_par` takes
+  `ronoise` from `SAMPMODE`/`NUMREADS` (Keck table; CDS 21 e-, was 5.8 for
+  every frame).
+  - Committed on `etc-fixes` as `38bb1b747d55a5b9205cbeb62734b0e870223990`;
+    the patch is `nautilus/patches/pypeit_mosfire_ronoise.patch`.
+  - Not yet pinned. The next image (0.2.6) should pin it. No released
+    product uses it.
+  - A CDS lamp-off flat pair gives 21.4 e- (`measure_read_noise.py`).
+- **Docs (S18):**
+  - `README.md` usage;
+  - `nautilus/README.md` as the operator guide;
+  - `docs/wmko_api_note.md`;
+  - the design document "as built" (v0.5);
+  - `scripts/check_docs.py`, which checks that the docs agree.
+
 ## Calibration releases
 
 ### mosfire-J-2026.10 (2026-10-08, plan S16; first release)
@@ -71,6 +96,15 @@ rows; 14 enter the era curves).
   -10 to +15 percent in 250 A bins).
 
 **Detector table:** unchanged.
+
+**Validation against this release** (S18, 2026-10-09;
+`scripts/mosfire/validate_j0841.py` on the unchanged 0.1.6 products):
+
+- J0841+3814 2022-04-09, ETC/measured S/N: 0.982 over the band and 0.990
+  between OH lines. Both pass (20 and 10 percent); they were 0.996 and 1.003
+  with the S10 curve.
+- XTcalc comparison (`compare_xtcalc.py`): ratios 0.895-1.013 (0.7") and
+  1.078-1.291 (1.0"); they were 0.891-1.005 and 1.067-1.271.
 
 **Reductions used** (image | digest | PypeIt pin):
 

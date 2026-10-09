@@ -40,7 +40,11 @@ def test_d18_criterion(summary):
 
 
 def test_signal_closure_and_n5(summary):
-    assert abs(summary['signal_ratio_etc_over_measured'] - 1) <= 0.02
+    # S11 (throughput = LDS749B 2022-04-09 alone) made this a closure: 0.999. Since mosfire-J-2026.10 the
+    # 2017-02..2025-02 curve is the median of 9 standards, and this J2 night sits above it within the
+    # per-standard scatter (MAD 2.7 %) and the J/J2 offset (~5 %): 0.980 (S18). 3 % allows that, and
+    # still catches a broken signal chain.
+    assert abs(summary['signal_ratio_etc_over_measured'] - 1) <= 0.03
     assert abs(summary['n5_oh_centroid_offset_meas_minus_gemini']['median_offset_A']) < 0.5
 
 

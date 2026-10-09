@@ -1,6 +1,6 @@
 # Keck/MOSFIRE J-band: sensitivity analysis and exposure-time calculator design
 
-*Version 0.4, 2026-10-04. Decisions come from the Q&A in
+*Version 0.5 ("as built"), 2026-10-09. Decisions come from the Q&A in
 `claude_prompts/keck_mosfire/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed; round
 (d) on Nautilus, Q27-Q39, answered 2026-09-30; Calibrations, Q40-Q48,
 answered 2026-10-04). Readers: the PypeIt/keck-etcs
@@ -54,6 +54,33 @@ wavelength-calibrated on OH sky lines, not lamps, so the OH lines act as
 the "arc" for widths and serve as a sky monitor for brightness. The Ne/Ar
 lamp lines are an instrument monitor, but only on nights with lamp frames.
 
+*Change note, v0.5 (2026-10-09, plan S18, "as built"):* this version
+describes what was built for the MOSFIRE J milestone. It runs to keck_etcs
+0.2.5, image 0.2.5 and the first calibration release, `mosfire-J-2026.10`
+(4.6.1, `CHANGES.md`). Changes from v0.4:
+
+- **LSF (D25, 5.3.6):** quadrature form, `sqrt((w / 0.292)^2 + 1.08^2)` pix,
+  fitted on 1" and 0.7" OH lines.
+- **Combine (4.5):**
+  - J rows are kept only where the J filter is >= 0.9 of its peak;
+  - A0V rows only redward of 11900 A;
+  - the 3-MAD test runs over 11900-12450 A;
+  - an era curve is completed over a band window from the nearest era
+    that measured the rest of it.
+- **Pin (D31, 4.8.2):** on PypeIt `etc-fixes` (`bc18a3b`), not `develop`.
+- **Workstation (D35):** the reference reduction and the local checks run
+  on the Linux workstation, in `pypeit14b`, with the checkout at the pin.
+- **Jobs (4.8.1, 4.8.4, 4.8.6):** per-index retries and exit-2 data
+  outcomes.
+- **PypeIt `ronoise` fix (D19):** done (S17).
+- **Validation and the XTcalc comparison:** re-run against the release
+  (6.1.1, appendix A).
+- **Definition of done:** status in section 7; section 8 updated.
+
+The operator guide is `nautilus/README.md`, the WMKO interface
+`docs/wmko_api_note.md`. `scripts/check_docs.py` checks that they agree with
+the schemas, `index.yaml`, `CHANGES.md` and the outputs.
+
 ## 1. Purpose and scope
 
 Two deliverables share one code base:
@@ -98,23 +125,23 @@ masks, imaging, and the other Keck instruments (which will reuse
 | D16 | Moffat beta = 3.5 slit loss; extraction aperture 1.5 x FWHM along the slit; the factor is calibrated in validation. | PypeIt optimal extraction behaves like ~1.2 x FWHM; validation sets the effective value. |
 | D17 | S/N per spectral pixel is the headline; S/N per resolution element is also returned. | Comparable with XTcalc. |
 | D18 | Validation: reproduce PypeIt's measured S/N on J0841+3814 within 20 percent over the band. | Measured S/N, not another ETC, is the target. |
-| D19 | PypeIt fix: `ronoise` from `NUMREADS`/`SAMPMODE`, drafted as a PypeIt branch. | PypeIt hard-codes 5.8 e-. |
+| D19 | PypeIt fix: `ronoise` from `NUMREADS`/`SAMPMODE`, drafted as a PypeIt branch. *As built (S17, 2026-10-09):* committed on `etc-fixes` as `38bb1b7` (patch in `nautilus/patches/pypeit_mosfire_ronoise.patch`, test `pypeit/tests/test_keck_mosfire.py`). It is not yet in the image pin. A CDS flat pair measures 21.4 e-. | PypeIt hard-codes 5.8 e-. |
 | D20 | Package layout of section 5.1. | Instrument-agnostic core for the other Keck ETCs. |
 | D21 | ECSV for 1-D tables under ~1 MB; FITS for grids; every file carries provenance metadata; `keck_etcs/data/index.yaml` indexes products. | Diff-able in git; provenance for WMKO. |
 | D22 | "Current" throughput = pixel-wise median of the latest era's standards, with MAD; `date` selects an era; `throughput_scale` is a free factor; nights beyond 3 MAD in band median are excluded whole. | Robust to a bad night; era-aware. |
 | D23 | Gemini grid rebinned (flux-conserving) to 0.05 nm over 0.95-2.45 um, one FITS file of ~3 MB committed to git. No git-lfs, no download on first use. | MOSFIRE's narrowest LSF is ~0.36 nm; the native 45 MB is too large for git. |
-| D24 | Data root `KECK_ETCS_DATA` (default `/Users/xavier/Projects/PypeIt/keck-etcs-data`) with `mosfire/<YYYYMMDD>/{raw,redux,sens}`; only harvested tables and combined products are committed. | Raw KOA data and PypeIt outputs are large. |
-| D25 | Gaussian LSF, FWHM = max(slit / 0.277"/pix, 2.2 pix) x dispersion; floor and slope measured from OH lines. *Revised 2026-10-04 (S13, user):* the slope was 0.24"/pix (XTcalc); OH lines of the 2022-04-09 1" slit give FWHM 3.61 px, R 2677 at 1.25 um, i.e. 0.277"/px. Interim until other slit widths (part 5) separate slope and floor. | Anamorphic factor 1.48 makes the dispersion-direction pixel 0.24", but the measured slit-limited LSF is 15% narrower than slit / 0.24". |
+| D24 | Data root `KECK_ETCS_DATA` (default `~/Projects/PypeIt/keck-etcs-data`) with `mosfire/<YYYYMMDD>/{raw,redux,sens}`; only harvested tables and combined products are committed. | Raw KOA data and PypeIt outputs are large. |
+| D25 | Gaussian LSF, FWHM = max(slit / 0.277"/pix, 2.2 pix) x dispersion; floor and slope measured from OH lines. *Revised 2026-10-04 (S13, user):* the slope was 0.24"/pix (XTcalc); OH lines of the 2022-04-09 1" slit give FWHM 3.61 px, R 2677 at 1.25 um, i.e. 0.277"/px. Interim until other slit widths (part 5) separate slope and floor. *As built (S16, 2026-10-08):* `FWHM = sqrt((w / 0.292)^2 + 1.08^2)` pix x dispersion, fitted on the 1" (3.56-3.61 px, 4 nights) and 0.7" (2.63 px) OH widths (`lsf_form = 'quadrature'`); a measured width for the slit still takes precedence. | Anamorphic factor 1.48 makes the dispersion-direction pixel 0.24", but the measured slit-limited LSF is 15% narrower than slit / 0.24". |
 | D26 | Moffat beta 3.5; seeing FWHM quoted at the observing band, optional `seeing_wave_um` with lambda^-0.2 scaling; 2-D integral over the slit x aperture rectangle; extended sources are a top-hat convolved with the Moffat. | Standard practice. |
 | D27 | Tests: analytic unit tests, a frozen JSON regression fixture, the XTcalc comparison as a script (not CI), the J0841 validation as a `slow` test. | See section 6. |
 | D28 | Semantic versions for code, date tags for calibration products (`mosfire-J-2026.10`), both echoed in every output with `pypeit_version`; `CHANGES.md`; a calibration release touches only `keck_etcs/data/` and `CHANGES.md`. | WMKO can diff releases. |
 | D29 | Definition of done in section 7. | |
 | D30 | All PypeIt reductions (`pypeit_setup`, `run_pypeit`, `pypeit_sensfunc`, the per-night harvest) and the KOA raw-data downloads run as Kubernetes Jobs on the NRP Nautilus cluster, following the conventions of the user's PAB project and the PypeIt dev suite; the ETC library, its tests, the combine/trend/validation analyses and the KOA metadata search stay local. Section 4.8. | User decision, Prompt #5 (2026-09-30). Tens of KOA nights do not belong on a laptop; the user already runs PypeIt and PAB on Nautilus, and Nautilus S3 already hosts PypeIt's telluric grids. |
-| D31 | Container image `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:<semver>` (public registry, same as `profx/pab`), base `python:3.12`, built on the user's Linux workstation. PypeIt is installed from GitHub at a pinned commit on **`develop`** (recorded in `nautilus/pypeit_pin.txt`; `f3a1f1d27` = `origin/develop` on 2026-09-30, re-pinned only deliberately with an image tag bump); `keck_etcs` installed from this repo; the PypeIt cache populated at build time (`pypeit_cache_github_data keck_mosfire`, `pypeit_install_telluric` on `TellPCA_3000_26000_R10000.fits`, `XDG_CACHE_HOME` pinned); PypeIt and keck_etcs SHAs baked in as `KECK_ETCS_GIT_SHAS` (ENV + label). Section 4.8.2. | Q29, Q30, Q31, Q38. `orig-hires-fixes` is not needed for this work; `develop` is PypeIt's integration branch. 3.12 is what the dev suite and PAB use; switch to 3.14 only if the dry run shows a numerical difference. |
+| D31 | Container image `gitlab-registry.nrp-nautilus.io/profx/keck-etcs:<semver>` (public registry, same as `profx/pab`), base `python:3.12`, built on the user's Linux workstation. PypeIt is installed from GitHub at a pinned commit on **`develop`** (recorded in `nautilus/pypeit_pin.txt`; `f3a1f1d27` = `origin/develop` on 2026-09-30, re-pinned only deliberately with an image tag bump; *as built:* the pin is `bc18a3b` on the PypeIt branch `etc-fixes` = `develop` + the MOSFIRE fixes found in reduction, a recorded exception until it merges, 4.8.2); `keck_etcs` installed from this repo; the PypeIt cache populated at build time (`pypeit_cache_github_data keck_mosfire`, `pypeit_install_telluric` on `TellPCA_3000_26000_R10000.fits`, `XDG_CACHE_HOME` pinned); PypeIt and keck_etcs SHAs baked in as `KECK_ETCS_GIT_SHAS` (ENV + label). Section 4.8.2. | Q29, Q30, Q31, Q38. `orig-hires-fixes` is not needed for this work; `develop` is PypeIt's integration branch. 3.12 is what the dev suite and PAB use; switch to 3.14 only if the dry run shows a numerical difference. |
 | D32 | Storage: the **private** bucket `s3://keck-etcs` on Nautilus S3 (Ceph RGW; created by the user 2026-09-30; only the user has read/write) is the canonical store of raw and reduced data, laid out as in 4.2. Every access, local (`scripts/nautilus/s3_sync.py`) or in-pod (a mounted credentials secret in namespace `pypeit`), uses the user's credentials; nothing is public. Pods work on `emptyDir` scratch; no PVC. `$KECK_ETCS_DATA` is the local mirror. Products reach WMKO and collaborators through the committed ECSV/FITS files in git, not through S3 URLs. | Q27, Q28, Q35. A private bucket needs no policy work and cannot be overwritten by others; the committed products were always the primary record (D21, D28). |
 | D33 | One night per pod as an Indexed Job over a night manifest (`completions = n_nights`, `parallelism` 4 to start); each pod idempotent (a night whose `run_manifest.json` exists on S3 is skipped unless `REPLACE=1`). Section 4.8.4. | Q34. PypeIt nights share no writer, so fan-out is safe; PAB's single pod protected a single SQLite writer. |
 | D34 | Each night job harvests its own `sens_*.fits` (`keck_etcs.calib.harvest`) and pushes the per-standard row and curve to `mosfire/<night>/harvest/`; the local `scripts/mosfire/harvest_sens.py --merge` builds `standards.ecsv`. Harvesting a synced sens file locally gives the same row. | Q36. |
-| D35 | The 2022-04-09 night is reduced once locally in `pypeit14`, whose PypeIt checkout stays on `orig-hires-fixes` (user, 2026-09-30) and must be **MOSFIRE-equivalent to the image pin**: `scripts/check_pypeit_pin.py` (plan step S0) passes only if (1) the pin is an ancestor of the local HEAD and (2) the diff from the pin to HEAD, plus any uncommitted changes, touches only an allow-list of paths irrelevant to MOSFIRE J reductions (other spectrographs' `pypeit/spectrographs/*.py`, excluding `keck_mosfire.py`, `spectrograph.py`, `util.py` and `__init__.py`; `doc/`; `*.rst`; tests). It reports both SHAs and the file list; anything else fails with the offending files named. The reference reduction records `pypeit_git_sha` (its actual commit, `017bece06` today), `pypeit_pin` (`f3a1f1d27`) and the check result. That reduction gates the Nautilus dry run: `gates.py --reference` first requires the reference's recorded pin to equal the image pin with a passed check, then the in-pod LDS749B zero point must agree to 1 percent over 1.117-1.260 um. Every other night is reduced on Nautilus only. If the pin later moves to a commit that changes MOSFIRE code, the local check fails by design until the user brings the laptop checkout up to date or the reference is redone elsewhere. | Q37, Q38, follow-up 2026-09-30. On that date the local diff from the pin is `keck_hires.py` only (+131/-33), so the MOSFIRE code path is identical; requiring equal SHAs would force a branch switch the user does not want. |
+| D35 | *As built:* the local work moved to the Linux workstation (`pypeit14b`), whose PypeIt checkout sits at the pin itself, so the check passes with an empty diff. As designed: the 2022-04-09 night is reduced once locally in `pypeit14`, whose PypeIt checkout stays on `orig-hires-fixes` (user, 2026-09-30) and must be **MOSFIRE-equivalent to the image pin**: `scripts/check_pypeit_pin.py` (plan step S0) passes only if (1) the pin is an ancestor of the local HEAD and (2) the diff from the pin to HEAD, plus any uncommitted changes, touches only an allow-list of paths irrelevant to MOSFIRE J reductions (other spectrographs' `pypeit/spectrographs/*.py`, excluding `keck_mosfire.py`, `spectrograph.py`, `util.py` and `__init__.py`; `doc/`; `*.rst`; tests). It reports both SHAs and the file list; anything else fails with the offending files named. The reference reduction records `pypeit_git_sha` (its actual commit, `017bece06` today), `pypeit_pin` (`f3a1f1d27`) and the check result. That reduction gates the Nautilus dry run: `gates.py --reference` first requires the reference's recorded pin to equal the image pin with a passed check, then the in-pod LDS749B zero point must agree to 1 percent over 1.117-1.260 um. Every other night is reduced on Nautilus only. If the pin later moves to a commit that changes MOSFIRE code, the local check fails by design until the user brings the laptop checkout up to date or the reference is redone elsewhere. | Q37, Q38, follow-up 2026-09-30. On that date the local diff from the pin is `keck_hires.py` only (+131/-33), so the MOSFIRE code path is identical; requiring equal SHAs would force a branch switch the user does not want. |
 | D36 | Reduction provenance on every product: `image`, `image_digest`, `pypeit_git_sha`, `keck_etcs_git_sha`, `job_name`, `s3_prefix`, in the per-standard table (4.4), the per-night `run_manifest.json`, the curve and era `meta` (5.4) and `CHANGES.md` (5.5). A locally harvested row carries `image = local`. | Q38. |
 | D37 | KOA raw-frame downloads run as a Nautilus Job writing to `mosfire/<night>/raw/` on S3 with a manifest; the KOA metadata search stays local; fallback is a local download and `s3_sync.py push` if pods cannot reach KOA anonymously (checked first in plan step S14b). The 2022-04-09 dev-suite frames are pushed from the workstation. | Q33. |
 | D38 | Stays local, in `pypeit14`, on synced products: `keck_etcs.core`, `etc.compute`, the schemas, tests, the Gemini grid build, combine, trend, the J0841 validation, the XTcalc comparison, the KOA metadata search, the PypeIt `ronoise` branch (off `develop`) and the documentation. Pods never call `compute()`; the core keeps its no-I/O rule. | Q39. |
@@ -242,7 +269,7 @@ s3://keck-etcs/
 ```
 
 The local data root `KECK_ETCS_DATA` (default
-`/Users/xavier/Projects/PypeIt/keck-etcs-data`, never in git) keeps the same
+`~/Projects/PypeIt/keck-etcs-data`, never in git) keeps the same
 layout and is a *mirror* of the bucket, filled by
 `scripts/nautilus/s3_sync.py pull mosfire/<night>` (sens, harvest, spec1d and
 `Calibrations/WaveCalib*` by default; raw and spec2d on request). It also
@@ -366,6 +393,22 @@ deviates by more than 3 MAD from the era median are excluded as a whole
 default is the latest era; a `date` input selects an era; `throughput_scale`
 applies a global factor.
 
+*As built (S16; `keck_etcs/calib/combine.py`):*
+
+- Each row's filter-free curve is kept inside the filter's half-power
+  band. J rows are further kept only where the J filter is >= 0.9 of its
+  peak (`EDGE_TRIM_FRAC`), and A0V rows only redward of 11900 A
+  (`A0V_MIN_WAVE`); 4.6.1 gives the reasons.
+- The 3-MAD test compares nights over `COMMON_WINDOW` = 11900-12450 A,
+  inside both filters. It needs at least 3 nights.
+- An era curve covers only what its standards measured (2025-04.. has one
+  J2 standard, 11171-12462 A). `Instrument.throughput_for_window`
+  completes a band window from the nearest era that measured the rest,
+  scaled by the median ratio of the two curves over 11900-12450 A, with a
+  warning. In the release that is 2025-04.. over J (x 1.024) and
+  2012-2016 over J2 (x 1.005). Beyond every era the edge value is held,
+  with a warning.
+
 ### 4.6 Trend analysis
 
 Plot `zp_1250` and `thru_median_1117_1260` against date with the era
@@ -468,7 +511,8 @@ scripts) and `PypeIt-development-suite/nautilus/` (`gen_kube_devsuite`,
 
 - One Kubernetes Job (`batch/v1`) per unit of work, `restartPolicy: Never`,
   `backoffLimit: 4` for idempotent, resumable work and `0` for one-shots and
-  validation runs, `activeDeadlineSeconds` as a safety net against hung pods,
+  validation runs (*as built:* the night Job uses `backoffLimitPerIndex: 1`
+  and a `podFailurePolicy` instead, 4.8.6), `activeDeadlineSeconds` as a safety net against hung pods,
   `imagePullPolicy: Always` on a semver tag with the image digest noted in a
   comment.
 - `command: ["/bin/bash", "-lc"]` with a YAML literal block (`|`, never the
@@ -553,6 +597,19 @@ declared last, so that a new commit does not invalidate layers 1-3.
 `check_pypeit_pin.py` runs in image mode: it passes when
 `KECK_ETCS_GIT_SHAS.pypeit` equals the pin.
 
+*As built (2026-10-08):* the pin moved along `etc-fixes` with each
+MOSFIRE fix found in reduction:
+
+- `fb47905` (image 0.2.2): `get_arc_extract_center` and
+  `alignment_box_rows`;
+- `fb6fb62` (0.2.3, 0.2.4): `transfer_wavecal` and `long2pos_bar_widths`;
+- `bc18a3b` (0.2.5): `construct_basename`.
+
+Image 0.2.5 is current. The `ronoise` fix (D19) is on `etc-fixes` as
+`38bb1b7` and goes into the next image. `nautilus/README.md` has every tag
+with its digest, keck-etcs commit and pin. The `--allow-branch` flag
+anticipated in plan S17 does not exist: `PIN_BRANCHES` serves the purpose.
+
 **4.8.3 Storage (D32).** Layout in 4.2. The pod's working directory is an
 `emptyDir` sized by `ephemeral-storage` (a MOSFIRE night is a few GB of
 outputs); nothing is written to a shared file system. Push list per night:
@@ -602,7 +659,27 @@ gate results. `keck_etcs.calib.harvest` copies these into the per-standard
 row (4.4) and into the `meta` of the curve file (5.4). A calibration release
 lists in `CHANGES.md` the image tags whose reductions it used.
 
-**4.8.6 Failure handling.** A night is `success` only when all gates pass and
+**4.8.6 Failure handling.**
+
+*As built (S15a, 2026-10-06):* data outcomes exit 2 and infrastructure
+failures exit 1.
+
+- **Data outcomes:** `no calibs`, `setup failed`, `no trace`, `sens failed`,
+  `gate failed` and `pin check failed`. The Job's `podFailurePolicy` turns
+  exit 2 into `FailIndex`.
+- **Infrastructure failures:** `pull failed`, `push failed`,
+  `reduce failed`, OOM. These are retried once per index
+  (`backoffLimitPerIndex: 1`).
+- **Evictions** (`DisruptionTarget`) are ignored.
+- **Why:** the pilot's global `backoffLimit: 4`, exhausted by three
+  `no trace` nights, had deleted healthy pods.
+- **Status rows:** one object per pod,
+  `runs/<job>/status/<index>_<night>.ecsv`. `night_failures.py` takes each
+  night's latest row.
+- **Products** are always pushed with `--force`, so a re-reduction
+  replaces same-size files.
+
+As designed: a night is `success` only when all gates pass and
 the push completes; otherwise the pod writes `status in {no calibs, setup
 failed, reduce failed, no trace, sens failed, gate failed, push failed}` with
 the exception text to `runs/<job_name>/status.ecsv` and exits non-zero, so the
@@ -645,8 +722,9 @@ call, and every analysis that reads harvested products: the Gemini grid build
 (S3), core, instrument module, `compute()`, tests, `combine`, `trend`, the
 J0841 validation (on synced spec1d and sens files), the XTcalc comparison, the
 KOA metadata search, the PypeIt `ronoise` branch, and the documentation.
-`pypeit14` remains the local environment; the image pins the same PypeIt
-commit so local and in-pod PypeIt agree.
+`pypeit14` remains the local environment (*as built:* `pypeit14b` on the
+Linux workstation); the image pins the same PypeIt commit so local and
+in-pod PypeIt agree.
 
 **4.8.9 Backup (D39).** Nautilus S3 is not backed up and the raw frames are
 re-downloadable, so the backup set is the high-level products only, per
@@ -674,7 +752,7 @@ re-reduction regenerates).
 
 **4.8.10 Residual verification items** are listed in section 8 (credentials
 secret, registry project and token, local PypeIt checkout on `develop`, KOA
-reachability from pods).
+reachability from pods). *All settled by 2026-10-08* (section 8).
 
 ### 4.9 Calibration monitor (v0.4; D40-D47)
 
@@ -978,6 +1056,9 @@ and resampled to `wave_A`.
 
 **5.3.4 System throughput.** `T_sys(lam)` = era median curve (4.5) times the
 filter curve `F(lam)` times `throughput.scale`, convolved with the LSF.
+*As built:* the era curve is completed over the band window as in 4.5.
+The product `N0 T_atm T_sys` is convolved as a whole, rather than each
+factor separately, so a line on a telluric feature is handled correctly.
 
 **5.3.5 Slit loss and aperture.** Moffat profile with beta = 3.5 and FWHM
 `s` (at the band):
@@ -1000,7 +1081,7 @@ kept for saturation.
 **5.3.6 LSF and resolution.**
 
 ```
-FWHM_pix = max( w / 0.277 , 2.2 )                [pixels, D25; slope revised 2026-10-04]
+FWHM_pix = sqrt( (w / 0.292)^2 + 1.08^2 )        [pixels, D25 as built, S16; was max(w / 0.277, 2.2)]
 FWHM_lsf = FWHM_pix * dlam                        [A]
 R(lam)   = lam / FWHM_lsf
 n_spec   = FWHM_pix                               [pixels per resolution element]
@@ -1014,7 +1095,10 @@ R = 2677 at 1.25 um, which sets the interim slope at 0.277"/px. It was
 is not constrained by a 1" slit. Widths other than 1" are provisional
 until part 5's KOA nights measure them; the slope-only form predicts R of
 about 3820 at 0.7", against the 3318 published by WMKO. The instrument
-module uses the measured row where one exists for the slit. The LSF is Gaussian; source spectrum, sky,
+module uses the measured row where one exists for the slit. *As built (S16):*
+the 0.7" OH lines (2.63 px) separated slope and floor. The quadrature
+fit gives +3.9 percent at 0.7" and -0.6 percent at 1" against the
+interim rule (`keck_etcs.core.lsf.fwhm_pix(form='quadrature')`). The LSF is Gaussian; source spectrum, sky,
 transmission and throughput are all convolved with it before sampling on
 `wave_A`. A line's observed FWHM is `sqrt(FWHM_line^2 + FWHM_lsf^2)` with
 `FWHM_line = lam * fwhm_kms / c`.
@@ -1214,6 +1298,28 @@ not circular. Later, every KOA quasar night adds a validation point.
   - N5 holds: the Gemini grid is consistent with vacuum to 0.1 A
     (0.05 px).
 
+#### 6.1.2 Re-run against the release `mosfire-J-2026.10` (plan S18, 2026-10-09)
+
+Same products (image 0.1.6) and script. The ETC is keck_etcs 0.2.5. The
+2017-02..2025-02 curve is now the median of 9 standards, and the LSF is
+the D25 quadrature form. The S11 outputs are kept in
+`validation_S11_2026-10-05/`.
+
+| Quantity | S11 (LDS749B curve) | Release |
+|----------|------|------|
+| ETC / measured S/N, band | 0.996 | **0.982** (pass) |
+| ETC / measured S/N, between OH lines | 1.003 | **0.990** (pass) |
+| ETC / measured S/N, per frame | 0.94-1.06 | 0.92-1.04 |
+| Signal, ETC / measured | 0.999 | 0.980 |
+| Sky, measured / Gemini, OH lines / between | 0.86 / 1.33 | 0.89 / 1.34 |
+| OH centroids, measured - Gemini | -0.07 A | -0.07 A (MAD 0.09, 27 lines) |
+| Best `aperture.length_fwhm` | 2.22 | 1.88 |
+
+The signal is no longer a closure. The night's own standard (J2) sits
+2 percent above the era median, within the per-standard scatter and the
+J/J2 offset of 4.6.1. The slow test's signal tolerance moved from 2 to
+3 percent for this reason (`test_validation_j0841.py`). D18 passes.
+
 ### 6.2 Tests (pytest, `keck_etcs/tests/`)
 
 - Unit tests with analytic cases: Poisson-only limit (`SNR = sqrt(S)` when
@@ -1232,6 +1338,14 @@ not circular. Later, every KOA quasar night adds a validation point.
   rejected with a message naming the field.
 - Slow (`-m slow`, needs `KECK_ETCS_DATA`): the J0841 validation of 6.1 with
   the 20 percent criterion.
+- *As built (2026-10-09):* `pytest` runs 111 tests in about 6 s.
+  `pytest -m slow --run-slow` adds 3 J0841 tests; all pass. The regression
+  helper is `scripts/regen_regression_fixtures.py --regen --note`. Other
+  tests cover the harvest, combine, trend, monitor, standards, KOA
+  manifest and night-failure logic, and a check that `keck_etcs.core`
+  imports without PypeIt, boto3, matplotlib or astropy.
+  `scripts/check_docs.py` checks the documents against the schemas and the
+  release.
 - Not a test: `scripts/mosfire/compare_xtcalc.py` re-implements XTcalc's
   formula on XTcalc's own data files and tabulates the ratio of our S/N to
   XTcalc's for a grid of magnitudes and slits; the result goes in the design
@@ -1252,6 +1366,18 @@ not circular. Later, every KOA quasar night adds a validation point.
 7. A calibration-monitor table (4.9) for every reduced night, with the
    monitor trends of 4.6 (D40).
 
+*Status (2026-10-09, plan S18):*
+
+| Item | Status | Evidence |
+|---|---|---|
+| 1 | **Met** | 20 standard nights, 14 in the era curves, across all three eras: 4 / 9 / 1 standards (LDS749B plus 13 KOA). Era medians and MADs in 4.6.1; `docs/figures/mosfire_throughput_trend.png`; release `mosfire-J-2026.10` |
+| 2 | **Met** | `compute()` for J and J2. Schemas in `keck_etcs/schema/`. 111 unit, schema and regression tests pass. |
+| 3 | **Met** | J0841+3814: ETC/measured 0.982 over the band, 0.990 between OH lines, against the release (6.1.2) |
+| 4 | **Met** | This document (v0.5, as built). `README.md` has Python and CLI examples, which `scripts/check_docs.py` runs. `nautilus/README.md` is the operator guide. |
+| 5 | **Met in substance** | The `ronoise` fix is committed and pushed on PypeIt `etc-fixes` (`38bb1b7`, with a unit test). A review PR of `etc-fixes` into `develop` is the user's step, and the image pin moves with 0.2.6. |
+| 6 | **Met** | `docs/wmko_api_note.md`: every schema field (checked by `check_docs.py`), versions, errors and warnings, refresh cycle, dependency footprint, monitor |
+| 7 | **Met** | `calib_monitor.ecsv` has rows for all 20 reduced nights. The trends are in 4.6.1 (169 `trend_3mad` flags), with figures `mosfire_monitor_*.png`. |
+
 ## 8. Open items and TBDs
 
 - **Q3 / Josh Walawender (WMKO):** *closed 2026-10-05.* The KOA census
@@ -1261,50 +1387,59 @@ not circular. Later, every KOA quasar night adds a validation point.
 - **KOA `SAMPMODE` census:** *done 2026-10-05.* Of 168,038 public on-sky
   spectroscopy frames: MCDS 84.2 percent (MCDS-16 73.3), CDS 14.8, UTR 0.94,
   Single 0.06. UTR stays out (D13).
-- **PypeIt `ronoise` branch:** to be drafted once the Keck RN table is
-  confirmed against our own data (e.g. from the difference of two dome flats
-  at fixed `NUMREADS`).
-- **LSF parameters:** the slope is the interim 0.277"/px measured at 1"
-  (S13, 2026-10-04); the 2.2-pixel floor is still XTcalc's. Both need
-  measurements at other slit widths (part 5).
-- **Sky-model validation:** the Gemini grid's OH-line strengths versus the
-  measured J2 sky may require a default `sky_scale` other than 1.
-  From v0.4 the OH-flux rows of the monitor (4.9.4) provide this for every
-  night, not only 2022-04-09. *First value (S6b, 2026-10-04):* measured /
-  Gemini = 0.91 for the summed monitor-line windows on the dark 1" J0841
-  frames of 2022-04-09 (per line 0.81-1.20), so no change from 1 yet.
-  *S11 (2026-10-05, section 6.1.1):* the full sky from the raw frames gives
-  x0.86 in the OH lines but x1.15-1.33 between them. A single `sky_scale`
-  cannot match both, so the default stays 1.0. The sky-limited part-5
-  nights decide the default, and whether the ETC needs separate line and
-  continuum scales (a schema change).
-- **Effective extraction aperture (D16), S11:** the default 1.5 x FWHM
-  reproduces PypeIt's optimal-extraction S/N (0.996). The bright validation
-  star allows 1.48-2.44 within 1 percent, so a sky-limited night must fix
+- **PypeIt `ronoise` branch (D19):** *done 2026-10-09 (S17).*
+  - A CDS lamp-off flat pair (m220409_0022-0026) gives 21.4 e- against the
+    Keck table's 21 e- (`scripts/mosfire/measure_read_noise.py`).
+  - The fix is committed on PypeIt `etc-fixes` as `38bb1b7`, with a unit
+    test; the patch is `nautilus/patches/pypeit_mosfire_ronoise.patch`.
+  - Open: a PR of `etc-fixes` into `develop` (user), and the pin move with
+    image 0.2.6.
+  - Dev-suite MOSFIRE setups all hold CDS frames, so their reference
+    outputs may shift (`scripts/mosfire/devsuite_sampmode_census.py`).
+  - 15 of the 20 standard rows were CDS frames reduced with 5.8 e-. Their
+    throughput is expected to change well below 1 percent; this is not
+    measured.
+- **LSF parameters:** *settled at the release (S16).*
+  `sqrt((w / 0.292)^2 + 1.08^2)` pix from 1" and 0.7" OH lines (D25, 5.3.6).
+  Still open: a third slit width, which the KOA nights did not provide.
+- **Sky-model validation (D14): open.**
+  - OH lines over the Gemini model, per night, are 0.43-0.91 (median 0.82,
+    S16).
+  - The continuum between lines is 1.14-1.34x Gemini on 2022-04-09 (S11,
+    S18).
+  - The default stays 1.0. Lines and continuum disagree, so a better model
+    needs separate line and continuum scales (a schema change) and
+    sky-limited nights that measure the continuum.
+- **Effective extraction aperture (D16): open.** The default 1.5 x FWHM
+  gives 0.982 against the release (best 1.88; S11: 2.22). The bright
+  validation star constrains it only weakly; a sky-limited night must fix
   it.
-- **1" against 5" OH slit normalisation (S6b):** not testable on
-  2022-04-09, because its 5" standard frames are in nautical twilight
-  (`flag = twilight`). Re-run `scripts/mosfire/verify_monitor.py` check 6 on
-  a dark-sky wide-slit standard night in part 5.
+- **1" against 5" OH slit normalisation (S6b): open.** The release monitor
+  uses science-slit frames only, for `sky_scale`. Check 6 of
+  `verify_monitor.py` on a dark-sky wide-slit night has not been run.
 - **Answered in S6b:** `pixelflat_waveimg` is filled for MOSFIRE.
   `pixelflat_raw` is in electrons per frame (lamp-on minus lamp-off mean,
   gain 2.15). The 5" standard setup uses the night's single merged
   calibration group, i.e. `WaveCalib_A_1` from the 1" science frames' OH
   lines.
-- **J2 red edge:** confirm 1.260 um from the fluxed LDS749B spectrum.
-- **A0V model uncertainty:** whether to add a metallicity/rotation-broadened
-  A0V model rather than Vega itself; decide after the first A0V standards.
-- **Calibration monitor (4.9), to verify in plan step S6b:** that
-  `pixelflat_raw` is in e- per frame (mean-combined, gain applied, lamp-off
-  subtracted), by comparing it with (lamp-on minus lamp-off) x gain from the
-  raw frames; whether `pixelflat_waveimg` is filled for MOSFIRE or the wave
-  image must be built from `WaveCalib` and `Tilts`; which `WaveCalib` serves
-  a wide-slit standard setup on a night where the standard is the only
-  on-sky frame for that slit.
-- **Monitor line lists:** the OH and Ne/Ar lines are frozen after the S15a
-  pilot (D45). Until then the OH-flux columns carry `lines = provisional`.
-- **Lamp arcs in KOA:** whether Ne/Ar frames exist on the standards' masks
-  and filters often enough to download them (S14 census; D44).
+- **J2 red edge:** *answered in S5.* 1.250 um, not 1.260, is the clean red
+  edge; the band metrics also use `thru_median_1117_1250`. PypeIt's 1.260
+  trim is kept for the fit. The release's common window (11900-12450 A)
+  avoids the edge.
+- **A0V model (N3):** *settled (S15a, S16).* Vega scaled to 2MASS J with
+  photon-counting synthetic photometry. Unsaturated A0V nights give
+  `zp_1250` 19.77-19.83 in J against 19.76-19.90 for the white dwarfs.
+  - Saturated frames (> 26k ADU) are flagged and excluded.
+  - The A0V blue depression is handled by the 11900 A cut (4.5).
+  - 55 Dra 2014-10-05 is the one unexplained low night (excluded by 3 MAD).
+- **Calibration monitor checks of S6b:** *done* (above).
+- **Monitor line lists:** *frozen in S15a* (OH 11591.847, 11788.495,
+  12229.206 and 12287.158 A in J2; none in J; `monitor_lines_status =
+  frozen`). Lines may be added but never removed (D45).
+- **Lamp arcs in KOA:** *answered by the S14 census.* Only 15 of the 43
+  `long2pos_specphot` rows have Ne/Ar arcs on the mask; the KOA download
+  Job fetches them (`--lamp-arcs`), and those nights are the reducible
+  specphot sample (4.1).
 - **Gemini grid provenance:** we hold the grids only via XTcalc's IDL save
   files (comment "From Gemini: mk_skybg_zm_16_10.dat"); record the Gemini
   page URL and, if it becomes reachable, verify against the original ASCII.
@@ -1313,34 +1448,29 @@ Nautilus items (v0.3): the decisions of v0.2 were answered in Q27-Q39 and
 are settled as D31-D39. What remains are verifications and one-time actions
 by the user, each tied to the plan step that checks it:
 
-- **Local PypeIt checkout (S0, check only; no user action):** the laptop
-  checkout `/Users/xavier/Projects/PypeIt/PypeIt` stays on
-  `orig-hires-fixes` (user decision 2026-09-30; no PypeIt development on
-  this laptop). `scripts/check_pypeit_pin.py` verifies MOSFIRE-equivalence
-  to the pin (D35): pin is an ancestor of HEAD, and the diff plus uncommitted
-  changes touch only allow-listed paths. Today: HEAD `017bece06`, pin
-  `f3a1f1d27` = merge-base, diff = `keck_hires.py` only, so it passes. If a
-  future pin changes MOSFIRE code the check fails; the user then either
-  updates the laptop checkout (merge or rebase `orig-hires-fixes` onto
-  `develop`, or pull) or the reference reduction is redone on the
-  workstation, and the check is re-run before any gate.
-- **Credentials (S1b): confirmed by the user, 2026-09-30.** The user's keys
-  read and write `s3://keck-etcs`; local `s3_sync.py` uses them via
-  `AWS_PROFILE`. S1b's inspect pod remains the in-pod smoke test of the
-  mounted secret (`prp-s3-credentials` in `pypeit`, else a new
-  `keck-etcs-s3-credentials`).
-- **Registry (S4a): done by the user, 2026-09-30.** GitLab project
-  `profx/keck-etcs` exists with a deploy token (username
-  `gitlab+deploy-token-1383`; the token itself stays with the user),
-  `docker login` done on the workstation.
-- **KOA from the cluster (S14b check):** that pods reach
-  `koa.ipac.caltech.edu` and `pykoa` downloads public data without a login;
-  otherwise the D37 fallback (local download, `s3_sync.py push`).
-- **Base Python revisit (S4b):** only if the dry run shows a numerical
-  difference between the local 3.14 reference and the 3.12 image.
+- **Local PypeIt checkout (S0):** *settled.* The local work runs on the
+  Linux workstation (`pypeit14b`), with the PypeIt checkout at the pin
+  (`etc-fixes` `bc18a3b`); `check_pypeit_pin.py` passes with an empty diff.
+  The laptop arrangement of v0.3.1 (`orig-hires-fixes`, allow-list) is not
+  used. Since S17 the checkout is at `38bb1b7`, one commit past the pin, and
+  the check fails by design until the pin moves (D35).
+- **Credentials (S1b):** *settled.* `prp-s3-credentials` in `pypeit` reads
+  and writes `s3://keck-etcs` (inspect pod); the fallback secret was not
+  needed.
+- **Registry (S4a):** *done* (user, 2026-09-30). GitLab project
+  `profx/keck-etcs` with a deploy token (username
+  `gitlab+deploy-token-1383`; the token stays with the user). Pushes use
+  their own Docker config (`~/.docker-keck-etcs`). Images 0.1.0-0.2.5 are
+  listed in `nautilus/README.md`.
+- **KOA from the cluster (S14b):** *settled 2026-10-05.* `koa_probe_job.yaml`
+  reached KOA's TAP service and downloaded a frame at 10.9 MB/s; the
+  downloads run in-cluster (`koa_download_job.yaml`).
+- **Base Python (S4b):** *settled.* The dry run on the 3.12 image matched
+  the local reference within the gates (4.8.7). No switch to 3.14.
 - **Wider bucket access (optional, later):** if WMKO or collaborators ever
   need the S3 products directly, a read policy for named users or pre-signed
-  URLs; not part of this plan, since products ship in git.
+  URLs; not part of this plan, since products ship in git. *Not done*
+  (optional; noted in `nautilus/README.md` section 1).
 
 ## 9. References
 
@@ -1468,3 +1598,14 @@ are given at J = 17 / 20 / 23 for the 0.7" slit (1.0" in brackets).
   atmosphere and the collecting area each contribute 3 percent or less.
 - Every step of the chain is a known cause, and the chain closes on
   `compute` to better than 0.1 percent.
+
+**Re-run against the release (S18, 2026-10-09;
+`$KECK_ETCS_DATA/external/xtcalc/comparison_2026.10/`).** Inputs: the
+`mosfire-J-2026.10` 2017-02..2025-02 curve and the D25 quadrature LSF.
+
+- Ratios ours/XTcalc: 0.895-1.013 at 0.7" (was 0.891-1.005) and
+  1.078-1.291 at 1.0" (was 1.067-1.271).
+- Step 3 (throughput) is now 1.015 / 1.042 / 1.037 at J = 17 / 20 / 23
+  (0.7").
+- Step 10 (sampling and LSF) is 1.028 / 1.051 / 1.051.
+- Every other factor moves by at most 0.006. The reading above stands.
