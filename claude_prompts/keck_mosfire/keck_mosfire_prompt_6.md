@@ -138,6 +138,10 @@ Call the report `reports/Keck_MOSFIRE_report_20261009.md`.  Include figures.
 Remove any report text from the design doc.
 Use Opus 5.5 and log your work.
 
+5. **ETC**  Please create a new prompt doc `claude_prompts/keck_mosfire/keck_mosfire_prompt_7.md` to describe and host the MOSFIRE ETC on readthedocs.org.
+Model it after the existing prompt docs.
+Use Opus 5.5 and log your work.
+
 ## Q&A
 
 ## Logging
@@ -605,3 +609,97 @@ resolves.
 - modified: `docs/keck_mosfire_design.md`, `docs/XTcalc_HOWTO.md`,
   `README.md`, `CHANGES.md`, `scripts/mosfire/verify_release.py`,
   `scripts/mosfire/compare_xtcalc.py`, this prompt doc.
+
+### 2026-10-10 (Prompt #4: yes, the MOSFIRE ETC exists; where it is)
+
+Model: Claude Opus 5.5.
+
+**Answer: yes.** The MOSFIRE J/J2 ETC was built in parts 3-5 (plan S7-S9,
+then calibrated in S10-S16). It is the Python library `keck_etcs`, which
+was the agreed deliverable (CLAUDE.md: a library now; WMKO hosts the web
+front end later). No new prompt doc is needed.
+
+- **Entry point:** `keck_etcs/etc.py`, `compute(inputs: dict) -> dict`, with
+  `validate()`. JSON in, JSON out; no PypeIt, no I/O beyond the package
+  data.
+- **CLI:** `bin/keck_etc INPUT.json [-o OUT.json] [--summary]`; example
+  inputs are in `examples/` (`J_point.json`, `J2_point.json`,
+  `J_line.json`).
+- **Physics:** `keck_etcs/core/` (source, atmosphere, sky, slit loss, LSF,
+  detector, S/N and exposure-time solve).
+- **Instrument:** `keck_etcs/instruments/mosfire.py` (bands, eras, LSF,
+  detector, monitor config).
+- **Contract:** the schemas `keck_etcs/schema/etc_input.json` and
+  `etc_output.json`.
+- **Calibration** (release `mosfire-J-2026.10`): `keck_etcs/data/`
+  (throughput per era, filters, Gemini sky grid, detector table), indexed in
+  `index.yaml`.
+- **Documentation:** `README.md` (usage), `docs/wmko_api_note.md`
+  (interface), `docs/keck_mosfire_design.md` section 5 (design),
+  `reports/Keck_MOSFIRE_report_20261009.md` sections 5-7 (validation, XTcalc,
+  predictions).
+- **Checked today:** `python bin/keck_etc examples/J_point.json --summary`
+  gives keck_etcs 0.2.5, calib `mosfire-J-2026.10`, era 2025-04.., and a
+  band-median S/N per pixel of 4.473 for J = 20 AB in 4 x 120 s.
+
+**Not built:** a web or GUI front end. That was left to WMKO by design
+(D11, design 1). If a local interactive page is wanted, for demos or for
+WMKO to start from, it would need a new prompt doc. Options: a static page
+calling the CLI, or a small Flask or FastAPI service wrapping `compute()`.
+
+### 2026-10-10 (Prompt #5: new prompt doc for hosting the ETC on Read the Docs)
+
+Model: Claude Opus 5.5.
+
+Wrote `claude_prompts/keck_mosfire/keck_mosfire_prompt_7.md`, "part 7: the
+ETC on Read the Docs (Phase 6)". Its structure follows parts 1-6: Goals,
+Context, numbered Prompts, Q&A, Logging, Logs. It defines four new plan
+steps:
+
+- **S19:** a Sphinx skeleton under `docs/` with MyST, which includes the
+  existing Markdown files (README, WMKO note, report, design, CHANGES,
+  operator guide) rather than copying them. Also autodoc of `etc`, `core`
+  and `instruments`, a version and calibration line on every page,
+  `docs/requirements.txt`, `.readthedocs.yaml`, and a local `-W` build
+  without PypeIt.
+- **S20:** a field reference generated from the JSON schemas at build time,
+  so it cannot drift; examples executed at build time (numbers from the
+  build, not pasted); `check_docs.py` extended to cover the generated
+  tables.
+- **S21 (optional, Q&A):** an interactive calculator page that runs
+  `compute()` in the browser with Pyodide, using a `keck_etcs` wheel built
+  during the RTD build. It starts with a feasibility check: the Pyodide
+  package list (astropy; jsonschema's compiled dependency `rpds-py`), load
+  time and download size, and agreement with CPython to 1e-6.
+- **S22:** publish. The final `.readthedocs.yaml`, a README badge, and a
+  "Citing and versions" page. The user imports the project on
+  readthedocs.org with exact steps from the session. Then a read-only
+  check of the first build and of the published pages, and an RTD step in
+  the release process.
+
+**Facts used, checked today:**
+
+- `pypeit/keck-etcs` on GitHub is **public**, default branch `main`
+  (`gh repo view`, read-only). The work is on the unmerged `keck-mosfire`.
+- No Sphinx setup or `.readthedocs.yaml` exists yet.
+- Sphinx is not installed in `pypeit14b`.
+- PypeIt's own docs use `sphinx_rtd_theme`.
+- The ETC's runtime dependencies are numpy, scipy, astropy, jsonschema and
+  pyyaml (S18).
+
+RTD's build limits and Pyodide's package list are left for the session to
+verify, not stated from memory.
+
+**Q&A seeded for the user before prompt #1**, each with a recommended
+default:
+
+- S19-1: the branch to build (`main` after a merge);
+- S19-2: the theme (`furo`);
+- S19-3: public scope (include the developer guide);
+- S21-1: build the interactive page (yes, if feasible);
+- S22-1: the RTD slug (`keck-etcs`).
+
+**Rules carried over:** the user runs git and creates the RTD project;
+docs-only dependencies stay out of `install_requires`; nothing is installed
+in `pypeit14b` without a go-ahead; generators are scripts on disk; no
+secrets.
