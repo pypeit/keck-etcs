@@ -133,6 +133,11 @@ part 5 (S16) for the final version.
    appears in any document. Log your work and state which items of the
    definition of done (design section 7) are met.
 
+3. **Report**  Separate the report on MOSFIRE from its design doc.  
+Call the report `reports/Keck_MOSFIRE_report_20261009.md`.  Include figures.
+Remove any report text from the design doc.
+Use Opus 5.5 and log your work.
+
 ## Q&A
 
 ## Logging
@@ -500,3 +505,103 @@ Nautilus reduction.
 - modified: `README.md`, `nautilus/README.md`, `CHANGES.md`,
   `docs/keck_mosfire_design.md`, `setup.py`,
   `keck_etcs/tests/test_validation_j0841.py`, this prompt doc.
+
+### 2026-10-09 (Prompt #3: the MOSFIRE report split from the design doc; XTcalc throughput comparison corrected)
+
+Model: Claude Opus 5.5.
+
+**New report: `reports/Keck_MOSFIRE_report_20261009.md`.** It has a summary
+and these sections:
+
+1. data and method, with the KOA census counts;
+2. the 20 standards, as a table;
+3. throughput by era, findings and systematics, and the XTcalc throughput
+   comparison;
+4. the calibration monitor (FWHM, dome flats, LSF, sky);
+5. the J0841 validation, S11 and the release side by side;
+6. the XTcalc comparison (manual check, the quirk, the S/N table, the
+   attribution);
+7. ETC predictions;
+8. read noise (the S17 measurement, the `SAMPMODE` census, the PypeIt fix);
+9. limitations and open items;
+10. provenance;
+11. milestone status (the definition of done, moved from design section 7).
+
+**Figures.** There are nine.
+
+- New, from `scripts/mosfire/make_report_figures.py` into
+  `reports/figures/`:
+  - `mosfire_era_throughput.png`: the era curves with MAD, XTcalc 2012 with
+    the J filter divided out, the half-power bands, and every standard's
+    curve;
+  - `mosfire_xtcalc_comparison.png`;
+  - `mosfire_etc_example.png`: S/N against wavelength for J = 20 AB, and the
+    exposure time against magnitude;
+  - `mosfire_j0841_validation.png`, copied from the release re-run.
+- Linked from `docs/figures/` (made by `plot_throughput_trend.py` and
+  `plot_monitor_trends.py`): the throughput trend and the four monitor
+  figures.
+
+**Tables.** `scripts/mosfire/report_tables.py` builds them: per-standard,
+per-era statistics, and ETC S/N per era and band.
+
+**Design doc: report text removed.**
+
+- 4.1 keeps the census decision; the counts moved to the report.
+- 4.6.1 (release results), 6.1.1 and 6.1.2 (validation results), the
+  section 7 status table and Appendix A (XTcalc) are replaced by pointers to
+  the report.
+- The v0.5 change note and the 4.5 and 6.2 cross-references are updated.
+- The doc is now 1357 lines; the design, its decisions, the method and the
+  open items stay.
+- Other references updated: `docs/XTcalc_HOWTO.md` (three Appendix A
+  references), the docstring of `compare_xtcalc.py`, and the `README.md`
+  pointers to `reports/`.
+
+**Error found and corrected: the XTcalc throughput comparison.**
+
+- `verify_release.py` check 2 compared our *filter-free* 2012-2016 curve
+  with XTcalc's `Jeff.sm.dat`, which is XTcalc's *total* efficiency
+  including the order-sorting filter. `compare_xtcalc.py` already swaps it
+  for "our curve x J filter", which is right.
+- The J filter is about 0.96 in band. The S16 result "+3.6 percent above
+  XTcalc" is therefore wrong. Like for like, it is **-2.9 percent** (250 A
+  bins -13 to +13 percent). The 10 percent agreement still holds, with the
+  sign reversed.
+- Fixed: `verify_release.py` (it multiplies by the J filter; ALL CHECKS
+  PASS); the `CHANGES.md` known-systematics line, with a dated correction
+  note; and the report.
+- The era-figure XTcalc curve is divided by the J filter inside its
+  half-power band.
+
+**Claims checked against the data while writing.**
+
+- **Non-linear A0V nights:** of the four, three read 24-36 percent low
+  (HD74721 2016, HD133772, HD21379 2021-09-28). HD159008 does not read low.
+- **Slit loss:** on the 5" slit, 9 of 10 standard frames lose < 1 percent
+  (`slitloss_gt1pct`). The long2pos 4" frames are not covered by that
+  metric.
+- **Validation:** between OH lines every 50 A bin is within 0.94-1.04,
+  except the blue edge (0.90).
+- **A0V depression:** its cause is stated as not established. A first draft
+  blamed Paschen-beta, which is at 12818 A, redward of the depression.
+
+**Seen in the new era figure and noted in the report.**
+
+- Every J curve rises past about 13300 A: the red-edge counterpart of the J
+  cut-on problem.
+- The 2012-2016 curve steps at 11900 A, because blueward of the A0V cut
+  only Feige110 contributes.
+
+**Checks.** `check_docs.py` ALL CHECKS PASS; `pytest` 111 passed;
+`verify_release.py` ALL CHECKS PASS; every figure link in the report
+resolves.
+
+**Files for the user to commit:**
+
+- new: `reports/Keck_MOSFIRE_report_20261009.md`, `reports/figures/*.png`
+  (4), `scripts/mosfire/make_report_figures.py`,
+  `scripts/mosfire/report_tables.py`;
+- modified: `docs/keck_mosfire_design.md`, `docs/XTcalc_HOWTO.md`,
+  `README.md`, `CHANGES.md`, `scripts/mosfire/verify_release.py`,
+  `scripts/mosfire/compare_xtcalc.py`, this prompt doc.

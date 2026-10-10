@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""XTcalc sanity comparison (plan S12, design 6.2 and appendix A).
+"""XTcalc sanity comparison (plan S12, design 6.2; results in reports/Keck_MOSFIRE_report_20261009.md, section 6).
 
 Usage:
     conda run -n pypeit14b python scripts/mosfire/compare_xtcalc.py [--out DIR]

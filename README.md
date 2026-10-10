@@ -8,7 +8,8 @@ measured values. The ETCs can be refreshed as new data come in.
 
 The first instrument is **Keck/MOSFIRE, J and J2 long-slit spectroscopy**.
 The current code is `keck_etcs` 0.2.5, with calibration `mosfire-J-2026.10`.
-The design is in `docs/keck_mosfire_design.md`, the interface for WMKO in
+The results are in `reports/Keck_MOSFIRE_report_20261009.md`, the design in
+`docs/keck_mosfire_design.md`, the interface for WMKO in
 `docs/wmko_api_note.md`, and the release history in `CHANGES.md`.
 
 ## Installation
@@ -178,6 +179,7 @@ with a `MONITOR` config and register it in
 - `nautilus/`: the container image, Job manifests and operator guide.
 - `docs/`: the design, the implementation plan, the WMKO note, the XTcalc
   notes and the figures.
+- `reports/`: the MOSFIRE report and its figures.
 - `claude_prompts/`: task prompts and a dated log of the work.
 - `CLAUDE.md`: conventions for working in this repository.
 

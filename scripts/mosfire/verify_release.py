@@ -12,9 +12,13 @@ Usage:
    x KMRef^2 = 0.89, as ``compare_xtcalc.py``), after the aperture
    correction: XTcalc's efficiency is defined for 75 m^2 and ours for the
    effective 72.37 m^2 (``harvest.EFF_APERTURE``), so XTcalc's
-   equivalent is ``eff x 75 / 72.37``. Reported in 250 A bins and as the
-   median ratio over the overlap; the target is agreement at about 10
-   percent.
+   equivalent is ``eff x 75 / 72.37``. XTcalc's efficiency includes the
+   order-sorting filter (``compare_xtcalc.py`` swaps it for our era curve x
+   the J filter), so our filter-free curve is multiplied by the Keck J
+   filter before the ratio (corrected 2026-10-09; the release log's +3.6
+   percent compared a filter-free curve with a filtered one). Reported in
+   250 A bins and as the median ratio over the overlap; the target is
+   agreement at about 10 percent.
 3. ``zp_1250`` against airmass, within each filter, over the rows that
    entered an era curve (residuals after era medians): no correlation
    beyond 2 sigma.
@@ -55,7 +59,7 @@ def main():
             if not ok:
                 bad.append(f'compute {era.name} {band}')
 
-    print('2. 2012-04..2016-09 against XTcalc 2012 (x 75 / 72.37 m^2)')
+    print('2. 2012-04..2016-09 x J filter against XTcalc 2012 (x 75 / 72.37 m^2)')
     t = Table.read(DATA_DIR / MOSFIRE.throughput_file(MOSFIRE.eras[0]), format='ascii.ecsv')
     xf = paths.data_root() / 'external' / 'xtcalc' / 'XTcalc_dir' / 'MosfireSpecEff' / 'Jeff.sm.dat'
     if not xf.exists():
@@ -65,6 +69,8 @@ def main():
         xw, xe = np.loadtxt(xf, unpack=True)
         xeq = np.clip(xe, 0, None) * KMREF ** 2 * XT_AREA / EFF_APERTURE
         w, th = np.asarray(t['wave'], float), np.asarray(t['thru_median'], float)
+        fc = MOSFIRE.filter_curve('J')
+        th = th * np.interp(w, fc['wave_A'], fc['transmission'], left=0.0, right=0.0)      # XTcalc's efficiency includes the filter
         xi = np.interp(w, xw, xeq, left=np.nan, right=np.nan)
         ok = np.isfinite(xi) & (xi > 0) & np.isfinite(th)
         for lo in np.arange(np.floor(w[ok].min() / 250) * 250, w[ok].max(), 250):

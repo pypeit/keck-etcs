@@ -92,8 +92,11 @@ rows; 14 enter the era curves).
 - The J cut-on and A0V blue depression above.
 - 55 Dra low but unflagged.
 - `zp_1250` against airmass in J: 1.9 sigma (limit 2).
-- 2012-2016 is +3.6 percent above XTcalc's 2012 curve (x 75 / 72.37 m^2;
-  -10 to +15 percent in 250 A bins).
+- 2012-2016 x J filter is 2.9 percent below XTcalc's 2012 curve
+  (x 75 / 72.37 m^2; -13 to +13 percent in 250 A bins).
+  - *Corrected 2026-10-09.* The release first gave +3.6 percent. That
+    compared our filter-free curve with XTcalc's efficiency, which includes
+    the filter (`verify_release.py`, check 2).
 
 **Detector table:** unchanged.
 

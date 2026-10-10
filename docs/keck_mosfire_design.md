@@ -57,7 +57,7 @@ lamp lines are an instrument monitor, but only on nights with lamp frames.
 *Change note, v0.5 (2026-10-09, plan S18, "as built"):* this version
 describes what was built for the MOSFIRE J milestone. It runs to keck_etcs
 0.2.5, image 0.2.5 and the first calibration release, `mosfire-J-2026.10`
-(4.6.1, `CHANGES.md`). Changes from v0.4:
+(`CHANGES.md`; results in the report). Changes from v0.4:
 
 - **LSF (D25, 5.3.6):** quadrature form, `sqrt((w / 0.292)^2 + 1.08^2)` pix,
   fitted on 1" and 0.7" OH lines.
@@ -73,9 +73,10 @@ describes what was built for the MOSFIRE J milestone. It runs to keck_etcs
 - **Jobs (4.8.1, 4.8.4, 4.8.6):** per-index retries and exit-2 data
   outcomes.
 - **PypeIt `ronoise` fix (D19):** done (S17).
-- **Validation and the XTcalc comparison:** re-run against the release
-  (6.1.1, appendix A).
-- **Definition of done:** status in section 7; section 8 updated.
+- **Results** (validation, XTcalc comparison, throughput and monitor
+  trends) moved to the report `reports/Keck_MOSFIRE_report_20261009.md` (2026-10-09); this document keeps
+  the design.
+- **Definition of done:** status in the report; section 8 updated.
 
 The operator guide is `nautilus/README.md`, the WMKO interface
 `docs/wmko_api_note.md`. `scripts/check_docs.py` checks that they agree with
@@ -231,18 +232,11 @@ answers the UTR question (D13). The search is its own prompt doc (N8); the
 priority nights are the Hennawi/Yang/Wang quasar program (D9). *Settled by
 the KOA census (2026-10-05, `scripts/koa/search_mosfire_standards.py`;
 the question to Josh Walawender (WMKO) is dropped, user):* the 5" slit was
-not routine for standards. Of the 62 public wide-slit standard rows, 51 are
-`long2pos_specphot` (13 of them its "(align)" variant), 9 `LONGSLIT-46x5`
-(nearly all the Hennawi program, 2022-2025) and 2 10" slits, so
-`long2pos_specphot` carries the throughput sample. The usable wide-slit sample
-is 52 rows on 44 nights (27 stars: 10 WD, 1 CALSPEC, 41 A0V) over all three
-eras. *Reducible* (KOA prompt 2) needs a wavelength calibrator as well:
-narrow-slit on-sky frames of >= 55 s that night for the OH lines (a wide slit
-broadens the standard's own; short telluric exposures show too little OH),
-or, for `long2pos_specphot`, Ne/Ar arcs on a long2pos mask (PypeIt's
-calibration for that mask). Only 15 of the 43 specphot rows have such arcs,
-so the reducible wide-slit sample is 20 nights, 13 stars (era 2012-16: 7,
-2017-25: 12, 2025-: 1), still above the milestone.
+not routine for standards, so `long2pos_specphot` (its 4" bars) carries the
+throughput sample. A night is *reducible* only with a wavelength
+calibrator: narrow-slit on-sky frames of >= 55 s that night for the OH
+lines, or Ne/Ar arcs on a long2pos mask. The counts are in the report
+(`reports/Keck_MOSFIRE_report_20261009.md`, section 1).
 
 ### 4.2 Reduction workflow, S3 layout and data root
 
@@ -398,7 +392,7 @@ applies a global factor.
 - Each row's filter-free curve is kept inside the filter's half-power
   band. J rows are further kept only where the J filter is >= 0.9 of its
   peak (`EDGE_TRIM_FRAC`), and A0V rows only redward of 11900 A
-  (`A0V_MIN_WAVE`); 4.6.1 gives the reasons.
+  (`A0V_MIN_WAVE`); the report (section 3) gives the reasons.
 - The 3-MAD test compares nights over `COMMON_WINDOW` = 11900-12450 A,
   inside both filters. It needs at least 3 nights.
 - An era curve covers only what its standards measured (2025-04.. has one
@@ -426,65 +420,11 @@ empirical `sky_scale` distribution (D14, 8). Compare the
 chain (they should agree at the 10 percent level once the 75 vs 72.4 m^2
 aperture is accounted for).
 
-#### 4.6.1 Results of the first release, `mosfire-J-2026.10` (plan S16, 2026-10-08)
-
-Code: `keck_etcs/calib/trend.py`, `scripts/mosfire/plot_throughput_trend.py`,
-`plot_monitor_trends.py`, `verify_release.py`; figures
-`docs/figures/mosfire_throughput_trend.png` and
-`mosfire_monitor_{fwhm,flat_rate,lsf,sky_scale}.png`. 20 standard-star
-nights, 16 usable, 14 in the era curves (`CHANGES.md` lists them).
-
-**Metric.** `zp_1250` and `thru_median_1117_1260` include the filter, and
-their windows cross the J and J2 edges (J2's red cut-off is at 12463 A), so
-they are compared only within one filter. The trend metric is
-`thru_common`: the median filter-free throughput over 11900-12450 A,
-inside both filters and redward of two systematics found here:
-
-- the tabulated J cut-on is too high (the same white dwarf through J is
-  10 percent below J2 at 11650 A, 0 at 12000 A);
-- every A0V curve is depressed blueward of about 11900 A.
-
-The era curves therefore use J rows only where the J filter is >= 0.9 of
-its peak, and A0V rows only redward of 11900 A (`combine.py`). A J/J2
-offset of about 5 percent remains in 11900-12450 A.
-
-**Throughput.**
-
-| Era | n | `thru_common` median | MAD | slope |
-|---|---|---|---|---|
-| 2012-04..2016-09 | 4 | 0.258 | 2.2 % | -1.0 +- 2.7 %/yr (1.4 yr) |
-| 2017-02..2025-02 | 9 | 0.257 | 2.7 % | -0.3 +- 0.5 %/yr |
-| 2025-04.. | 1 | 0.270 | - | - |
-
-(The 14 rows in the era curves, after the nonlinearity and 3-MAD
-exclusions.)
-
-- No era-to-era change beyond the 3-4 percent per-standard scatter
-  expected in 4.7.
-- Residual correlations of `thru_common` (era medians removed): airmass
-  1.8 sigma, PWV 0.2 sigma, slit width 0.6 sigma.
-- `zp_1250` against airmass in J: 1.9 sigma over the rows in the curves.
-- **A0V model (N3):** unsaturated A0V nights give `zp_1250` 19.77-19.83 in
-  J, against 19.76-19.90 for the white dwarfs. Saturated A0V frames
-  (> 26k ADU) are flagged at harvest and excluded; 55 Dra (19.52) is the one
-  unexplained low night.
-- **XTcalc:** 2012-2016 is +3.6 percent above XTcalc's 2012 curve over
-  11633-13457 A after the 75/72.37 m^2 correction (-10 to +15 percent in
-  250 A bins): the whole chain agrees at the 10 percent level.
-
-**Monitor (D47).**
-
-- 169 rows on 19 metric/era sets carry `trend_3mad`. Rows already
-  `nonlinear` take no part, and dome-flat series are split by lamp power
-  `FPOWER`, which changes between nights (4.0, 9.0, 13.5): the flat rate is
-  only comparable at one lamp power.
-- Dome-flat rate at 12000/12500 A against `zp_1250`: 4 J2 nights, r = -0.78
-  (1.2 sigma), not meaningful across lamp powers.
-- **LSF (D25):** OH lines at 12500 A are 3.56-3.61 pix in 1" (4 nights)
-  and 2.63 pix in 0.7". D25 is now `sqrt((w / 0.292)^2 + 1.08^2)` pix.
-- **Sky (D14):** OH lines over the Gemini model are 0.43-0.91 per night
-  (median 0.82). `sky_scale` stays 1.0, since the continuum between lines
-  (S11: x1.14-1.33) is not monitored.
+*Results* of the first release (`mosfire-J-2026.10`, plan S16): see the
+report, `reports/Keck_MOSFIRE_report_20261009.md`, sections 2-4. The method changes they led to are in 4.5 and
+D25; the trend code is `keck_etcs/calib/trend.py`, with
+`scripts/mosfire/plot_throughput_trend.py`, `plot_monitor_trends.py` and
+`verify_release.py`.
 
 ### 4.7 Uncertainties
 
@@ -1236,89 +1176,8 @@ commit touching only `keck_etcs/data/` and `CHANGES.md`.
 The fluxed spectrum is the input and the noise is the output, so the test is
 not circular. Later, every KOA quasar night adds a validation point.
 
-#### 6.1.1 Results, 2022-04-09 (plan S11, 2026-10-05)
-
-**Setup.**
-
-- Script: `scripts/mosfire/validate_j0841.py`. Outputs in
-  `$KECK_ETCS_DATA/mosfire/20220409/validation/`: a 50 A bin table, a
-  summary JSON and a figure, each with the provenance below.
-- Products: the in-pod reduction, image `keck-etcs:0.1.6`
-  (`sha256:0c5e88fd838e…`), PypeIt pin `8017f47` (equal to the
-  `run_manifest.json` SHA); sensfunc `sens_LDS749B_20220409.fits`.
-- ETC: keck_etcs 0.1.6, throughput `mosfire_thru_2017-2025.ecsv`
-  (`mosfire-J-2026.10-dev`).
-- The target is **J0841+3814_OFF**, the bright blind-offset star (J2 = 15.9 AB
-  intrinsic), not the quasar.
-- Steps:
-  - the four spec1d were copied, fluxed with `pypeit_flux_calib` and
-    coadded with `pypeit_coadd_1dspec`;
-  - the ETC input is the coadd divided by the ETC's own LSF-convolved T_atm
-    and by the model slit fraction (0.678 at the measured 0.95"), smoothed
-    over 51 pixels;
-  - other inputs: J2, 1" slit, 4 x 149.8 s ABBA MCDS-16, airmass 1.076,
-    PWV 1.62 mm (the standard's telluric fit), `throughput.date =
-    2022-04-09`, default `sky_scale` and aperture.
-- "Between OH lines" means pixels where the model sky is <= 1.25 x its
-  median.
-
-| Quantity | Value |
-|----------|-------|
-| Median S/N per pixel, 4 frames, 1.117-1.260 um | measured 81.9 (coadd); ETC 82.0 |
-| ETC / measured S/N, band | **0.996** (criterion 20 percent: pass) |
-| ETC / measured S/N, between OH lines | **1.003** (criterion 10 percent: pass) |
-| ETC / measured S/N, per frame | 0.94, 0.95, 1.04, 1.06 (the ETC used the median FWHM; the frames span 4.98-5.63 px) |
-| Signal in the slit, ETC / measured counts | 0.999 (closure: same standard, same throughput) |
-| Sky, measured / Gemini x T_sys, in OH lines (D14) | 0.86 (the S6b monitor gave 0.91) |
-| Sky, measured / Gemini x T_sys, between OH lines (D14) | 1.33 overall; 1.14-1.19 in the cleanest 50 A bins, up to 2.3 next to bright lines (OH wings beyond the Gaussian LSF) |
-| OH centroids, measured - Gemini (N5, second test) | -0.07 A (MAD 0.10, 26 lines) |
-| Effective aperture (D16) | `length_fwhm` 1.5 gives 0.996; best 2.22; within 1 percent for 1.48-2.44, within 2 percent for 1.32-2.64 |
-
-**Reading.**
-
-- The ETC reproduces PypeIt's S/N to better than 1 percent in the median,
-  and within ±10 percent in every 50 A bin except the telluric-dominated
-  blue edge (0.91 at 11170 A).
-- The star is bright: between OH lines the source is 70 percent of the
-  variance, the sky 16 percent and read noise 13 percent
-  (`scripts/mosfire/validation_noise_budget.py`). This night therefore
-  confirms the signal chain and the noise bookkeeping (ABBA doubling, read
-  noise, optimal extraction against a 1.5-FWHM aperture), but constrains the
-  sky level and the aperture only weakly.
-- Applying the measured continuum (x1.33) would change this case by 2.6
-  percent, but faint sources by about 8 percent (J2 = 20-22 AB).
-- **Recorded, not adopted:**
-  - `keck_etcs/instruments/mosfire.py` holds these numbers
-    (`VALIDATION_J0841`, `SKY_SCALE_DEFAULT = 1.0`,
-    `APERTURE_LENGTH_FWHM_DEFAULT = 1.5`) with provenance;
-  - the schema defaults are unchanged. One night cannot set a sky scale
-    when the lines (x0.86) and the continuum (x1.15-1.33) disagree;
-  - the part-5 quasar nights, which are sky-limited, decide `sky_scale`
-    and whether the lines and the continuum need separate scales;
-  - N5 holds: the Gemini grid is consistent with vacuum to 0.1 A
-    (0.05 px).
-
-#### 6.1.2 Re-run against the release `mosfire-J-2026.10` (plan S18, 2026-10-09)
-
-Same products (image 0.1.6) and script. The ETC is keck_etcs 0.2.5. The
-2017-02..2025-02 curve is now the median of 9 standards, and the LSF is
-the D25 quadrature form. The S11 outputs are kept in
-`validation_S11_2026-10-05/`.
-
-| Quantity | S11 (LDS749B curve) | Release |
-|----------|------|------|
-| ETC / measured S/N, band | 0.996 | **0.982** (pass) |
-| ETC / measured S/N, between OH lines | 1.003 | **0.990** (pass) |
-| ETC / measured S/N, per frame | 0.94-1.06 | 0.92-1.04 |
-| Signal, ETC / measured | 0.999 | 0.980 |
-| Sky, measured / Gemini, OH lines / between | 0.86 / 1.33 | 0.89 / 1.34 |
-| OH centroids, measured - Gemini | -0.07 A | -0.07 A (MAD 0.09, 27 lines) |
-| Best `aperture.length_fwhm` | 2.22 | 1.88 |
-
-The signal is no longer a closure. The night's own standard (J2) sits
-2 percent above the era median, within the per-standard scatter and the
-J/J2 offset of 4.6.1. The slow test's signal tolerance moved from 2 to
-3 percent for this reason (`test_validation_j0841.py`). D18 passes.
+*Results* (plan S11, 2026-10-05, and the release re-run of 2026-10-09):
+see the report, `reports/Keck_MOSFIRE_report_20261009.md`, section 5.
 
 ### 6.2 Tests (pytest, `keck_etcs/tests/`)
 
@@ -1348,8 +1207,8 @@ J/J2 offset of 4.6.1. The slow test's signal tolerance moved from 2 to
   release.
 - Not a test: `scripts/mosfire/compare_xtcalc.py` re-implements XTcalc's
   formula on XTcalc's own data files and tabulates the ratio of our S/N to
-  XTcalc's for a grid of magnitudes and slits; the result goes in the design
-  doc's appendix as a sanity check.
+  XTcalc's for a grid of magnitudes and slits; the result is in the report
+  (`reports/Keck_MOSFIRE_report_20261009.md`, section 6) as a sanity check.
 
 ## 7. Definition of done, MOSFIRE J milestone
 
@@ -1366,17 +1225,7 @@ J/J2 offset of 4.6.1. The slow test's signal tolerance moved from 2 to
 7. A calibration-monitor table (4.9) for every reduced night, with the
    monitor trends of 4.6 (D40).
 
-*Status (2026-10-09, plan S18):*
-
-| Item | Status | Evidence |
-|---|---|---|
-| 1 | **Met** | 20 standard nights, 14 in the era curves, across all three eras: 4 / 9 / 1 standards (LDS749B plus 13 KOA). Era medians and MADs in 4.6.1; `docs/figures/mosfire_throughput_trend.png`; release `mosfire-J-2026.10` |
-| 2 | **Met** | `compute()` for J and J2. Schemas in `keck_etcs/schema/`. 111 unit, schema and regression tests pass. |
-| 3 | **Met** | J0841+3814: ETC/measured 0.982 over the band, 0.990 between OH lines, against the release (6.1.2) |
-| 4 | **Met** | This document (v0.5, as built). `README.md` has Python and CLI examples, which `scripts/check_docs.py` runs. `nautilus/README.md` is the operator guide. |
-| 5 | **Met in substance** | The `ronoise` fix is committed and pushed on PypeIt `etc-fixes` (`38bb1b7`, with a unit test). A review PR of `etc-fixes` into `develop` is the user's step, and the image pin moves with 0.2.6. |
-| 6 | **Met** | `docs/wmko_api_note.md`: every schema field (checked by `check_docs.py`), versions, errors and warnings, refresh cycle, dependency footprint, monitor |
-| 7 | **Met** | `calib_monitor.ecsv` has rows for all 20 reduced nights. The trends are in 4.6.1 (169 `trend_3mad` flags), with figures `mosfire_monitor_*.png`. |
+*Status:* see the report, `reports/Keck_MOSFIRE_report_20261009.md`, section 11.
 
 ## 8. Open items and TBDs
 
@@ -1506,106 +1355,3 @@ by the user, each tied to the plan step that checks it:
   `kube_dev_suite.yaml`, `README_s3`, `s3_pypeit_policy.json`); PypeIt's
   `pypeit/pkg/cache.py`, `pypeit/data/s3_url.txt` and the
   `pypeit_install_telluric` / `pypeit_cache_github_data` scripts.
-
-## Appendix A. XTcalc comparison (plan S12, 2026-10-05)
-
-`scripts/mosfire/compare_xtcalc.py` ports XTcalc (`XTcalc.pro`; Keck's `XTcalc.tar`, GUI and manual v2.0)
-line by line and runs it on XTcalc's own files: filter, efficiency x
-KMRef^2, the May 2012 MOSFIRE sky, and Gemini `mktrans_zm_16_10`. It
-writes `xtcalc_comparison.ecsv` and `xtcalc_attribution.ecsv` to
-`$KECK_ETCS_DATA/external/xtcalc/comparison/`. This is a sanity check, not
-a target (project rule) and not a CI test.
-
-**Check against the manual.** The worked example of `MOSFIRE_XTcalc.pdf`
-(Figure 1, the GUI v1.8 beta) is a line-flux case:
-
-- inputs: K, 0.7" slit, theta 0.7", 1 x 1000 s, 16 reads, 9e-18
-  erg/s/cm^2 at 6563 A, z = 2.3, 30 km/s;
-- the port gives S/N 8.85 per FWHM against the manual's 9.1 (0.972; within
-  10 percent);
-- dark (58.92 e-) and read noise (12.87 e-) agree exactly; signal and sky
-  are about 4 percent lower;
-- the manual's GUI predates XTcalc's 2012-06-26 switch to the measured
-  throughput and sky, which the distributed files hold.
-
-**An XTcalc quirk.** In magnitude mode XTcalc reports the median S/N over
-`filt_index`, which is computed on its full 3072-pixel grid but applied to
-the band-cut arrays (1650 pixels in J).
-
-- IDL clips out-of-range subscripts, and `XTcalc.pro` has no
-  `compile_opt strictarrsubs`, so 729 of 2379 indices (31 percent) repeat
-  the band's red-edge pixel.
-- The reported "median" is then about the 28th percentile of the band's
-  S/N: 0.57-0.75 of the true median in this case.
-- **Confirmed (2026-10-05):** the user ran the XTcalc GUI at WMKO (J, 0.7"
-  slit, angular extent 0.7", 4 exposures, 16 reads, 20.0 AB flat f_nu,
-  480 s, default airmass and PWV). It reported **S/N 4.4 per spectral
-  pixel**; the port gives 4.437 with the quirk and 7.392 without it. So
-  XTcalc's magnitude-mode S/N is pessimistic by about 40 percent in this
-  case, and published XTcalc numbers for J continuum sources inherit the
-  bias.
-
-**Table.** Flat f_nu in J, 4 x 120 s MCDS-16 ABBA (XTcalc's two-point
-dither), seeing 0.7". XTcalc mode as coded uses theta 0.7" and airmass 1.0;
-keck_etcs uses airmass 1.2, PWV 1.6, the 2017-02..2025-02 throughput and
-the default 1.5-FWHM aperture. Values are the median S/N per pixel.
-
-| J (AB) | 0.7": XTcalc | 0.7": XTcalc, true median | 0.7": keck_etcs | 0.7": ratio | 1.0": XTcalc | 1.0": XTcalc, true median | 1.0": keck_etcs | 1.0": ratio |
-|---|---|---|---|---|---|---|---|---|
-| 17 | 53.79 | 71.92 | 47.92 | 0.891 | 47.53 | 66.11 | 50.73 | 1.067 |
-| 18 | 24.95 | 36.83 | 23.42 | 0.939 | 21.33 | 32.32 | 24.58 | 1.153 |
-| 19 | 10.76 | 17.12 | 10.41 | 0.968 | 8.93 | 14.53 | 10.85 | 1.215 |
-| 20 | 4.437 | 7.392 | 4.381 | 0.987 | 3.621 | 6.119 | 4.530 | 1.251 |
-| 21 | 1.784 | 3.060 | 1.785 | 1.000 | 1.453 | 2.488 | 1.843 | 1.268 |
-| 22 | 0.714 | 1.240 | 0.718 | 1.005 | 0.583 | 1.000 | 0.740 | 1.269 |
-| 23 | 0.285 | 0.497 | 0.287 | 1.005 | 0.232 | 0.400 | 0.295 | 1.271 |
-
-**Attribution.** Each step swaps one ingredient, cumulatively, on the same
-S/N engine. XTcalc's noise formula is ours: S T + k (B T + n D T + n RN^2
-N_exp). The factor is the S/N ratio of a step to the one before. Ranges
-are given at J = 17 / 20 / 23 for the 0.7" slit (1.0" in brackets).
-
-| Step | Cause | Factor, 0.7" (1.0") |
-|---|---|---|
-| 1 | XTcalc band-median quirk removed | 1.34 / 1.67 / 1.74 (1.39 / 1.69 / 1.72) |
-| 2 | Area 75 -> 72.37 m^2 (N1), AB zero point 48.59 -> 48.6 | 0.976 / 0.971 / 0.970 |
-| 3 | Throughput: XTcalc 2012 (`Jeff.sm` x 0.89^2) -> our 2017-02..2025-02 curve x Keck J filter | 1.007 / 1.027 / 1.022 (1.003 / 1.011 / 1.017) |
-| 4 | Atmosphere: XTcalc's `mktrans_zm_16_10` -> our grid at airmass 1.0 (same Gemini source) | 1.000 |
-| 5 | Airmass 1.0 -> 1.2 | 0.997 / 0.993 / 0.996 |
-| 6 | Sky: MOSFIRE 2012 measured -> Gemini model (interline continuum 2.7x fainter) | 1.088 / 1.357 / 1.451 (1.101 / 1.309 / 1.369) |
-| 7 | Read noise 15/sqrt(16) = 3.75 -> 5.8 e- (Keck table), dark 0.005 -> 0.008 | 0.968 / 0.869 / 0.836 (0.970 / 0.907 / 0.891) |
-| 8 | Extraction pixels: theta/0.18" = 3.89 -> ceil(1.5 FWHM / 0.1798") = 6 | 0.937 / 0.830 / 0.807 (0.925 / 0.825 / 0.807) |
-| 9 | Slit x aperture loss: none -> Moffat 0.561 (0.682) | 0.665 / 0.577 / 0.562 (0.755 / 0.690 / 0.682) |
-| 10 | Sampling: 1.31 A, XTcalc's velocity LSF (R = 3310 or 2317), its filter > 0.1 band -> 1.2922 A, our LSF (measured at 1"), the J half-power window | 1.037 / 1.060 / 1.061 (1.056 / 1.114 / 1.122) |
-| 11 | `compute` against the step-10 engine (it convolves N0 T_atm T_sys as a product) | 1.000 |
-
-**Reading.**
-
-- The two calculators agree to within 0.89-1.27 in this case. That
-  agreement is largely an accident: XTcalc's quirk (x0.6) offsets three
-  effects it omits or underestimates, namely slit loss (x0.56-0.76), the
-  measured read noise (x0.84-0.97) and a realistic extraction aperture
-  (x0.81-0.94).
-- Against XTcalc's true band median, keck_etcs is 0.58-0.77 of XTcalc.
-- The largest disagreement between the inputs is the sky.
-  - XTcalc's 2012 MOSFIRE-measured sky has an interline continuum 2.7x the
-    Gemini model's.
-  - Section 6.1.1 measured 1.15-1.33x Gemini between the lines on
-    2022-04-09, between the two.
-  - So at faint magnitudes the choice of `sky_scale` (section 8) moves the
-    S/N by tens of percent.
-- The throughput (our one standard against XTcalc's 2012 curve), the
-  atmosphere and the collecting area each contribute 3 percent or less.
-- Every step of the chain is a known cause, and the chain closes on
-  `compute` to better than 0.1 percent.
-
-**Re-run against the release (S18, 2026-10-09;
-`$KECK_ETCS_DATA/external/xtcalc/comparison_2026.10/`).** Inputs: the
-`mosfire-J-2026.10` 2017-02..2025-02 curve and the D25 quadrature LSF.
-
-- Ratios ours/XTcalc: 0.895-1.013 at 0.7" (was 0.891-1.005) and
-  1.078-1.291 at 1.0" (was 1.067-1.271).
-- Step 3 (throughput) is now 1.015 / 1.042 / 1.037 at J = 17 / 20 / 23
-  (0.7").
-- Step 10 (sampling and LSF) is 1.028 / 1.051 / 1.051.
-- Every other factor moves by at most 0.006. The reading above stands.
