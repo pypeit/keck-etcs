@@ -16,8 +16,12 @@ the form and presses "Compute" for three cases, reading ``window.KECK_ETC`` (set
 2. a 10" slit: the page shows the schema message ("Invalid input: ...") and no result;
 3. J2, 21 AB, 8 frames, ``target_snr`` 5 per resolution element: ``exptime_s`` equals CPython's.
 
-Also lists every host the page contacted; for the self-hosted site (Q&A S21-2 (b)) that must be the
-site's own host only. Exit 1 on any failure.
+Also checks that every calculator file (``_static/pyodide/``, ``_static/wheels/``, ``etc_*.json``,
+``etc.js``, ``etc.css``) came from the site's own host (Q&A S21-2 (b)), and lists any other host the
+page contacted: on readthedocs.io, the add-ons and EthicalAds that Read the Docs injects into
+community sites. Note: Read the Docs' Cloudflare front end answers headless Chrome with a bot
+challenge (HTTP 429, "Just a moment..."), so ``--url`` works in Firefox; check Chrome on the locally
+served build, or by hand. Exit 1 on any failure.
 """
 import argparse
 import functools
@@ -128,10 +132,17 @@ def main():
         browser.close()
     if srv:
         srv.shutdown()
-    hosts = sorted({u.split('/')[2] for u in requests if u.startswith('http')})
     own = url.split('/')[2]
-    ok = hosts == [own]
-    print(f"hosts contacted: {hosts} -> {'OK (self-hosted only)' if ok else 'FAIL (third-party request)'}")
+    hosts = sorted({u.split('/')[2] for u in requests if u.startswith('http')})
+    calc = [u for u in requests if '/_static/' in u and ('pyodide/' in u or 'wheels/' in u or 'etc_' in u
+                                                         or u.endswith(('etc.js', 'etc.css')))]
+    calc_hosts = sorted({u.split('/')[2] for u in calc})
+    ok = calc_hosts == [own]
+    print(f"calculator files: {len(calc)} requests, hosts {calc_hosts} -> "
+          f"{'OK (self-hosted)' if ok else 'FAIL (calculator file from another host)'}")
+    others = [h for h in hosts if h != own]
+    if others:
+        print(f'other hosts contacted by the page (not the calculator; e.g. Read the Docs add-ons/ads): {others}')
     bad += [] if ok else ['hosts']
     print('ALL CHECKS PASS' if not bad else f'FAILED: {bad}')
     return 1 if bad else 0

@@ -844,3 +844,99 @@ post-push checks:
 - modified: `docs/conf.py`, `docs/index.md`, `docs/requirements.txt`,
   `README.md`, `nautilus/README.md`, `scripts/check_docs.py`,
   `scripts/check_docs_build.py`, this prompt doc.
+
+### 2026-10-10 (Prompt #4 / S22: published on Read the Docs; post-push checks pass)
+
+Model: Claude Opus 5.5. The user pushed `keck-mosfire` (`f6e1f00`, "go
+time").
+
+**The push triggered a rebuild.** Build **35064669** of `keck-mosfire`
+started at 20:08:16Z for commit `f6e1f00` (the webhook works) and finished:
+success, **89 s**. The checks below use RTD's public API and log,
+read-only.
+
+- **No PypeIt:** the log says "PypeIt importable in the build environment:
+  False", and the `pip list` has no pypeit (keck_etcs 0.2.5, furo
+  2025.12.19, myst-nb 1.4.0, numpy 2.5.4).
+- **No warnings:** no Sphinx `WARNING` (only the kernel's "TCP without
+  encryption" log line), "build succeeded", `fail_on_warning: true`.
+- **Pyodide self-hosting at build time:** "5 core files + 16 packages, 39.5
+  MB ... (21 downloaded, all sha256 verified)"; wheel
+  `keck_etcs-0.2.5-py3-none-any.whl`; version line "keck_etcs 0.2.5 /
+  calibration mosfire-J-2026.10".
+- **Notebook:** executed in 26.8 s on RTD (3 s locally). The total stays
+  far inside the 15-minute limit.
+
+**Published pages** (https://keck-etcs.readthedocs.io/en/keck-mosfire/,
+fetched with curl):
+
+- the banner "keck_etcs 0.2.5 · calibration mosfire-J-2026.10" is on
+  `index`, `etc`, `field_reference`, `examples`, `citing`, `results` and
+  `api/etc`;
+- the field reference has 67 rows ("Inputs (31 fields)", "Outputs (36
+  fields)");
+- the examples page prints `snr_pixel_median = 4.47275798416922`,
+  identical to the local build and to `pypeit14b`;
+- `_static/pyodide/v314.0.7/pyodide.js` and the wheel are served (HTTP
+  200).
+
+**Published calculator** (`scripts/etc_page_check.py --url
+.../etc.html`):
+
+- **Firefox 155: ALL CHECKS PASS.**
+  - Ready 7.7-9.0 s after Start, cold; 37.1 MB transferred, since RTD
+    compresses; the button says "about 44 MB" of files.
+  - Defaults: `snr_pixel_median` 4.4727579841692195 against CPython
+    4.47275798416922; `calib_version` shown.
+  - Slit 10": the schema message.
+  - The `target_snr` exposure is 237.07418038007444 s against
+    237.07418038007478 s.
+  - All 25 calculator requests (Pyodide, packages, wheel, `etc_*.json`,
+    `etc.js`, `etc.css`) went to `keck-etcs.readthedocs.io`: self-hosted,
+    as S21-2 (b) asked.
+- **Other hosts:** the page also contacted `media.ethicalads.io` and
+  `server.ethicalads.io`. Read the Docs injects these ads into every
+  Community (free) site, so they are not the calculator's requests. The
+  check script now separates the two:
+  - it requires the calculator's files to come from the site;
+  - it lists the injected hosts.
+
+  Whether RTD's ads can be turned off is a project-settings question for
+  the user; I did not check RTD's current terms.
+- **Chrome:** RTD's Cloudflare front end answers *headless* Chrome with a
+  bot challenge (HTTP 429, "Just a moment...", seen in the page content).
+  A normal user agent did not help either, and I did not try further to get
+  around the bot protection; the user-agent change was removed again. So
+  Chrome is verified on the identical locally served build (ALL CHECKS
+  PASS, with calculator files from the site only). On the published site,
+  check it by hand in a normal Chrome window. The script's docstring
+  records this.
+
+**S22 Verify:**
+
+- **The published version shows keck_etcs 0.2.5 / `mosfire-J-2026.10`:**
+  yes, on `keck-mosfire`.
+  - `latest` (`main`) is still the failed build 35063843, as accepted in
+    S22-2 (b); it changes after the merge.
+  - `stable` needs a tag.
+- **A push triggers a rebuild:** yes, build 35064669 for `f6e1f00`.
+- **`check_docs.py`:** ALL CHECKS PASS earlier this prompt, with no secret
+  in any new file; there have been no changes since except
+  `scripts/etc_page_check.py`.
+
+**Public URL:** https://keck-etcs.readthedocs.io/en/keck-mosfire/ (the
+calculator is at `etc.html`). The bare https://keck-etcs.readthedocs.io/
+still returns 404 until `main` builds (S22-2 (b)).
+
+**Builds:** 35063843 (`latest`, failed), 35063949, 35063962 and 35064669
+(`keck-mosfire`, success).
+
+**After the merge (user):**
+
+- `latest` builds from `main`, and the root URL works.
+- Point the README badge at `latest`.
+- On the first tag, activate `stable`, and mint a Zenodo DOI for
+  `CITATION.cff` (S22-3).
+
+**Files changed since the push:** `scripts/etc_page_check.py` (host
+classification, Chrome note) and this prompt doc.
