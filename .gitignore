@@ -228,3 +228,7 @@ __marimo__/
 !keck_etcs/data/**/*.fits.gz
 !keck_etcs/tests/data/**/*.fits
 !keck_etcs/tests/data/**/*.fits.gz
+
+# Sphinx sources generated at build time (docs/conf.py) and myst-nb execution output
+docs/_generated/
+docs/jupyter_execute/

@@ -16,7 +16,9 @@ its calibration and its validation.
 :maxdepth: 2
 
 getting_started
+examples
 wmko_api_note
+field_reference
 api/index
 ```
 

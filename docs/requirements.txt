@@ -1,6 +1,10 @@
-# Documentation build only (plan S19; Read the Docs installs this, then `pip install .`).
+# Documentation build only (plan S19/S20; Read the Docs installs this, then `pip install .`).
 # Never add these to setup.py install_requires. No PypeIt: the docs build proves the ETC needs none.
 sphinx==9.1.0
 furo==2025.12.19
 myst-parser==5.1.0
+myst-nb==1.4.0
 docutils==0.22.4
+# executed examples (docs/examples.md, a MyST text notebook run at build time)
+ipykernel==7.4.0
+matplotlib==3.11.2

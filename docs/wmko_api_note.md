@@ -4,7 +4,8 @@
 `mosfire-J-2026.10`, 2026-10-09. The schemas
 `keck_etcs/schema/etc_input.json` and `etc_output.json` are the contract. This
 page summarises them; `scripts/check_docs.py` checks that it lists every
-field.*
+field. The full generated table of every field is the
+[ETC field reference](field_reference.md).*
 
 **Call.** `keck_etcs.etc.compute(inputs: dict) -> dict`. Both dicts are plain
 JSON. The CLI `keck_etc INPUT.json [-o OUT.json] [--summary]` wraps the call.

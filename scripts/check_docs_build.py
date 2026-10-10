@@ -26,7 +26,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 REPO = Path(__file__).resolve().parents[1]
-PAGES = ['index', 'getting_started', 'wmko_api_note', 'results', 'changes', 'keck_mosfire_design',
+PAGES = ['index', 'getting_started', 'examples', 'wmko_api_note', 'field_reference', 'results', 'changes', 'keck_mosfire_design',
          'developer/nautilus', 'keck_mosfire_implementation', 'XTcalc_bug', 'XTcalc_HOWTO',
          'api/index', 'api/etc', 'api/core', 'api/instruments', 'api/calib']
 API_OBJECTS = {'api/etc': ['keck_etcs.etc.compute', 'keck_etcs.etc.validate'],

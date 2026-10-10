@@ -53,16 +53,28 @@ release = version = keck_etcs.__version__
 
 # ---- extensions
 extensions = [
-    'myst_parser',
+    'myst_nb',             # includes myst_parser; executes docs/examples.md at build time
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
 ]
-source_suffix = {'.md': 'markdown', '.rst': 'restructuredtext'}
+source_suffix = {'.md': 'myst-nb', '.rst': 'restructuredtext'}
 root_doc = 'index'
 # Planning and working documents that are not pages of the site
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'requirements.txt']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'requirements.txt', 'jupyter_execute',
+                    '_generated/*.md']   # generated files are included by their pages, not pages themselves
+
+# ---- generated pages (plan S20): the field reference tables, from the JSON schemas, at every build
+sys.path.insert(0, str(REPO / 'scripts'))
+import gen_field_reference  # noqa: E402
+print(f'[keck_etcs docs] field reference: {gen_field_reference.write(DOCS / "_generated" / "field_reference_tables.md")}')
+
+# ---- executed examples (myst-nb): always run, so every number on the page comes from this build
+nb_execution_mode = 'force'
+nb_execution_raise_on_error = True
+nb_execution_timeout = 300
+nb_merge_streams = True
 
 myst_enable_extensions = ['colon_fence', 'deflist']
 myst_heading_anchors = 4

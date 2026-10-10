@@ -39,6 +39,14 @@ Usage:
    - private-key blocks;
    - ``secret``/``password``/``token`` assignments with a literal value.
 
+6. **Generated field reference covers the schemas** (plan S20): the tables
+   that ``scripts/gen_field_reference.py`` renders for ``docs/field_reference.md``
+   list exactly the leaf fields of both schemas (31 input, 36 output today).
+7. **Executed examples agree with this environment** (plan S20): if a built
+   ``docs/_build/html/examples.html`` exists, its printed
+   ``snr_pixel_median`` for J = 20 AB at the defaults equals ``compute()``
+   here to 1e-6 (relative).
+
 Read-only. Exit 1 if any check fails.
 """
 import contextlib
@@ -246,6 +254,41 @@ def check_secrets():
     return hits
 
 
+def check_field_reference():
+    sys.path.insert(0, str(REPO / 'scripts'))
+    import gen_field_reference as g
+    text = g.render()
+    bad = []
+    for name, title in (('etc_input', 'Inputs'), ('etc_output', 'Outputs')):
+        sch = json.loads((REPO / 'keck_etcs' / 'schema' / f'{name}.json').read_text())
+        want = set(leaf_paths(sch))
+        sec = text.split(f'## {title}')[1].split('\n## ')[0]
+        got = set(re.findall(r'^\| `([^`]+)` \|', sec, re.M))
+        ok = got == want
+        print(f"   {name}.json: {len(want)} leaf fields, {len(got)} rows in the generated table -> "
+              f"{'OK' if ok else 'FAIL missing ' + str(sorted(want - got)) + ' extra ' + str(sorted(got - want))}")
+        if not ok:
+            bad.append(f'field reference {name}')
+    return bad
+
+
+def check_built_examples():
+    page = REPO / 'docs' / '_build' / 'html' / 'examples.html'
+    if not page.exists():
+        print('   docs/_build/html/examples.html not built; skipped')
+        return []
+    from keck_etcs import etc
+    m = re.search(r'snr_pixel_median = ([0-9.eE+-]+)', page.read_text())
+    want = etc.compute({'band': 'J', 'source': {'mag': 20.0, 'mag_system': 'AB'}})['summary']['snr_pixel_median']
+    if not m:
+        print('   examples.html: no snr_pixel_median line -> FAIL')
+        return ['examples page']
+    got = float(m.group(1))
+    ok = abs(got / want - 1) <= 1e-6
+    print(f"   examples.html J = 20 AB snr_pixel_median {got!r}, compute() here {want!r} -> {'OK' if ok else 'FAIL'}")
+    return [] if ok else ['examples page']
+
+
 def main():
     bad = []
     print('1. WMKO note against the schemas')
@@ -256,6 +299,10 @@ def main():
     bad += check_versions_and_images()
     print('5. secrets')
     bad += check_secrets()
+    print('6. generated field reference')
+    bad += check_field_reference()
+    print('7. built examples page')
+    bad += check_built_examples()
     print('ALL CHECKS PASS' if not bad else f'FAILED: {bad}')
     return 1 if bad else 0
 

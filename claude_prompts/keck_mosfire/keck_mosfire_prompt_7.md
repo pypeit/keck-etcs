@@ -482,3 +482,102 @@ want a persistent `keck-etcs-docs` env instead.
 - `docs/developer/nautilus.md`, `docs/api/{index,etc,core,instruments,calib}.md`;
 - `scripts/check_docs_build.py`;
 - this prompt doc.
+
+### 2026-10-10 (Prompt #2 / S20: generated field reference, executed examples; -W build in 9 s)
+
+Model: Claude Opus 5.5. The second-round Q&A is still unanswered, so the
+build ran again in the scratch env (S19-4 (b)), with nothing installed in
+`pypeit14b`.
+
+**Field reference.**
+
+- **`scripts/gen_field_reference.py` (new; standard library):** walks both
+  schemas and resolves `$defs`/`$ref` and `anyOf`. It writes one row per
+  leaf field: dotted path, type, range or enum (min, max, exclusive min,
+  pattern, item and length constraints), default (JSON), `x-unit`, and the
+  description, marked *(required)* or *(always present)*.
+- **`docs/conf.py`** calls `gen_field_reference.write()` at every build,
+  into `docs/_generated/field_reference_tables.md`. That file is
+  git-ignored and excluded as a page; it is written only when its content
+  changes.
+- **`docs/field_reference.md`** includes it: 31 input and 36 output rows.
+- **The WMKO note and the reference link to each other:** the note's header
+  links to the reference, and the reference links back to the note.
+
+**Examples: myst-nb, chosen over the matplotlib `plot` directive.** The
+plot directive renders only figures; the printed numbers would then need a
+second generator. A MyST *text* notebook (`docs/examples.md`, `file_format:
+mystnb`) runs in a Jupyter kernel at build time and shows both the code and
+its real output. Kept as Markdown it can never hold stored outputs, and it
+diffs cleanly in git.
+
+- **Settings:** `nb_execution_mode = 'force'` (always executed),
+  `nb_execution_raise_on_error = True` (a failing cell fails the build),
+  300 s timeout.
+- **Cells:**
+  - the versions;
+  - the three `examples/*.json`: S/N per pixel and per resel, line S/N,
+    frames, saturation flag, number of warnings;
+  - J = 20 AB at the defaults: the exact `snr_pixel_median` and
+    `snr_resel_median`, slit and aperture fractions, the warnings, and a
+    figure of S/N against wavelength with the sky;
+  - exposure time against magnitude for J and J2 (S/N 5 per resel,
+    8 frames), printed and plotted;
+  - a 1e-17 erg/s/cm^2 line at 12820 A (`snr_line` and window, plotted);
+  - `throughput.date` selecting each era.
+- **Seen in the output:** J2 at 23 AB solves to 5479 s per frame, above the
+  3600 s maximum, and `compute()` warns. That is the intended behaviour,
+  shown as is.
+
+**Dependencies.**
+
+- `docs/requirements.txt` adds myst-nb 1.4.0, ipykernel 7.4.0 and
+  matplotlib 3.11.2, pinned; myst-parser stays 5.1.0.
+- `conf.py` now loads `myst_nb`, which includes myst-parser, with `.md`
+  mapped to `myst-nb`.
+- `.gitignore` adds `docs/_generated/` and `docs/jupyter_execute/`.
+- matplotlib stays docs-only: it is in the `calib` extra and the docs
+  requirements, never in `install_requires`.
+
+**Checks extended.**
+
+- **`scripts/check_docs.py`:**
+  - check 6: the generated tables list exactly the leaf fields of both
+    schemas, the same walker as the WMKO-note check;
+  - check 7: if `docs/_build/html/examples.html` exists, its printed J = 20
+    AB `snr_pixel_median` equals `compute()` in the running environment to
+    1e-6.
+- **`scripts/check_docs_build.py`** now expects 17 pages, adding `examples`
+  and `field_reference`.
+
+**Verify.**
+
+- **`-W` build passes:** "build succeeded", 0 warnings; the notebook ran in
+  3.3 s. The kernel's "TCP without encryption" line is a log message, not a
+  Sphinx warning.
+- **The field reference lists 31 input and 36 output fields**
+  (`check_docs.py` check 6 OK).
+- **The examples page agrees with `pypeit14b`:** it prints
+  `snr_pixel_median = 4.47275798416922`, identical to `compute()` in
+  `pypeit14b` (check 7: relative difference 0).
+- **`check_docs_build.py`: ALL CHECKS PASS.** 17 pages with the version
+  line; 14 images and 491 internal links resolve.
+- **`check_docs.py`: ALL CHECKS PASS** (secret scan of 208 files).
+- **Build time against the RTD limit.** Read the Docs' build
+  documentation, fetched today, gives 15 minutes and 7 GB of memory for
+  Community projects. Simulated in a fresh venv from the same Python:
+  - cold `pip install --no-cache-dir -r docs/requirements.txt .`: 25.5 s;
+  - `sphinx-build -W`: 8.2 s;
+  - peak memory of the Sphinx process 0.22 GB (the notebook kernel is a
+    separate, light process).
+
+  That is about 34 s against 900 s. RTD's own overhead (clone, environment
+  set-up) will add to it; the margin is large.
+
+**Files for the user to commit:**
+
+- new: `scripts/gen_field_reference.py`, `docs/field_reference.md`,
+  `docs/examples.md`;
+- modified: `docs/conf.py`, `docs/requirements.txt`, `docs/index.md`,
+  `docs/wmko_api_note.md` (the link), `.gitignore`,
+  `scripts/check_docs.py`, `scripts/check_docs_build.py`, this prompt doc.
