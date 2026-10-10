@@ -1,10 +1,12 @@
 # Documentation build only (plan S19/S20; Read the Docs installs this, then `pip install .`).
 # Never add these to setup.py install_requires. No PypeIt: the docs build proves the ETC needs none.
-sphinx==9.1.0
+# Pinned to what coexists with PypeIt's own docs stack in pypeit14b (sphinx-rtd-theme 3.0.0 needs
+# sphinx<9 and docutils<0.22), so the same versions build locally (Q&A S19-4 (c)) and on Read the Docs.
+sphinx==8.2.3
 furo==2025.12.19
 myst-parser==5.1.0
 myst-nb==1.4.0
-docutils==0.22.4
+docutils==0.21.2
 # executed examples (docs/examples.md, a MyST text notebook run at build time)
 ipykernel==7.4.0
-matplotlib==3.11.2
+matplotlib==3.11.0

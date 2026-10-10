@@ -70,6 +70,34 @@ sys.path.insert(0, str(REPO / 'scripts'))
 import gen_field_reference  # noqa: E402
 print(f'[keck_etcs docs] field reference: {gen_field_reference.write(DOCS / "_generated" / "field_reference_tables.md")}')
 
+# ---- interactive ETC page (plan S21; docs/etc.md, docs/_static/etc.js): self-hosted Pyodide (Q&A S21-2 (b)),
+# the keck_etcs wheel of this very source tree, and the input schema, all as static files of the site
+import json as _json  # noqa: E402
+import shutil as _shutil  # noqa: E402
+import fetch_pyodide  # noqa: E402
+
+_STATIC_GEN = DOCS / '_generated' / 'static'
+_pyo_dir = fetch_pyodide.fetch(_STATIC_GEN / 'pyodide', log=print)
+_wheel_dir = _STATIC_GEN / 'wheels'
+_shutil.rmtree(_wheel_dir, ignore_errors=True)
+subprocess.run([sys.executable, '-m', 'pip', 'wheel', '--no-deps', '-q', '-w', str(_wheel_dir), str(REPO)], check=True)
+_wheel = next(_wheel_dir.glob(f'keck_etcs-{keck_etcs.__version__}-*.whl'))
+_shutil.copy2(REPO / 'keck_etcs' / 'schema' / 'etc_input.json', _STATIC_GEN / 'etc_input.json')
+_pyo_lock = _json.loads((_pyo_dir / 'pyodide-lock.json').read_text())
+_download_mb = (sum(f.stat().st_size for f in _pyo_dir.iterdir() if f.is_file() and f.name != 'pyodide-lock.json')
+                + _wheel.stat().st_size) / 1e6
+(_STATIC_GEN / 'etc_config.json').write_text(_json.dumps({
+    'pyodide_version': fetch_pyodide.VERSION,
+    'pyodide_index': f'pyodide/v{fetch_pyodide.VERSION}/',
+    'pyodide_python': _pyo_lock['info']['python'],
+    'packages': fetch_pyodide.PACKAGES,
+    'wheel': f'wheels/{_wheel.name}',
+    'keck_etcs_version': keck_etcs.__version__,
+    'calib_version': CALIB_VERSION,
+    'download_mb': round(_download_mb, 1),
+}, indent=1))
+print(f'[keck_etcs docs] interactive page: wheel {_wheel.name}, first-load download about {_download_mb:.0f} MB')
+
 # ---- executed examples (myst-nb): always run, so every number on the page comes from this build
 nb_execution_mode = 'force'
 nb_execution_raise_on_error = True
@@ -90,7 +118,8 @@ napoleon_numpy_docstring = False
 # ---- HTML
 html_theme = 'furo'
 html_title = f'keck_etcs {version}'
-html_static_path = []
+html_static_path = ['_static', '_generated/static']
+html_css_files = ['etc.css']
 VERSION_LINE = (f'keck_etcs <strong>{version}</strong> &middot; calibration '
                 f'<strong>{CALIB_VERSION}</strong> &middot; MOSFIRE J/J2')
 html_theme_options = {

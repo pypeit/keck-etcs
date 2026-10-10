@@ -14,7 +14,10 @@ runs in the docs environment or in ``pypeit14b``. Checks:
    fetched) resolves to a file in the built tree;
 4. the report page shows all of the report's figures (as many ``<img>`` as the Markdown has
    images), and the API pages hold the documented objects (``keck_etcs.etc.compute``,
-   ``keck_etcs.core.snr``, ``keck_etcs.instruments.mosfire``).
+   ``keck_etcs.core.snr``, ``keck_etcs.instruments.mosfire``);
+5. the interactive page's static files exist (``_static/etc_config.json``, the wheel it names, the
+   self-hosted Pyodide loader and lock file, the schema, ``etc.js``, ``etc.css``), and the config's
+   versions equal the repository's (the browser test itself is ``scripts/etc_page_check.py``).
 
 Read-only. Exit 1 on any failure.
 """
@@ -26,7 +29,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 REPO = Path(__file__).resolve().parents[1]
-PAGES = ['index', 'getting_started', 'examples', 'wmko_api_note', 'field_reference', 'results', 'changes', 'keck_mosfire_design',
+PAGES = ['index', 'etc', 'getting_started', 'examples', 'citing', 'wmko_api_note', 'field_reference', 'results', 'changes', 'keck_mosfire_design',
          'developer/nautilus', 'keck_mosfire_implementation', 'XTcalc_bug', 'XTcalc_HOWTO',
          'api/index', 'api/etc', 'api/core', 'api/instruments', 'api/calib']
 API_OBJECTS = {'api/etc': ['keck_etcs.etc.compute', 'keck_etcs.etc.validate'],
@@ -120,6 +123,25 @@ def main():
             print(f"   {page}: {o} {'OK' if ok else 'MISSING'}")
             if not ok:
                 bad.append(f'api {o}')
+    print('5. interactive page static files (plan S21)')
+    import json
+    cfg_f = root / '_static' / 'etc_config.json'
+    if not cfg_f.exists():
+        print('   _static/etc_config.json MISSING')
+        bad.append('etc_config')
+    else:
+        cfg = json.loads(cfg_f.read_text())
+        need = [cfg['wheel'], cfg['pyodide_index'] + 'pyodide.js', cfg['pyodide_index'] + 'pyodide-lock.json',
+                'etc_input.json', 'etc.js', 'etc.css']
+        for rel in need:
+            ok = (root / '_static' / rel).exists()
+            print(f"   _static/{rel}: {'OK' if ok else 'MISSING'}")
+            bad += [] if ok else [f'static {rel}']
+        ok = cfg['keck_etcs_version'] == version and cfg['calib_version'] == calib and version in cfg['wheel']
+        print(f"   etc_config.json: keck_etcs {cfg['keck_etcs_version']}, calibration {cfg['calib_version']}, "
+              f"wheel {cfg['wheel']}, Pyodide {cfg['pyodide_version']}, first load {cfg['download_mb']} MB -> "
+              f"{'OK' if ok else 'FAIL'}")
+        bad += [] if ok else ['etc_config versions']
     print('ALL CHECKS PASS' if not bad else f'FAILED: {bad}')
     return 1 if bad else 0
 

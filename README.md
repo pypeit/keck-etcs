@@ -1,5 +1,7 @@
 # keck-etcs
 
+[![Documentation](https://readthedocs.org/projects/keck-etcs/badge/?version=keck-mosfire)](https://keck-etcs.readthedocs.io/en/keck-mosfire/)
+
 Exposure time calculators (ETCs) for the Keck spectrographs, grounded in
 real, reduced data rather than design numbers. Throughputs come from
 standard stars reduced with [PypeIt](https://github.com/pypeit/PypeIt), the
@@ -8,7 +10,10 @@ measured values. The ETCs can be refreshed as new data come in.
 
 The first instrument is **Keck/MOSFIRE, J and J2 long-slit spectroscopy**.
 The current code is `keck_etcs` 0.2.5, with calibration `mosfire-J-2026.10`.
-The results are in `reports/Keck_MOSFIRE_report_20261009.md`, the design in
+The documentation, with an in-browser calculator, is at
+<https://keck-etcs.readthedocs.io/en/keck-mosfire/> (the `latest` version follows `main`
+once `keck-mosfire` is merged). The results are in
+`reports/Keck_MOSFIRE_report_20261009.md`, the design in
 `docs/keck_mosfire_design.md`, the interface for WMKO in
 `docs/wmko_api_note.md`, and the release history in `CHANGES.md`.
 
@@ -161,6 +166,10 @@ with a `MONITOR` config and register it in
    release commit, and tag it with the calibration version. Run
    `scripts/nautilus/backup_products.py --run --release <tag>` to freeze the
    inputs on the backup drive.
+7. **Documentation.** The push triggers a Read the Docs build. Check that
+   the banner of the published site shows the new code and calibration
+   versions, and that the interactive calculator reports them
+   (`scripts/etc_page_check.py --url <published etc.html>`).
 
 ## Layout
 

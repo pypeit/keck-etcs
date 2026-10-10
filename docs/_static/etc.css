@@ -1,0 +1,16 @@
+/* Interactive keck_etcs calculator (docs/etc.md, docs/_static/etc.js) */
+#keck-etc .etc-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.4rem 1.2rem; margin: 1rem 0; }
+#keck-etc .etc-row { display: flex; flex-direction: column; }
+#keck-etc .etc-row[hidden] { display: none; }
+#keck-etc .etc-row label { font-size: 0.85em; color: var(--color-foreground-secondary); }
+#keck-etc input, #keck-etc select { font: inherit; padding: 0.2rem 0.3rem; color: var(--color-foreground-primary);
+  background: var(--color-background-secondary); border: 1px solid var(--color-background-border); border-radius: 3px; }
+#keck-etc button { font: inherit; padding: 0.35rem 0.9rem; margin-right: 0.5rem; cursor: pointer; border-radius: 4px;
+  border: 1px solid var(--color-brand-primary); background: var(--color-brand-primary); color: white; }
+#keck-etc button.secondary { background: transparent; color: var(--color-brand-primary); }
+#keck-etc button:disabled { opacity: 0.5; cursor: progress; }
+#keck-etc .etc-status { font-size: 0.9em; color: var(--color-foreground-secondary); }
+#keck-etc .etc-error { color: #c62828; font-weight: 600; }
+#keck-etc .etc-summary td:first-child { padding-right: 1.5rem; color: var(--color-foreground-secondary); }
+#keck-etc .etc-warnings { font-size: 0.9em; }
+#keck-etc .etc-plot { width: 100%; display: block; margin: 0.8rem 0; }

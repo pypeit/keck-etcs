@@ -15,6 +15,7 @@ its calibration and its validation.
 :caption: Using the ETC
 :maxdepth: 2
 
+etc
 getting_started
 examples
 wmko_api_note
@@ -28,6 +29,7 @@ api/index
 
 results
 changes
+citing
 ```
 
 ```{toctree}

@@ -302,6 +302,7 @@ prompt #1:
     proves the docs need no PypeIt);
   - (b) a throw-away venv in the session scratchpad;
   - (c) install the docs requirements into `pypeit14b`.
+>A. (c)
 - **S22-2. Default version until the merge.** You will expose both `main`
   and `keck-mosfire` (S19-1). Today `origin/main` is the start-up merge
   (`987dca0`), 65 commits behind `keck-mosfire`, with no `keck_etcs/etc.py`,
@@ -312,6 +313,7 @@ prompt #1:
     switch the default to `latest` once `main` has the merge
     (recommended);
   - (b) activate both and accept a failed `latest` build until the merge.
+>A. (b)
 - **S21-2. Where the interactive page loads Pyodide from.** Each reader's
   browser downloads Pyodide and its packages when the page is opened.
   - (a) the official Pyodide CDN (jsDelivr), with an exact version pinned
@@ -319,12 +321,45 @@ prompt #1:
     third-party request, stated on the page.
   - (b) self-host the Pyodide files we need as static files on RTD: larger
     builds and repository-independent, but no third-party request.
+>A. Try and go with (b)
 - **S22-3. Citation (optional).** The repository has a BSD-3 `LICENSE` but no
   `CITATION.cff` or DOI.
   - (a) add a `CITATION.cff` now (authors, title, repository, license; no
     DOI), and leave a Zenodo DOI until the first tag after the merge
     (recommended);
   - (b) nothing for now.
+>A. (a)
+
+Third round (prompt #3, 2026-10-10; the S21 feasibility check stopped
+here, as the prompt asks, because the cold download is "tens of MB"):
+
+- **S21-3. Interactive page: size and loading.** In Chrome the first visit
+  downloads **36.4 MB** (measured). That is Pyodide's core (12.3 MB), the
+  ETC's 15 packages (25.8 MB: scipy 14.0, astropy plus IERS data 8.0, numpy
+  3.0) and the 4.7 MB wheel, before compression savings. The browser caches
+  it afterwards.
+  - The first result appears after about 9 s on this workstation's
+    connection: Pyodide 2.3 s, packages 4.7 s, wheel 5.2 s, first compute
+    3.6 s. A later compute takes 0.02 s.
+  - On a 20-50 Mbit/s home connection, expect roughly 10-20 s more for the
+    download.
+  - The results are exact: Pyodide equals CPython to 2e-16.
+
+  Options:
+  - (a) build the page as is, but load Pyodide only when the reader clicks
+    "Start the calculator", with the size and time stated on the button, so
+    the rest of the docs never pays for it (recommended: no code change, and
+    results identical to the library);
+  - (b) as (a), and also drop astropy from the browser path (-8 MB) by
+    shipping the four tables `compute()` reads (throughput, filters,
+    detector, sky grid) in a browser-only format. That is a code change in
+    `keck_etcs/instruments/base.py`, which needs your approval;
+  - (c) as (b), and also replace the five scipy functions on the compute
+    path (`fftconvolve`, `simpson`, `beta`/`betainc`, `brentq`, `ndtr`) with
+    numpy code (-14 MB, to about 14 MB in total). This is a larger change to
+    validated physics and needs new regression checks;
+  - (d) stop at documentation only.
+>A. (a)
 
 ## Logging
 
@@ -581,3 +616,231 @@ diffs cleanly in git.
 - modified: `docs/conf.py`, `docs/requirements.txt`, `docs/index.md`,
   `docs/wmko_api_note.md` (the link), `.gitignore`,
   `scripts/check_docs.py`, `scripts/check_docs_build.py`, this prompt doc.
+
+### 2026-10-10 (Prompt #3 / S21: Pyodide feasibility. Exact, but 36 MB on first load; stopped for the S21-3 decision)
+
+Model: Claude Opus 5.5. The second-round Q&A is still unanswered.
+
+- S21-2 takes its recommended default (a), Pyodide from the pinned jsDelivr
+  CDN, for the feasibility test only.
+- The scratch env is reused (S19-4 (b)); nothing was installed in
+  `pypeit14b`.
+- Playwright 1.63.0 is installed in the scratch env only, driving the
+  system Google Chrome. No browser was downloaded.
+
+**Pyodide version and packages.** The latest Pyodide on npm is **314.0.7**
+(Python 3.14.2, ABI 2026_0). Its `pyodide-lock.json` has every dependency
+of `compute()`:
+
+- numpy 2.4.6, scipy 1.18.0, pyyaml 6.0.3;
+- astropy 7.2.0, with pyerfa, astropy-iers-data and packaging;
+- jsonschema 4.26.0, with referencing, compiled `rpds-py` 0.30.0, attrs,
+  jsonschema-specifications and pyrsistent.
+
+matplotlib 3.10.8 is also available, but it adds 10.2 MB; a JS plot is
+lighter.
+
+**Download size** (jsDelivr `Content-Length`):
+
+- Pyodide core: 12.28 MB (`pyodide.asm.wasm` 9.60, `python_stdlib.zip`
+  2.55);
+- the closure of the ETC's dependencies: 15 packages, 25.81 MB. scipy 14.03,
+  astropy 5.99, astropy-iers-data 1.99 and numpy 2.96 dominate;
+- our wheel: 4.67 MB;
+- total about 42.8 MB of files; the browser measured 36.4 MB transferred.
+
+**Run in headless Chrome 149.** The new script `scripts/pyodide_check.py`
+writes a test page, serves it on localhost and loads Pyodide from the CDN.
+It installs the wheel with micropip and compares three cases with CPython:
+
+| Case | Pyodide | CPython | Result |
+|---|---|---|---|
+| `compute({})`: `snr_pixel_median` | 4.4727579841692195 | 4.47275798416922 | rel 2e-16, OK |
+| J2 21 AB, `target_snr` 5/resel: `exptime_s` | 237.07418038007444 | 237.07418038007478 | rel 1e-15, OK |
+| slit 10": `InputError` message | identical: "slit_width_arcsec: 10.0 is greater than the maximum of 5.0" | | OK |
+
+- The versions echoed are keck_etcs 0.2.5, calibration `mosfire-J-2026.10`
+  and era 2025-04.., the same warnings as CPython.
+- **Timing (cold, fresh profile):** Pyodide ready 2.3 s, packages 4.7 s,
+  wheel 5.2 s, then the first `compute` 3.6 s (it reads the sky grid and
+  the tables). Subsequent calls take 0.02 s.
+- **Total:** about 9 s to the first result, 36.4 MB transferred.
+
+**Decision needed.** The prompt says to stop and report if the cost is
+"tens of MB or tens of seconds". 36 MB is in that range, although the time
+on this connection (9 s) is not. The options and a recommendation are in
+Q&A S21-3. Nothing has been built for the page yet.
+
+- The scipy and astropy uses on the compute path are real, so shrinking
+  needs code changes:
+  - `core/lsf` fftconvolve;
+  - `core/slitloss` simpson, beta and betainc;
+  - `core/snr` brentq;
+  - `core/source` ndtr;
+  - `instruments/base` astropy Table and fits.
+- Firefox is not tested yet. It needs Playwright's own Firefox build, a
+  download of about 100 MB into the scratch env, and is planned for the
+  page-verification stage.
+
+**Read the Docs status** (public API, read-only, 2026-10-10):
+
+- **Project `keck-etcs`:** builds 35063949 (45 s) and 35063962 (77 s) of
+  `keck-mosfire` succeeded, and https://keck-etcs.readthedocs.io/en/keck-mosfire/
+  serves.
+- **`latest`:** build 35063843 (`main`) failed, as expected, since `main`
+  has no docs configuration.
+- **The default version is still `latest`**, so
+  https://keck-etcs.readthedocs.io/ redirects to a 404 `/en/latest/`. Set
+  Admin → Settings → Default version to `keck-mosfire` (S22-2 (a)), and
+  deactivate or hide `latest` until the merge.
+
+**Files:** new `scripts/pyodide_check.py`, plus this prompt doc.
+
+
+### 2026-10-10 (Prompt #4: S21 interactive page built, self-hosted, verified in Chrome and Firefox; S22 pre-publish done; waiting for the push)
+
+Model: Claude Opus 5.5.
+
+**Answers read.**
+
+- S19-4 (c): install the docs requirements in `pypeit14b`.
+- S22-2 (b): both versions active; a failed `latest` is accepted until the
+  merge.
+- S21-2 (b): self-host Pyodide.
+- S22-3 (a): `CITATION.cff` now.
+- S21-3 (a): build the page, loading Pyodide on demand.
+
+S22 publishes the interactive page, so this prompt first finished S21 on
+those answers, then did S22's pre-publish items. S22's post-push checks
+wait for the user's commit and push.
+
+**`pypeit14b` and the pins (S19-4 (c)).**
+
+- A dry run showed the first pins would upgrade Sphinx 8.2.3 to 9.1.0,
+  docutils 0.21.2 to 0.22.4 and matplotlib 3.11.0 to 3.11.2.
+- PypeIt's own docs stack (`sphinx-rtd-theme` 3.0.0, its `docs` extra)
+  needs `sphinx<9` and `docutils<0.22`.
+- `docs/requirements.txt` is therefore re-pinned to sphinx 8.2.3,
+  docutils 0.21.2 and matplotlib 3.11.0, as already in `pypeit14b`; furo
+  needs sphinx >= 7 and myst-parser 5.1 needs >= 8.
+- The install into `pypeit14b` then only *added* packages (myst-nb,
+  myst-parser, furo, ipykernel, jupyter-cache and their dependencies).
+  `pip check`: no broken requirements.
+- A local build in `pypeit14b` needs `KECK_ETCS_DOCS_ALLOW_PYPEIT=1`, since
+  `conf.py` refuses PypeIt by default. Read the Docs proves the build works
+  without PypeIt.
+
+**S21: self-hosted Pyodide.**
+
+- **`scripts/fetch_pyodide.py` (new; standard library)** downloads, at
+  build time, exactly the files a browser requested in the measurement
+  run: 5 core files (`pyodide.js`, `pyodide.asm.mjs`, `pyodide.asm.wasm`,
+  `python_stdlib.zip`, `pyodide-lock.json`) and the 16 wheels of
+  numpy/scipy/astropy/pyyaml/jsonschema/micropip and their dependencies.
+  - Core files are checked against the committed
+    `docs/pyodide_core.sha256`, written by `--record`, the one step that
+    trusts the CDN.
+  - Wheels are checked against the sha256 in the verified lock file.
+  - Pinned to Pyodide 314.0.7: 39.5 MB, kept in
+    `docs/_generated/static/pyodide/` (git-ignored); present files are
+    reused.
+- **`docs/conf.py`** runs it at every build. It also builds the wheel of the
+  same source tree (`pip wheel --no-deps`), copies `etc_input.json`, and
+  writes `etc_config.json` (Pyodide version and Python, the wheel's name
+  with its version, keck_etcs and calibration versions, first-load size).
+  All of it is served under `_static/`.
+- **`docs/etc.md`** ("Interactive calculator", first in "Using the ETC") with
+  **`docs/_static/etc.js` and `etc.css`**, plain JS with no third-party
+  library:
+  - nothing loads until "Start the calculator (downloads about 44 MB
+    once, from this site)" is pressed (S21-3 (a));
+  - the form is built from the schema at page load: defaults, ranges,
+    enums and descriptions as tooltips; conditional fields for extended
+    sources, power law and line; CDS sends `n_reads = 1`;
+  - the results: S/N per pixel and per resolution element, the line S/N,
+    the exposure, the brightest pixel and flag, R and the LSF, the slit
+    and aperture fractions, the versions (`meta.keck_etcs_version`,
+    `calib_version`, `era`), every warning verbatim, a canvas plot of S/N
+    and sky against wavelength, and a JSON download of the inputs and the
+    full output;
+  - `InputError` is shown as "Invalid input: ...", other exceptions as
+    one line (no stack trace);
+  - user spectra are left to the Python API, as stated on the page.
+- **Plot:** a small canvas plot rather than a JS library from a CDN, which
+  would be a third-party request, or matplotlib in Pyodide (+10 MB).
+
+**S21 verification.** The new `scripts/etc_page_check.py` serves the built
+HTML, opens `etc.html` in a fresh headless profile, presses Start and
+fills the form. Playwright runs in the scratch env with the system Chrome;
+its Firefox build was downloaded into the scratchpad, not `~/.cache`.
+
+| | Chrome 149 | Firefox 155 |
+|---|---|---|
+| Ready after Start (cold) | 6.0 s | 6.5 s |
+| Transferred (localhost, uncompressed) | 44.3 MB | 44.3 MB |
+| Defaults: `snr_pixel_median`, page against CPython | 4.4727579841692195 against 4.47275798416922 (2e-16), OK | same, OK |
+| First compute | 3.80 s | 3.81 s |
+| Slit 10" | "Invalid input: slit_width_arcsec: 10 is greater than the maximum of 5.0", no result, OK | same, OK |
+| J2 21 AB, `target_snr` 5/resel: `exptime_s` | 237.07418038007444 against 237.07418038007478, OK | same, OK |
+| `calib_version` shown | yes | yes |
+| Hosts contacted | 127.0.0.1 only | 127.0.0.1 only |
+
+- Screenshots, kept in the scratchpad only, not committed, show the banner,
+  the button with its size, the form, the results, the warnings and the
+  plot. A left-axis label overlap was fixed.
+- No claim is made about offline use.
+
+**S22: pre-publish.**
+
+- **`.readthedocs.yaml`** is unchanged and final: Python 3.12,
+  `docs/requirements.txt`, `pip install .` with no extras,
+  `fail_on_warning: true`. The S21 wheel and Pyodide steps run in
+  `conf.py`, so they need no build jobs; RTD downloads about 40 MB of
+  Pyodide per build.
+- **`CITATION.cff`** (new): version 0.2.5, BSD-3-Clause, the repository and
+  docs URLs, no DOI yet.
+- **`docs/citing.md`** ("Citing and versions"): the `meta` version fields,
+  the banner, how to cite, and that WMKO's front end will be the official
+  tool.
+- **`README.md`:**
+  - a Read the Docs badge and URL for `keck-mosfire`; the project exists,
+    so it is not "pending";
+  - release step 7, after the commit: check the published banner and the
+    calculator with `etc_page_check.py --url`.
+- **`nautilus/README.md`** section 10: step 10, the same check.
+- **Checks:**
+  - `check_docs_build.py` now covers 19 pages and the calculator's static
+    files and config versions;
+  - `check_docs.py` checks the `CITATION.cff` version.
+
+**Builds and checks after these changes.**
+
+- `-W` build in `pypeit14b`: 13.2 s, 0 warnings.
+- RTD-like build in a fresh venv without PypeIt: 10.8 s, "PypeIt
+  importable: False".
+- `check_docs_build.py`, `check_docs.py` (213 files, no secret) and
+  `pytest` (111 passed): all pass.
+
+**Read the Docs (read-only API).** `keck-mosfire` builds 35063949 and
+35063962 succeeded (these predate this prompt's changes); `latest` build
+35063843 failed, as accepted in S22-2 (b). With `latest` as the default
+version, https://keck-etcs.readthedocs.io/ itself returns 404 until the
+merge; the working URL is https://keck-etcs.readthedocs.io/en/keck-mosfire/.
+
+**Next, user:** commit and push `keck-mosfire`. Then I can run the S22
+post-push checks:
+
+- the new build's log (no PypeIt, build time, no warnings);
+- the published banner, field reference, examples and calculator, with
+  `etc_page_check.py --url https://keck-etcs.readthedocs.io/en/keck-mosfire/etc.html`;
+- that the push triggered the rebuild.
+
+**Files to commit:**
+
+- new: `CITATION.cff`, `docs/citing.md`, `docs/etc.md`,
+  `docs/_static/etc.js`, `docs/_static/etc.css`,
+  `docs/pyodide_core.sha256`, `scripts/fetch_pyodide.py`,
+  `scripts/pyodide_check.py`, `scripts/etc_page_check.py`;
+- modified: `docs/conf.py`, `docs/index.md`, `docs/requirements.txt`,
+  `README.md`, `nautilus/README.md`, `scripts/check_docs.py`,
+  `scripts/check_docs_build.py`, this prompt doc.

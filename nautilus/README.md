@@ -438,3 +438,8 @@ A calibration release is one commit touching only `keck_etcs/data/` and
    `CHANGES.md`, this table and `meta.calib_version` agree.
 8. The user commits (code first, then the release) and tags.
 9. Run `backup_products.py --run --release <calib_version>`.
+10. After the push, the Read the Docs build of the branch must show the new
+    `calib_version` in its banner and in the interactive calculator. Check it
+    with `scripts/etc_page_check.py --url
+    https://keck-etcs.readthedocs.io/en/<version>/etc.html`; the build logs
+    are on readthedocs.org (project `keck-etcs`).

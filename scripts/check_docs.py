@@ -27,7 +27,7 @@ Usage:
    - the Job manifests use the README's current image;
    - ``nautilus/pypeit_pin.txt`` is that image's pin;
    - ``keck_etcs.__version__`` is that tag (or the next one, before its
-     build).
+     build), and ``CITATION.cff`` carries the same version.
 5. **No secret in a document:** git-tracked and new text files under the
    repo (``*.md``, ``*.py``, ``*.yaml``, ``*.yml``, ``*.txt``, ``*.json``,
    ``*.csv``, ``*.ecsv``, ``*.patch``, ``*.sh``, the Dockerfile, ``bin/*``)
@@ -214,6 +214,11 @@ def check_versions_and_images():
         if not ok:
             bad.append(y)
     v = keck_etcs.__version__
+    cff = re.search(r'^version: (\S+)', (REPO / 'CITATION.cff').read_text(), re.M)
+    ok = cff is not None and cff.group(1) == v
+    print(f"   CITATION.cff version {cff.group(1) if cff else None} vs keck_etcs {v} -> {'OK' if ok else 'FAIL'}")
+    if not ok:
+        bad.append('CITATION.cff version')
     ok = v == current or tuple(map(int, v.split('.'))) > tuple(map(int, current.split('.')))
     print(f"   keck_etcs.__version__ {v} vs current image {current} -> {'OK' if ok else 'FAIL'}")
     if not ok:
