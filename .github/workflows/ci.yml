@@ -1,0 +1,156 @@
+# Continuous integration for keck_etcs (docs/developer/testing.md).
+#
+# Three jobs, mirroring the three ways the package is installed:
+#
+#   etc    the ETC alone (`pip install .[test]`, no PypeIt) on every supported
+#          Python: unit, schema and regression tests, the CLI on the example
+#          inputs, and scripts/check_docs.py (the documentation agrees with the
+#          code, the schemas and the shipped data);
+#   calib  the calibration pipeline with PypeIt installed from GitHub at the
+#          pin in nautilus/pypeit_pin.txt (as the Nautilus image does), so the
+#          PypeIt-dependent tests (harvest, A0V standards) run instead of
+#          skipping;
+#   docs   the Sphinx site exactly as Read the Docs builds it (warnings are
+#          errors; the examples page is executed; the interactive page's
+#          static files are produced), followed by scripts/check_docs_build.py.
+#
+# The slow validation test (KECK_ETCS_DATA, in-pod products) never runs here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  etc:
+    name: ETC tests (Python ${{ matrix.python }}, no PypeIt)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            setup.py
+            requirements.txt
+
+      - name: Install the ETC and pytest
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[test]
+          python -m pip list
+
+      - name: PypeIt must not be importable in this job
+        run: |
+          python -c "import importlib.util, sys; found = importlib.util.find_spec('pypeit') is not None; print('pypeit importable:', found); sys.exit(found)"
+
+      - name: Unit, schema and regression tests
+        run: python -m pytest keck_etcs/tests -ra
+
+      - name: CLI on the example inputs
+        run: |
+          for f in examples/*.json; do
+            echo "== $f"
+            keck_etc "$f" --summary
+          done
+          keck_etc examples/J_point.json -o /tmp/J_point_out.json
+          python -c "import json; d = json.load(open('/tmp/J_point_out.json')); print(d['meta']['keck_etcs_version'], d['meta']['calib_version'], d['meta']['era'])"
+
+      - name: Documentation agrees with the code (scripts/check_docs.py)
+        if: matrix.python == '3.12'
+        run: python scripts/check_docs.py
+
+  calib:
+    name: Calibration tests (Python 3.12, PypeIt at the pin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            setup.py
+            requirements.txt
+            nautilus/pypeit_pin.txt
+
+      - name: Install PypeIt at nautilus/pypeit_pin.txt
+        run: |
+          PIN="$(tr -d '[:space:]' < nautilus/pypeit_pin.txt)"
+          echo "PypeIt pin: ${PIN}"
+          python -m pip install --upgrade pip
+          python -m pip install "git+https://github.com/pypeit/PypeIt.git@${PIN}"
+          python -c "import pypeit; print('PypeIt', pypeit.__version__)"
+
+      - name: Install the calibration extras and pytest
+        run: |
+          python -m pip install .[calib,test]
+          python -m pip list
+
+      - name: Tests, PypeIt-dependent ones included
+        run: python -m pytest keck_etcs/tests -ra
+
+  docs:
+    name: Documentation build (Sphinx, warnings are errors)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            setup.py
+            docs/requirements.txt
+
+      # docs/conf.py fetches the pinned Pyodide release (about 40 MB) for the
+      # interactive page; files already present with the recorded hash are kept.
+      - name: Cache the self-hosted Pyodide files
+        uses: actions/cache@v4
+        with:
+          path: docs/_generated/static/pyodide
+          key: pyodide-${{ hashFiles('docs/pyodide_core.sha256', 'scripts/fetch_pyodide.py') }}
+
+      - name: Install the docs stack and the ETC (no PypeIt)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r docs/requirements.txt
+          python -m pip install .
+          python -m pip list
+
+      - name: Build the HTML site as Read the Docs does
+        run: sphinx-build -W --keep-going -b html docs docs/_build/html
+
+      - name: Check the built tree (scripts/check_docs_build.py)
+        run: python scripts/check_docs_build.py
+
+      - name: Executed examples agree with compute() (scripts/check_docs.py)
+        run: python scripts/check_docs.py
+
+      - name: Upload the built site
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/_build/html
+          retention-days: 7
+          if-no-files-found: error

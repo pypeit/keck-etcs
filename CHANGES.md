@@ -31,6 +31,16 @@ fed it.
   - `docs/wmko_api_note.md`;
   - the design document "as built" (v0.5);
   - `scripts/check_docs.py`, which checks that the docs agree.
+- **Continuous integration (PR #2):** `.github/workflows/ci.yml` with
+  three jobs: the ETC without PypeIt on Python 3.11-3.14 (tests, the CLI
+  on `examples/`, `scripts/check_docs.py`); the calibration pipeline with
+  PypeIt installed at `nautilus/pypeit_pin.txt`; and the Sphinx build with
+  warnings as errors plus `scripts/check_docs_build.py`.
+  `keck_etcs/tests/test_standards.py` now skips without PypeIt instead of
+  failing.
+- **Developer docs (PR #2):** `docs/developer/calculations.md` (the
+  calibration and ETC chains, equation by equation, with the PypeIt code
+  each step uses) and `docs/developer/testing.md` (the suite and CI).
 
 ## Calibration releases
 

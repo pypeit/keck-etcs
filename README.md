@@ -1,5 +1,6 @@
 # keck-etcs
 
+[![CI](https://github.com/pypeit/keck-etcs/actions/workflows/ci.yml/badge.svg)](https://github.com/pypeit/keck-etcs/actions/workflows/ci.yml)
 [![Documentation](https://readthedocs.org/projects/keck-etcs/badge/?version=keck-mosfire)](https://keck-etcs.readthedocs.io/en/keck-mosfire/)
 
 Exposure time calculators (ETCs) for the Keck spectrographs, grounded in
@@ -198,6 +199,12 @@ with a `MONITOR` config and register it in
 pytest keck_etcs/tests                # unit, schema and regression tests
 pytest -m slow --run-slow             # the J0841 validation only (needs KECK_ETCS_DATA)
 ```
+
+Tests that call PypeIt skip when it is not installed. GitHub Actions
+(`.github/workflows/ci.yml`) runs the suite on every pull request three
+ways: the ETC alone on Python 3.11-3.14, the calibration pipeline with
+PypeIt at the pin in `nautilus/pypeit_pin.txt`, and the Sphinx build with
+warnings as errors. See the developer page on tests and CI in the docs.
 
 ## Authors
 

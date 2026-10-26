@@ -104,7 +104,7 @@ nb_execution_raise_on_error = True
 nb_execution_timeout = 300
 nb_merge_streams = True
 
-myst_enable_extensions = ['colon_fence', 'deflist']
+myst_enable_extensions = ['colon_fence', 'deflist', 'dollarmath']   # dollarmath: docs/developer/calculations.md
 myst_heading_anchors = 4
 
 autodoc_default_options = {'members': True, 'undoc-members': False, 'show-inheritance': True}

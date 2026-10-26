@@ -1419,3 +1419,90 @@ started. So the monitor costs one image rebuild and a re-run of 2022-04-09,
 and every S15 night gets it for free. The lamp census is cheap because the
 Ne/Ar state is in the standard power-strip cards of every MOSFIRE frame.
 
+
+### 2026-10-26 (PR prompt #1: PR summary, GitHub Actions CI, developer docs on the calculations)
+
+The prompt asked for Opus 5.5; this session ran on Claude Fable 5.1 (the
+model cannot be switched from inside a session). No git commands were run
+other than `git status`, `git diff --stat` and `git log`; the PR
+description on GitHub was replaced (the prompt asked for a better summary;
+the old body was the two words "First steps"). `gh pr edit --body-file`
+exited 1 on a GraphQL "Projects (classic)" deprecation error without
+applying the change; `gh api -X PATCH repos/pypeit/keck-etcs/pulls/2`
+with the body as JSON did it.
+
+**PR summary.** Written to `claude_prompts/keck_mosfire/pr_2_summary.md`
+and applied to PR #2 (`keck-mosfire` -> `main`). It describes the
+throughput measurement (20 nights, 14 in the release, era medians 0.258 /
+0.257 / 0.270), the JSON-in, JSON-out `compute`, the validation (0.982 and
+0.990 on J0841), the calibration monitor, the Nautilus reductions, the
+documentation site, tests and CI, the PypeIt changes, and the known
+systematics.
+
+**CI: `.github/workflows/ci.yml`** (new; there was no `.github/`). Three
+jobs, on pull requests, pushes to `main` and `workflow_dispatch`:
+- `etc`: `pip install .[test]` on Python 3.11, 3.12, 3.13 and 3.14; asserts
+  PypeIt is not importable; `pytest keck_etcs/tests`; `keck_etc` on every
+  `examples/*.json`; `scripts/check_docs.py` on 3.12.
+- `calib`: PypeIt from `git+https://github.com/pypeit/PypeIt.git@<pin>`
+  with the pin read from `nautilus/pypeit_pin.txt` (what the Dockerfile
+  does), then `.[calib,test]` and the full fast suite.
+- `docs`: `docs/requirements.txt` + `pip install .`, `sphinx-build -W
+  --keep-going`, `scripts/check_docs_build.py`, `scripts/check_docs.py`
+  (check 7 against the built examples page), HTML uploaded as an artifact
+  for 7 days; the Pyodide download (44 MB) is cached on the hash of
+  `docs/pyodide_core.sha256`.
+- `keck_etcs/tests/test_standards.py` now has a module-level
+  `pytest.importorskip('pypeit')`. Without it the `etc` job would fail:
+  every test in the module reaches PypeIt (the Vega spectrum, the 2MASS J
+  response, the `standards` archive lookup, or `reduce_standard.py`, which
+  imports PypeIt at module level).
+
+**Developer docs.**
+- `docs/developer/calculations.md` (new, about 470 lines): the calibration
+  chain (PypeIt reduction, the `IR` sensfunc's joint zero-point and
+  telluric fit, the zero-point definition with `ZP_UNIT_CONST` = 40.0921,
+  the A0V Vega scaling with `V_eq`, `zeropoint_to_throughput`, the
+  filter-free curve, the PWV estimate, `combine_era`, the era completion)
+  and the ETC chain (`compute` step by step: grid and LSF, source
+  normalisation, photon rate, atmosphere, throughput, convolution of the
+  product, sky, Moffat slit loss, detector, variance with the nod factor,
+  S/N per pixel, resel and line, the exposure-time quadratic and the
+  median root, saturation, provenance), each with the equation and the
+  `keck_etcs` function it lives in. A table lists the PypeIt routines used
+  with links to the files at the pinned commit `bc18a3b`.
+- `docs/developer/testing.md` (new): the three test groups, the regression
+  fixtures, the three CI jobs and maintainer notes.
+- Wiring: both pages in the Developer toctree of `docs/index.md`; a pointer
+  in `docs/api/index.md`; `dollarmath` enabled in `docs/conf.py`;
+  `scripts/check_docs_build.py` expects the two pages; README CI badge and
+  Tests paragraph; `CHANGES.md` entries under "Code (unreleased, after
+  0.2.5)".
+
+**Verification (all local, this workstation).**
+- `pypeit14b`: 111 passed, 3 deselected.
+- A fresh venv from the `pypeit14b` interpreter with `pip install . pytest`
+  and no PypeIt (what the `etc` job does): 100 passed, 3 skipped, 3
+  deselected; `scripts/check_docs.py` ALL CHECKS PASS. Before the
+  `importorskip` fix this run had 7 failures.
+- `sphinx-build -W --keep-going` with `KECK_ETCS_DOCS_ALLOW_PYPEIT=1` in
+  `pypeit14b`: build succeeded; `scripts/check_docs_build.py` ALL CHECKS
+  PASS; the new page renders 16 display and 106 inline math elements and
+  all 46 of its API cross-references resolve.
+- The workflow YAML parses; the `calib` job has not run anywhere yet (it
+  needs GitHub). The PypeIt pin commit is reachable on
+  `github.com/pypeit/PypeIt` (checked with `gh api`).
+
+What I learned:
+- `pypeit14b` is Python 3.14.6 with numpy 2.5, scipy 1.18, astropy 8.0,
+  and the pinned docs stack (sphinx 8.2.3, furo, myst-nb 1.4.0,
+  matplotlib 3.11.0), so the docs build can be checked locally there.
+- `scripts/check_docs.py` runs without PypeIt; its check 7 is silently
+  skipped without a built `docs/_build/html/examples.html`, which is why
+  the `docs` job runs it again after the build.
+- PyPI's latest PypeIt is 1.9.0; the repository needs the 2.0.2.dev pin
+  from GitHub, which requires Python >= 3.11, < 3.15. Its dependency list
+  (pyqt6, ginga, scikit-learn, bottleneck ...) is all wheels, so the
+  `calib` job needs no system packages.
+- `reduce_standard.py` imports PypeIt at module level (line 346), so any
+  test that loads the driver needs PypeIt.

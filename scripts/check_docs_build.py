@@ -30,7 +30,7 @@ from urllib.parse import unquote, urlparse
 
 REPO = Path(__file__).resolve().parents[1]
 PAGES = ['index', 'etc', 'getting_started', 'examples', 'citing', 'wmko_api_note', 'field_reference', 'results', 'changes', 'keck_mosfire_design',
-         'developer/nautilus', 'keck_mosfire_implementation', 'XTcalc_bug', 'XTcalc_HOWTO',
+         'developer/calculations', 'developer/testing', 'developer/nautilus', 'keck_mosfire_implementation', 'XTcalc_bug', 'XTcalc_HOWTO',
          'api/index', 'api/etc', 'api/core', 'api/instruments', 'api/calib']
 API_OBJECTS = {'api/etc': ['keck_etcs.etc.compute', 'keck_etcs.etc.validate'],
                'api/core': ['keck_etcs.core.snr', 'keck_etcs.core.lsf.fwhm_pix'],

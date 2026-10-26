@@ -36,6 +36,8 @@ citing
 :caption: Developer
 :maxdepth: 1
 
+developer/calculations
+developer/testing
 keck_mosfire_design
 developer/nautilus
 keck_mosfire_implementation

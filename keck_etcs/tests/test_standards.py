@@ -1,4 +1,9 @@
-"""A0V standards (design N3, D2; plan S15a): the J-scaled Vega model, classification, the driver's typing."""
+"""A0V standards (design N3, D2; plan S15a): the J-scaled Vega model, classification, the driver's typing.
+
+Every test here reaches PypeIt (its Vega spectrum, 2MASS J response, standard-star archive or the
+``reduce_standard.py`` driver, which imports it), so the whole module is skipped where PypeIt is not
+installed: the ``etc`` CI job and a plain ``pip install .[test]``. The ``calib`` CI job runs it.
+"""
 import importlib.util
 from pathlib import Path
 
@@ -6,7 +11,9 @@ import numpy as np
 import pytest
 from astropy.table import Table
 
-from keck_etcs.calib import harvest, standards
+pytest.importorskip('pypeit')
+
+from keck_etcs.calib import harvest, standards  # noqa: E402
 
 DRIVER = Path(__file__).resolve().parents[2] / 'scripts' / 'mosfire' / 'reduce_standard.py'
 LDS749B = (323.06782305, 0.25447328)
