@@ -1,6 +1,6 @@
-# Keck/MOSFIRE J: implementation plan
+# Keck/MOSFIRE: implementation plan
 
-*Version 0.4, 2026-10-04. Companion to `docs/keck_mosfire_design.md` (v0.4);
+*Version 0.5, 2026-10-26. Companion to `docs/keck_mosfire_design.md` (v0.7);
 section numbers below refer to that document. Each step is meant to be one
 working session and to become one numbered prompt under "### Implementation"
 in `claude_prompts/keck_mosfire_prompts.md`.*
@@ -50,7 +50,18 @@ optional lamp download), S15 (S15a freezes the monitor lines on the pilot;
 S15c merges the monitor rows), S16 (monitor trends and flags), S18 (the
 monitor documented for WMKO), and the risks.
 
-Rules that apply to every step: Python via `conda run -n pypeit14` locally;
+*Change note, v0.5 (2026-10-26, "Other bands" prompt #3):* the title drops
+"J". Phase 6 (Read the Docs, S19-S22) was planned and done in
+`claude_prompts/keck_mosfire/keck_mosfire_prompt_7.md` and is summarised
+here for completeness. The new **Phase 7, Y/H/K** (design section 9,
+D48-D62; Q49-Q68) is steps **S23-S27** in the agreed order: the band-neutral
+refactor with its J-only tag, then H, K, Y, then the release. Its prompt
+docs are one per band, as the user asked: `keck_mosfire_prompt_H.md`
+(S23, S24), `keck_mosfire_prompt_K.md` (S25) and `keck_mosfire_prompt_Y.md`
+(S26, S27). Steps S0-S22 are unchanged; the rules below now say `pypeit14b`
+(the Linux workstation) rather than `pypeit14` (the laptop).
+
+Rules that apply to every step: Python via `conda run -n pypeit14b` locally;
 git is the user's (including `checkout`/`switch` in the PypeIt repo);
 calculations are scripts on disk; nothing under `KECK_ETCS_DATA` is
 committed; every new data file carries the provenance `meta` of design 5.4
@@ -82,6 +93,13 @@ Phase 4  S14 KOA metadata search (local; own prompt doc) ── S14b KOA downloa
          S15 batch reductions as Indexed Jobs + backup after each batch (Nautilus; needs S4b, S6, S14b)
          S16 trend + release + release backup (local; needs S15)
 Phase 5  S17 PypeIt ronoise branch off develop (local; needs S8)   S18 docs/README/CHANGES/WMKO note/nautilus README (needs S9, S16)
+Phase 6  S19 Sphinx skeleton ── S20 field reference + executed examples ── S21 Pyodide page ── S22 Read the Docs (all done, part 7)
+Phase 7  S23 band-neutral refactor: instrument module/schema, harvest columns, J rename + J-only tag, census Y/H/K,
+             dev-suite reference reductions (H/K footprints), manifests with `band`, per-band gates, dry runs (needs S16, S22)
+         S24 H: .sens by the polyorder test, A0V to 2MASS H, pilot + batches, throughput, excess curve, validation (needs S23)
+         S25 K: thermal term + TUBETEMP + sky_continuum metric, A0V to Ks, batches, throughput, validation (needs S24)
+         S26 Y: Moon columns + Y-only cut, batches, throughput, validation (needs S25; may start after S24)
+         S27 release mosfire-YYYY.MM for all bands, docs, design "as built" (needs S24-S26)
 ```
 
 Parallel groups: {S0, S1, S2, S14}; {S1b, S3, S4}; {S4a, S7, S8}; {S4b, S5};
@@ -720,6 +738,148 @@ digest and pin.
   calibration; the WMKO note lists every schema field. **Depends on:** S9,
   S16 (a draft can be written after S9).
 
+## Phase 6: Read the Docs *(S19-S22; done, part 7)*
+
+S19 built the Sphinx project under `docs/` (MyST includes of the existing
+Markdown, `furo`, `.readthedocs.yaml`, `docs/requirements.txt`); S20 added
+the generated field reference and the executed examples page
+(`scripts/gen_field_reference.py`, `scripts/check_docs.py` extended); S21
+added the in-browser calculator (Pyodide, self-hosted, loaded on demand);
+S22 published `https://keck-etcs.readthedocs.io` with `main` and
+`keck-mosfire` exposed. Everything is logged in
+`claude_prompts/keck_mosfire/keck_mosfire_prompt_7.md`. The Y/H/K steps
+below extend these pages (S27) rather than add new ones.
+
+## Phase 7: Y, H and K *(design section 9, D48-D62)*
+
+The order is D57's: the refactor, then H, K, Y, then the release. Each
+step runs the band's work through the whole chain that J went through
+(reference reduction, dry run, pilot, batches, harvest, throughput
+product, validation) with the J tools generalised in S23 rather than
+copied. A band is not "done" until its line of the 9.8 checklist holds.
+
+### S23. Band-neutral refactor, census, reference reductions and the J-only tag *(local + Nautilus; prompt doc `keck_mosfire_prompt_H.md`, prompts 1-4)*
+- **Goal:** everything that J hard-codes becomes per-band data, with the
+  J numbers unchanged, so that S24-S26 add data and physics only.
+- **Code (D49, D54, D55, D58, D59):** `keck_etcs/instruments/base.py`
+  (`Band` gains `group`, `order`, `zp_nodes_A`, `common_window_A`,
+  `pwv_window_A`, `lsf`; `throughput_pattern` takes `{group}`;
+  `SPLICE_WINDOW` becomes the group's common window;
+  `throughput_for_window` completes only within a group;
+  `lsf_fwhm_pix(slit, band)`); `keck_etcs/instruments/mosfire.py` (`BANDS`
+  Y, H, K with the 9.2 facts; footprints provisional until measured in this
+  step; `MONITOR` per band); `keck_etcs/calib/harvest.py` (`zp_lo/mid/hi`,
+  `thru_median_common`, `zp_nodes_A`, `common_window_A` from the module;
+  `estimate_pwv` by band window, `pwv_weak`), `combine.py` and `trend.py`
+  (`COMMON_WINDOW`, `EDGE_TRIM_FRAC`, `A0V_MIN_WAVE` per group),
+  `nautilus/gates.py` (windows and the 0.5-1.6x XTcalc range from the
+  module), `scripts/koa/make_night_manifest.py` and the manifests (`band`
+  column; one row per night and band), `scripts/koa/download_mosfire_night.py`
+  (bands list; flats and arcs per band), `reduce_standard.py` (per-band
+  `.sens`; products under `mosfire/<night>/<band>/` for Y/H/K, J unchanged),
+  `keck_etcs/schema/etc_input.json` (`band` enum Y, H, K), the
+  `--filters` option of `scripts/koa/search_mosfire_standards.py` with the
+  2MASS H and Ks columns (D50), and `keck_etcs/calib/standards.py`
+  `a0v_model(band, mag)` (D51).
+- **Data:** the three J throughput files renamed `mosfire_thru_J_<era>.ecsv`
+  and `standards.ecsv` regenerated with the new columns from the existing
+  harvest files (same numbers); `index.yaml` with `bands` per file; the
+  candidate tables per band (`koa_standards_candidates.ecsv` gains a
+  `filter` column or one file per band); `koa_validation_targets.ecsv`
+  re-run for Y/H/K (`find_validation_targets.py`).
+- **Reference reductions (D56):** `Y_long` (exists), `longslit_3x0.7_H`,
+  `longslit_3x0.7_K`, `K_long` and `long2pos1_H` reduced locally in
+  `pypeit14b` at the pin; the H and K centred long-slit footprints read from
+  their `WaveCalib` and frozen into `BANDS`; `measure_lsf.py --record` per
+  band and slit; the Brackett-mask check on HIP 17971 in H
+  (`hydrogen_mask_wid` 10 against 30 A, D52); the 2012 and 2019 K
+  between-line continuum against the Gemini model (the first `eps_eff`
+  values, D60). Then the in-pod dry run of one H and one K night with
+  `validate_job.yaml` and the per-band gates (image rebuilt with the new
+  `keck_etcs.calib`; tag recorded).
+- **Release (D49, Q68):** `compute()` run on every example and fixture
+  before and after the refactor, identical to 1e-6
+  (`scripts/regen_regression_fixtures.py` in report mode); `verify_release.py`
+  extended to the new names; `CHANGES.md` section; the user tags
+  `mosfire-2026.MM` (J-only).
+- **Verify:** tests pass; the J fixtures are unchanged; `check_docs.py`
+  passes; the dry-run gates pass for H and K on the reference nights;
+  footprints and LSF rows carry provenance.
+- **Depends on:** S16, S22. **Risk:** PypeIt's long2pos handling for the
+  lamp-calibrated H path; the K wavelength solution beyond 2.3 um (sparse OH);
+  the image rebuild (registry hangs, S4a).
+
+### S24. H band *(Nautilus + local; prompt doc `keck_mosfire_prompt_H.md`, prompts 5-6)*
+- **Goal:** the H throughput product and the H ETC, validated.
+- **Work:** `keck_mosfire_H.sens` by the polyorder test (D53: orders 4-8
+  on `longslit_3x0.7_H` and the first wide-slit KOA standard; start at 5;
+  `tell_npca` by the same test; `hydrogen_mask_wid = 30`); A0V scaled to
+  2MASS H; the image rebuilt; the H pilot (3-5 wide-slit nights) and
+  batches as Indexed Jobs with sweeps and per-batch backup (S15 pattern);
+  sync, harvest merge, monitor lines frozen for H
+  (`select_monitor_lines.py --band H`); `mosfire_thru_H_<era>.ecsv` from
+  `combine_throughput.py`; trend table and plot; the H sky-excess curve
+  (D61; all frames, twilight excluded); the saturation fraction output
+  (D62; built here because H is where it matters); examples, fixtures and
+  the XTcalc comparison for H; the H validation night at 20 percent (D18).
+- **Verify:** >= 10 wide-slit standards over >= 2 eras; era medians within
+  the 0.5-1.6x XTcalc gate (0.17-0.54); the A0V and WD zero points agree
+  within the J experience (20 percent, or explained); validation PASS;
+  `compute()` warns nothing for H except what is documented.
+- **Depends on:** S23. **Risk:** H saturates on OH lines in 1.5-2 min at
+  0.7", so many standards frames carry the `nonlinear` flag (harvest
+  already flags them); the Brackett wings at the blue edge (A0V_MIN_WAVE).
+
+### S25. K band *(Nautilus + local; prompt doc `keck_mosfire_prompt_K.md`)*
+- **Goal:** the K throughput product and the K ETC with the thermal term.
+- **Work:** as S24 for K (`.sens` by the test; A0V scaled to Ks; `hydrogen_mask_wid`
+  30 for Br gamma; pilot, batches, harvest, product, trend, excess curve,
+  examples, fixtures, XTcalc, validation), plus (D60): the Planck term in
+  `keck_etcs/core/sky.py`, `ambient_temp_C` in the schema and `thermal_e`
+  in the output; the monitor columns `tube_temp_C` (every band) and the K
+  metric `sky_continuum` over 2.30-2.40 um; the per-night `eps_eff` fit at
+  the night's median `TUBETEMP`, its era median as the instrument-module
+  default, and the `eps_eff`-against-`TUBETEMP` correlation test; the K
+  validation includes the thermal continuum within 30 percent (Per-emb 25
+  as the fallback).
+- **Verify:** as S24 with the K gate (0.16-0.51); `thermal_e` is zero
+  outside K and reproduces the 2012 and 2019 reference continua within 30
+  percent; the fixtures of Y, J and H are unchanged by the thermal code.
+- **Depends on:** S24. **Risk:** the OH wavelength solution beyond 2.3 um;
+  the CO2 bands in the telluric fit (`tell_npca`); a thermal term that
+  tracks `TUBETEMP` poorly (then report, do not force).
+
+### S26. Y band *(Nautilus + local; prompt doc `keck_mosfire_prompt_Y.md`, prompts 1-2)*
+- **Goal:** the Y throughput product and the Y ETC.
+- **Work:** as S24 for Y (`.sens` with polyorder 6 unless the test says
+  lower; A0V scaled to 2MASS J; Y shares the J grating tilt, footprint
+  already measured; the J2132-1434 fallback for validation), plus (D61):
+  the ephemeris columns `moon_alt_deg`, `moon_illum`, `moon_sep_deg` in
+  the monitor for every band, and the Y excess curve from dark frames when
+  >= 20 over >= 3 nights, otherwise all frames with `moon_included`.
+- **Verify:** >= 5 wide-slit standards (13 candidate nights) over >= 2
+  eras; the Y gate (0.12-0.38); validation PASS or the fallback's weaker
+  test reported as such.
+- **Depends on:** S25 for the code; the batches can start after S24.
+
+### S27. Release and documentation *(local; prompt doc `keck_mosfire_prompt_Y.md`, prompt 3)*
+- **Goal:** one calibration tag for all bands and the documents "as built".
+- **Work:** `verify_release.py` over all groups; `CHANGES.md` release
+  section (standards added per band, era medians, image tags and digests,
+  the `.sens` parameters per band); `index.yaml` complete; the user tags
+  `mosfire-YYYY.MM`; README, `docs/wmko_api_note.md` (every new field:
+  `band` values, `ambient_temp_C`, `thermal_e`,
+  `saturation.frac_pix_nonlinear_1pct`), the developer docs on the
+  calculations (thermal term, excess curve, per-band LSF), the examples
+  page and the interactive page (band selector) on Read the Docs, the
+  Nautilus operator guide (multi-band manifests and layout); design doc
+  v0.8 "as built" for Y, H and K with 9.2 filled in with the measured
+  footprints, LSFs and `eps_eff`; the 9.8 checklist ticked in the log.
+- **Verify:** `check_docs.py` and the `-W` Sphinx build pass; the WMKO note
+  lists every schema field; the interactive page computes for all four
+  bands with the released calibration.
+- **Depends on:** S24, S25, S26.
+
 ## Risks across steps
 
 - **LDS749B S/N.** Faint star, wide slit, two frames: the first sensfunc may
@@ -780,3 +940,11 @@ digest and pin.
   never gates a night.
 - **Regression churn.** Every calibration release changes numbers; the
   fixtures are regenerated only in S16-type steps, with a `CHANGES.md` line.
+- **Phase 7, bands.** The band generalisation touches every J tool at once
+  (S23); the J-only tag and the 1e-6 regression are the guard. H's OH
+  saturation makes wide-slit standards partly nonlinear; harvest flags
+  them, and the pilot shows how many survive. K's thermal term is a model
+  with one fitted number per night; if `eps_eff` does not hold constant
+  across nights at fixed `TUBETEMP`, the ETC states the spread rather than
+  hiding it. Y has 13 candidate nights, so its "done" threshold is 5
+  standards and its Moon cut may not be affordable (then `moon_included`).

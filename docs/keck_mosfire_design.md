@@ -1,9 +1,9 @@
-# Keck/MOSFIRE: sensitivity analysis and exposure-time calculator design (J band as built; Y, H, K proposed)
+# Keck/MOSFIRE: sensitivity analysis and exposure-time calculator design (J band as built; Y, H, K decided)
 
-*Version 0.6 (J "as built" plus the Y/H/K extension, proposed), 2026-10-26; v0.5 ("as built") was 2026-10-09. Decisions come from the Q&A in
+*Version 0.7 (J "as built" plus the Y/H/K extension, decided), 2026-10-26; v0.6 (extension proposed) was 2026-10-26 and v0.5 ("as built") 2026-10-09. Decisions come from the Q&A in
 `claude_prompts/keck_mosfire/keck_mosfire_prompts.md` (rounds 1 and 2, all agreed; round
 (d) on Nautilus, Q27-Q39, answered 2026-09-30; Calibrations, Q40-Q48,
-answered 2026-10-04). Readers: the PypeIt/keck-etcs
+answered 2026-10-04; Other bands, Q49-Q68, answered 2026-10-26). Readers: the PypeIt/keck-etcs
 developers, future implementation sessions, and WMKO staff who will host the
 web front end.*
 
@@ -101,6 +101,22 @@ emissivity about 0.15, 10-20x the model at 2.3-2.4 um), and **H and K are
 detector-limited** (their filter bands are wider than the 2048-pixel
 footprint), so their ETC windows depend on the slit position.
 
+*Change note, v0.7 (2026-10-26, "Other bands" prompt #3):* the user answered
+Q49-Q68 (fifteen proposals, all agreed, three with notes; five follow-ups,
+all agreed). The proposals P1-P15 of section 9 are now **decisions
+D48-D62**, listed in section 2 and kept under their P numbers in section 9
+with the answers folded in: the H and K `polyorder` starts at 5 and is set
+by a measured test (D53, Q53/Q64); the ambient temperature of the K
+thermal term comes from the header card `TUBETEMP`, present in every frame
+we hold (D60, Q65); the Moon is computed by ephemeris and excluded only
+from the Y sky-excess measurement (D61, Q61/Q66); the band-neutral refactor
+ends with a J-only calibration tag before any H product exists (D49, Q68).
+The work is plan Phase 7 (S23-S27, `docs/keck_mosfire_implementation.md`
+v0.5) and three prompt docs, one per band
+(`claude_prompts/keck_mosfire/keck_mosfire_prompt_{H,K,Y}.md`, run in that
+order). Section 9.9 keeps the two items still to verify. The *Other bands
+(v0.6)* pointers in sections 1-8 stand; "P*n*" there now means "D*n+47*".
+
 ## 1. Purpose and scope
 
 Two deliverables share one code base:
@@ -178,6 +194,21 @@ P1).
 | D45 | **Calibration-line brightness**, two metrics. (a) OH lines on every on-sky frame are a **sky monitor**: line flux in e-/s/arcsec^2, and in photons/s/arcsec^2/m^2 above the instrument (divided by that night's throughput where a sensfunc exists; the Gemini model's unit), with the frame's UT, airmass and the night's fitted PWV, plus the summed flux of all clean OH lines in the band. (b) Ne/Ar lines on lamp nights are an **instrument monitor**: line flux in e-/s per arcsec of slit width. Lines are chosen by explicit rules (4.9.4) by `scripts/mosfire/select_monitor_lines.py` on 2022-04-09 and the S15a pilot nights, then frozen in the monitor config with the script output as provenance. Lines may be added but are never removed. | Q45. OH varies about 2x through a night, so it does not measure the instrument, but it is the measurement D14 needs. |
 | D46 | Monitor rows go to `harvest/<night>_monitor.ecsv`, written by the in-pod harvest. The file is part of the D39 backup set through `harvest/**`, which matters because `Calibrations/` is not backed up. `harvest_sens.py --merge` builds the committed `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` with the D36 provenance columns, registered in `index.yaml` and covered by the calibration-release rule (D28). `compute()` never reads it; only the LSF rows feed the instrument module, through `lsf_measurements.ecsv` as now. | Q46. Inside the package keeps it under `index.yaml` and D28. |
 | D47 | Monitor metrics produce **flags, not gates**. In S16 each metric gets a per-era median and MAD, and nights beyond 3 MAD are flagged in the table, not failed. The only existing gate that touches calibrations, wavelength RMS, is kept. The flat-brightness trend is plotted beside the throughput trend with a correlation test. | Q47. If the dome-flat rate falls but the standards' throughput does not, the lamps are the cause; if both fall, the optics or the coatings are. |
+| D48 | **Band set:** Y, H and K long-slit spectroscopy are built; J3 and Ks are not. | Q49 (P1). 4 and 10 public long-slit frames in KOA; Ks is an imaging filter. |
+| D49 | **Band groups and one tag per release.** Throughput products are organised by grating order (`Y`, `J` = J/J2/J3, `H`, `K`): one era file per group, `mosfire_thru_<group>_<era>.ecsv`, the J files renamed `mosfire_thru_J_<era>.ecsv`; per-group common window, edge trim (0.9 of the filter peak) and A0V blue cut; one calibration tag per release for all bands, `mosfire-YYYY.MM`. The band-neutral refactor (S23) ends with a **J-only tag** whose products carry the current numbers under the new names and columns, checked by a `compute()` regression to 1e-6, so the rename is not held under the H and K timeline. | Q50 (P2), Q68. The filter-free throughput is a property of the grating order; a rename is a calibration-release change (D28). |
+| D50 | **KOA census per band:** `search_mosfire_standards.py --filters Y,H,K` under the J reducibility and wide-slit rules, recording 2MASS H and Ks beside J. | Q51 (P3). The first TAP count gives 92 (H), 72 (K) and 13 (Y) wide-slit nights against 50 in J. |
+| D51 | **A0V model scaled to the band's own 2MASS magnitude** (J for Y and J, H for H, Ks for K; PypeIt's `TMASS-J/H/K` curves), the J-scaled model kept as a cross-check column. | Q51 (P4). Avoids relying on the Vega model's colours over 1 um. |
+| D52 | **Hydrogen-line mask** `hydrogen_mask_wid = 30` A in the H and K `.sens` files, 10 A in Y and J; checked on a night with both a white dwarf and an A0V star in H if the census finds one. No PypeIt change. | Q52 (P5). A0V Brackett lines at R ~ 3000 are 50-100 A wide. |
+| D53 | **Sensfunc parameters per band:** one `.sens` file per band; `polyorder` 6 for Y; for H and K the **lowest order that passes a measured test**, starting at 5: `sensfunc_perturbation_test.py` extended to loop over orders 4-8 on each band's dev-suite reference night and on the first wide-slit KOA standard, taking the lowest order whose 1e-5 perturbation stability is below 1 percent and whose zero point differs from the next order up by less than 1 percent rms over the common window and 2 percent within 100 A of the edges; `tell_npca` by the same test (default 3); `extrap` 0; filter edges handled by the combine edge trim. The chosen order and the test table go into the `.sens` header and 9.3. | Q53 (P6), Q64. The user prefers a lower order for H and K if it holds; the test decides rather than a guess. |
+| D54 | **Band-neutral metric columns:** `zp_lo`, `zp_mid`, `zp_hi` and `thru_median_common`, with the nodes and the common window in the row and in the instrument module (Y 1.00/1.05/1.10 um over 0.98-1.11; H 1.55/1.65/1.75 over 1.49-1.78; K 2.05/2.15/2.30 over 1.98-2.37; J as built); the J table regenerated under the new names at the S23 tag; PWV recorded where weak with `flag = pwv_weak`. | Q54 (P7). |
+| D55 | **S3 layout and gates for multi-band nights:** manifests gain a `band` column, one row per (night, band); raw frames shared under `mosfire/<night>/raw/`; products under `mosfire/<night>/<band>/` for Y, H and K, J unchanged; idempotency per row; gate windows from the instrument module; throughput gate 0.5-1.6x XTcalc's 2012 median per band (Y 0.12-0.38, H 0.17-0.54, K 0.16-0.51). | Q55 (P8). |
+| D56 | **Reference reductions from the dev suite** (`Y_long`, `longslit_3x0.7_H` and `_K`, `K_long`, `long2pos1_H`), locally first and then in-pod as each band's dry run; they give the H and K footprints, the per-band LSF, the K thermal continuum and the Brackett-mask test, and stay out of the throughput sample (D4). | Q56 (P9). |
+| D57 | **Order of work:** H, then K, then Y, after the band-neutral refactor. | Q57 (P10), Q67. H has the largest wide-slit sample and no new physics. |
+| D58 | **Schema and instrument module:** `band` adds `Y`, `H`, `K`; `Band` gains group, order, nodes, windows and LSF entries; `throughput_pattern` takes `{group}`; the era completion splices only within a group; per-band examples, fixtures and XTcalc comparisons. The ETC models the centred long slit; H and K are detector-limited, so an off-centre slit loses one band edge, which the ETC states but does not model. | Q58 (P11). |
+| D59 | **LSF per band:** the J quadrature rule in pixels for Y, H and K with a warning until the monitor's OH widths give per-band slope and floor; `lsf_fwhm_pix(slit, band)` prefers a measured row of the band. | Q59 (P12). XTcalc's resolving powers imply a 0.7" image 5 percent narrower in H and K. |
+| D60 | **Thermal background in K:** `eps_eff * Planck(T_amb)` added to the sky before `T_sys`, unattenuated by the atmosphere; defaults `eps_eff = 0.15`, `T_amb = 275 K`. The ambient temperature is the header card **`TUBETEMP`** (telescope tube, degrees C; present in all 238 frames we hold, 2012-2025, median 1.6 C, range -3.4 to +4.9): the monitor records `tube_temp_C` per frame in every band; the per-night K fit holds T at the night's median `TUBETEMP` and fits `eps_eff` alone (the two are degenerate, about 50 percent per 5 K); the ETC input `ambient_temp_C` defaults to the K sample's median `TUBETEMP` (2 C provisionally) and the output gains `thermal_e`. If the fitted `eps_eff` correlates with `TUBETEMP`, the model is wrong and T belongs to something else (the instrument's warm window). | Q60 (P13), Q65. The 2012 K sky exceeds the Gemini model by a 275 K grey body of emissivity 0.12-0.15, 10-20x the model at 2.3-2.4 um. |
+| D61 | **Sky continuum excess per band:** an additive curve `E_band(lam)` measured from our own reduced frames (Sun below -18 deg, no object in the window, 10th percentile per 100 A, median over nights), shipped as `sky/mosfire_sky_excess_<band>.ecsv`, scaled with the Gemini sky by `sky_scale`; zero with a warning until measured. **Moon:** no header card exists; `moon_alt_deg`, `moon_illum` and `moon_sep_deg` are computed by ephemeris (as the Sun's altitude already is) and recorded for every band, and a cut is applied **only to the Y curve**: dark frames (Moon below the horizon or illuminated less than 30 percent) when at least 20 of them over at least 3 nights exist, otherwise all frames with `moon_included = true` in the metadata and the dark-minus-moonlit difference reported. J, H and K use all frames. | Q61 (P14), Q66. The user: the Moon should not matter in H or K; avoid it only in Y if enough exposures remain. |
+| D62 | **Saturation output** `saturation.frac_pix_nonlinear_1pct`, the fraction of spectral pixels whose brightest spatial pixel exceeds 26k ADU per frame. **Validation and done:** one validation night per band at 20 percent (K: thermal continuum within 30 percent); done means >= 10 wide-slit standards over >= 2 eras per band (Y >= 5), `compute()` with fixtures and examples per band, the thermal term and the saturation fraction, one release tag, and this design "as built". | Q62 (P15), Q63. In H the brightest OH lines reach 26k ADU in about 1.5-2 min through a 0.7" slit. |
 
 Decisions made while writing this document (not in the Q&A; flagged for
 review):
@@ -209,7 +240,7 @@ were put to the user as Q27-Q39 and are now settled as D31-D38 above (with
 the bucket, PypeIt branch and backup answers folded in, and D39 added for
 the backup set). Section 4.8 carries the detail.
 
-*Other bands (v0.6):* the proposals P1-P15 of section 9 are flagged the
+*Other bands (v0.6; decided v0.7):* the proposals P1-P15 of section 9 are flagged the
 same way and put to the user as Q49-Q63. None is settled yet.
 
 ## 3. Instrument facts and sources
@@ -363,8 +394,9 @@ airmass, resolution, shift, stretch); we record water (PWV) and airmass. For
 A0V stars the "standard" spectrum is built as in N3 and passed through the
 same machinery.
 
-*Other bands (v0.6):* one `.sens` file per band with `polyorder` 6 (Y) and
-8 (H, K), `tell_npca` set by the perturbation test per band, and a wider
+*Other bands (v0.6; D53):* one `.sens` file per band with `polyorder` 6 (Y)
+and a measured choice for H and K starting at 5 (9.3, P6),
+`tell_npca` set by the perturbation test per band, and a wider
 hydrogen-line mask for the Brackett series in H and K (P5, P6, 9.3).
 
 ### 4.4 Metrics
@@ -996,7 +1028,7 @@ default. All wavelengths are vacuum Angstroms unless the unit is in the name.
 | `throughput.scale` | float | 1.0 | 0.1-2 | |
 | `target_snr` | float or null | null | > 0 | if set, `exptime_s` is solved for at fixed `n_frames` |
 | `snr_reference` | str | `"pixel"` | `pixel`, `resel`, `line` | which S/N `target_snr` refers to |
-| `ambient_temp_C` | float or null | null | -10..20 | *v0.6 (P13), K only:* temperature of the telescope and dome for the thermal background; null = the default 2 C |
+| `ambient_temp_C` | float or null | null | -10..20 | *v0.6 (P13 = D60), K only:* temperature of the telescope and dome for the thermal background; null = the default (2 C provisionally; the median header `TUBETEMP` of the K sample once built) |
 
 Output (JSON object):
 
@@ -1386,8 +1418,9 @@ see the report, `reports/Keck_MOSFIRE_report_20261009.md`, section 5.
   files (comment "From Gemini: mk_skybg_zm_16_10.dat"); record the Gemini
   page URL and, if it becomes reachable, verify against the original ASCII.
 
-- **Other bands (v0.6):** the proposals P1-P15 of section 9 are open
-  until Q49-Q63 are answered; the items they depend on are listed in 9.9.
+- **Other bands (v0.7):** the proposals P1-P15 of section 9 are the
+  decisions D48-D62 (Q49-Q68 answered 2026-10-26); the two items still to
+  verify are listed in 9.9.
 
 Nautilus items (v0.3): the decisions of v0.2 were answered in Q27-Q39 and
 are settled as D31-D39. What remains are verifications and one-time actions
@@ -1417,20 +1450,29 @@ by the user, each tied to the plan step that checks it:
   URLs; not part of this plan, since products ship in git. *Not done*
   (optional; noted in `nautilus/README.md` section 1).
 
-## 9. Other bands: Y, H and K (v0.6, proposed)
+## 9. Other bands: Y, H and K (v0.6 proposed; v0.7 decided)
 
 *Added 2026-10-26 ("Other bands" prompt #1). This section extends the J
 design to the three remaining spectroscopic bands. Everything not mentioned
 here stays as in sections 1-8: the standards and the wide-slit rule (D1-D4),
 the eras (D6), the `IR` sensfunc and PWV handling (D7), the Nautilus
 reductions (D30-D39), the ETC equations (5.3) and the monitor (4.9). The
-decisions are written as **proposals P1-P15**, each with the question that
-puts it to the user (Q49-Q63 in the prompt doc). The numbers come from
-`scripts/mosfire/survey_other_bands.py` unless another source is named.*
+section was written as **proposals P1-P15**, each with the question that
+put it to the user (Q49-Q63 in the prompt doc). *v0.7:* all were agreed
+on 2026-10-26, with notes on Q53, Q60 and Q61 that led to the follow-ups
+Q64-Q68 (also agreed); they are the decisions **D48-D62** of section 2
+(P*n* = D*n+47*; Q63 is folded into D62, Q64-Q66 into D53, D60 and D61,
+and Q68 into D49). The P numbers are kept below so
+that the pointers in sections 1-8 stay valid; the paragraphs marked
+*v0.7* carry the folded-in answers. The numbers come from
+`scripts/mosfire/survey_other_bands.py` and
+`scripts/mosfire/inspect_raw_headers.py` unless another source is named.
+Implementation: plan Phase 7 (S23-S27) and the per-band prompt docs
+`claude_prompts/keck_mosfire/keck_mosfire_prompt_{H,K,Y}.md` (9.10).*
 
 ### 9.1 Scope
 
-**P1 (Q49).** The second milestone is MOSFIRE long-slit spectroscopy in
+**P1 = D48 (Q49, agreed).** The second milestone is MOSFIRE long-slit spectroscopy in
 **Y, H and K**, with the same readout modes, source types and nod patterns
 as J. **J3** (4 public long-slit frames in KOA) and **Ks** (10; an imaging
 filter) are not built; J3 would only be a third filter curve on the J
@@ -1489,7 +1531,7 @@ Notes.
 
 ### 9.3 Standards, KOA and flux models (sections 4.1, 4.3, 4.4)
 
-**P2 (Q50), band groups.** The filter-free throughput is a property of a
+**P2 = D49 (Q50, agreed), band groups.** The filter-free throughput is a property of a
 grating order, so the analysis is organised by **band group**: `Y`, `J` (=
 J, J2, J3), `H`, `K`. Each group gets its own era files
 `mosfire_thru_<group>_<era>.ecsv` (the three J files are renamed
@@ -1500,9 +1542,14 @@ rule) and, where A0V curves show a blue-edge depression as in J, its own
 `A0V_MIN_WAVE`. In H that is expected: the Brackett limit (1.458 um) and
 the dense high-n lines sit at the band's blue edge. One calibration tag per
 release covers all groups: `mosfire-YYYY.MM` (replacing `mosfire-J-YYYY.MM`,
-D28), with `bands` listed per file in `index.yaml`.
+D28), with `bands` listed per file in `index.yaml`. *v0.7 (Q68):* the
+band-neutral refactor (S23) ends with a **J-only tag** (`mosfire-2026.MM`
+at the month S23 lands) whose products carry the same numbers as
+`mosfire-J-2026.10` under the new names and columns, verified by a
+regression comparison of `compute()` outputs before and after (identical
+to 1e-6); the Y/H/K tag of S27 is a second release.
 
-**P3 (Q51), KOA census.** `scripts/koa/search_mosfire_standards.py` gains
+**P3 = D50 (Q51, agreed), KOA census.** `scripts/koa/search_mosfire_standards.py` gains
 `--filters` (its `BASE_WHERE` is J-only today) and records the 2MASS H and
 Ks magnitudes beside J. The selection rules of 4.1 are unchanged: wide
 slits (>= 3", in practice `long2pos_specphot`) for throughput, a wavelength
@@ -1511,7 +1558,7 @@ Ne/Ar arcs on the long2pos mask), flats in the band. CALSPEC white dwarfs
 are the absolute anchors as in J; they are faint in K (GD153 K ~ 14.1
 Vega), so the A0V series will dominate H and K.
 
-**P4 (Q51), A0V model per band.** N3 scales PypeIt's Vega spectrum to the
+**P4 = D51 (Q51, agreed), A0V model per band.** N3 scales PypeIt's Vega spectrum to the
 star's 2MASS J. For the other bands the scaling uses the **band's own 2MASS
 magnitude**: J for Y and J, H for H, Ks for K, with PypeIt's `TMASS-J/H/K`
 curves (`filtercurves.fits`; Ks half-maximum 2.028-2.299 um lies inside the K
@@ -1520,7 +1567,7 @@ J-scaled model is kept as a cross-check column (`a0v_scaled_to`,
 `a0v_jhk_offset_mag`). `keck_etcs.calib.standards` becomes
 `a0v_model(band, mag)`.
 
-**P5 (Q52), hydrogen lines.** PypeIt masks the Balmer, Paschen, Brackett
+**P5 = D52 (Q52, agreed), hydrogen lines.** PypeIt masks the Balmer, Paschen, Brackett
 and Pfund lines of a standard with `hydrogen_mask_wid` = 10 A on each side.
 At R ~ 3000 an A0V Brackett line in H (Br 10-18, 1.52-1.74 um) is 50-100 A
 wide, so the default mask leaves the wings in the zero-point fit. Proposal:
@@ -1530,16 +1577,29 @@ white dwarf and an A0V star in H (cross-tie, D2). If no such night exists
 the check uses the smoothness of the A0V zero point across the masked
 regions. The PypeIt parameters exist; no PypeIt change is needed.
 
-**P6 (Q53), sensfunc parameters.** One repo-owned file per band,
+**P6 = D53 (Q53, agreed), sensfunc parameters.** One repo-owned file per band,
 `keck_etcs/data/pypeit_par/keck_mosfire_<band>.sens`, with the J settings
-(4.3) except `polyorder` 6 (Y, 1500 A) and 8 (H, 3400 A; K, 4400 A), and
-`tell_npca` chosen per band by `sensfunc_perturbation_test.py` (default 3;
+(4.3) except `polyorder` 6 (Y, 1500 A) and, for H (3400 A) and K (4400 A),
+**the lowest order that passes a measured test, starting at 5** (*v0.7*,
+Q53/Q64: the user prefers a lower order than the proposed 8 if it holds).
+The test extends `sensfunc_perturbation_test.py` to loop over `polyorder`
+4, 5, 6 and 8 on each band's dev-suite reference night
+(`longslit_3x0.7_H` and `_K`, HIP 17971, 2012-11-28, 0.7") and on the
+first wide-slit KOA standard reduced per band, and takes the lowest order
+that passes both: (a) the 1e-5 perturbation stability of the zero point is
+below 1 percent; (b) the zero point differs from the next order up by less
+than 1 percent rms over the band's common window and less than 2 percent
+within 100 A of its edges, where an underfit shows first. The chosen order
+and the test table go into the `.sens` file header and into this section;
+the S5 fallback (polyorder 4-5 or a BOX extraction when the fit is
+unstable) stays, and Y keeps 6 unless the same test says lower.
+`tell_npca` is chosen per band by the same script (default 3;
 K has the CO2 bands at 2.01 and 2.06 um and water at both edges, so it may
 need more components). PypeIt's `tweak_standard` has no clean window for H
 and K; the filter-edge handling stays on the keck-etcs side (the edge trim
 of P2), which is not a PypeIt defect.
 
-**P7 (Q54), metrics per band.** The harvest row (4.4) keeps its structure
+**P7 = D54 (Q54, agreed), metrics per band.** The harvest row (4.4) keeps its structure
 with band-neutral column names: `zp_lo`, `zp_mid`, `zp_hi` at the band's
 three nodes, `thru_median_common` over the band's common window, and the
 node and window values in the row (`zp_nodes_A`, `common_window_A`) and in
@@ -1560,7 +1620,7 @@ band-neutral quantity. Where the PWV estimate is weak it is still recorded
 
 ### 9.4 Reductions on Nautilus (sections 4.2, 4.8)
 
-**P8 (Q55), multi-band nights.** The night manifests gain a `band` column
+**P8 = D55 (Q55, agreed), multi-band nights.** The night manifests gain a `band` column
 and a night observed in several bands becomes several rows. The raw frames
 of a night are downloaded once to `mosfire/<night>/raw/` (the download Job
 takes a list of bands and fetches each band's flats and arcs); the products
@@ -1576,7 +1636,7 @@ XTcalc's 2012 median for the band (Y 0.12-0.38, H 0.17-0.54, K 0.16-0.51;
 J's 0.15-0.45 is 0.54-1.63x of 0.276). Image, pin, resources and failure
 handling are unchanged; the `.sens` files ship as package data.
 
-**P9 (Q56), reference reductions.** The dev suite holds one long-slit
+**P9 = D56 (Q56, agreed), reference reductions.** The dev suite holds one long-slit
 night per band with a standard, raw frames on this workstation and PypeIt
 files that run at the pin:
 
@@ -1593,14 +1653,14 @@ gates of P8 and the reference comparison of 4.8.7. Their slits are narrow,
 so they are LSF, footprint, sky and pipeline references, not throughput
 points (D4).
 
-**P10 (Q57), order of work.** H first (the largest wide-slit sample, no
+**P10 = D57 (Q57, agreed), order of work.** H first (the largest wide-slit sample, no
 new physics; it exercises every band generalisation), then K (the thermal
 term), then Y (the smallest sample; shares the J grating tilt). Batches are
 sized from the J per-night rate; H and K are each about twice the J batch.
 
 ### 9.5 ETC (section 5)
 
-**P11 (Q58), schema and instrument module.** `band` takes `Y`, `H`, `K`.
+**P11 = D58 (Q58, agreed), schema and instrument module.** `band` takes `Y`, `H`, `K`.
 `Band` gains `group`, `order`, `zp_nodes_A`, `common_window_A`,
 `pwv_window_A` and a per-band LSF entry; `Instrument.throughput_pattern`
 takes `{group}`; `SPLICE_WINDOW` becomes the group's common window;
@@ -1610,7 +1670,7 @@ group only. `meta.calib_version` is the release tag. Examples
 `reference_{Y,H,K}.json` are added; the XTcalc comparison runs per band
 (its port already carries XTcalc's Y/H/K constants).
 
-**P12 (Q59), LSF.** The D25 rule is in pixels and holds to first order in
+**P12 = D59 (Q59, agreed), LSF.** The D25 rule is in pixels and holds to first order in
 every band (same slit image, same detector). It is used for Y, H and K
 with a warning until the monitor's OH widths (4.9.3; the Y, H and K OH
 lists exist) give per-band slope and floor; `lsf_measurements.ecsv` already
@@ -1619,7 +1679,7 @@ measured row of the band. XTcalc's resolving powers (R x 0.7" = 3380, 3310,
 3660, 3620 for Y, J, H, K) imply a 0.7" image of 2.9 pix in Y and J and
 2.7 pix in H and K, a 5 percent difference the measurement should show.
 
-**P13 (Q60), thermal background in K.** The Gemini model is the sky alone;
+**P13 = D60 (Q60, agreed), thermal background in K.** The Gemini model is the sky alone;
 MOSFIRE sees the telescope and dome too. The measured 2012 K sky exceeds
 the model by a grey body (9.2): 2.7, 5.2, 9.1, 12.8 and 21 ph/s/arcsec^2/nm/m^2
 at 2.15, 2.25, 2.30, 2.35 and 2.40 um, i.e. `eps_eff` = 0.15, 0.12, 0.14,
@@ -1637,12 +1697,31 @@ transmission; it is an instrument-module constant with defaults `eps_eff
 dark-sky median between lines minus the Gemini model, 2.15-2.40 um, per
 night; a monitor metric, 9.6) once the reference and pilot nights are
 reduced. Because the term changes by about 50 percent per 5 K, the schema
-gains an optional `ambient_temp_C` (default 2 C; which header card records
-the dome or primary-mirror temperature is a verification item). The term
-is computed for every band and is negligible outside K (eps 0.15 at 1.80
-um: 0.05 against a continuum of 0.4), and the output gains `thermal_e`.
+gains an optional `ambient_temp_C` (default 2 C). The term is computed for
+every band and is negligible outside K (eps 0.15 at 1.80 um: 0.05 against
+a continuum of 0.4), and the output gains `thermal_e`.
 
-**P14 (Q61), sky continuum excess.** Between the OH lines the measured sky
+*v0.7 (Q65): the ambient temperature is the header card `TUBETEMP`.*
+Every MOSFIRE frame we hold carries `TUBETEMP` ("tube temperature",
+degrees C): 238 frames on 30 nights from 2012-09-10 to 2025-07-23, dev
+suite and KOA downloads alike (`scripts/mosfire/inspect_raw_headers.py
+--stat TUBETEMP --by-night`); median 1.6 C, range -3.4 to +4.9 C, with a
+per-night spread usually below 0.5 K. No card gives a dome or mirror
+temperature, and the dewar cards (`DWRTMP1-8`, 11-121 K) are irrelevant.
+Hence: (a) the monitor records `tube_temp_C` per on-sky frame in every
+band (9.6); (b) the per-night K thermal fit holds T at the night's median
+`TUBETEMP` and fits `eps_eff` alone, since T and `eps_eff` are degenerate;
+(c) the ETC default for `ambient_temp_C` becomes the median `TUBETEMP` of
+the K throughput sample once it exists (the 238 frames give 1.6 C, so the
+provisional 2 C stands), and the ETC documentation states the spread it
+covers: -3.4 to +4.9 C moves the thermal term by about -40 to +35 percent,
+which is why the input is exposed. The tube is a proxy for the mirrors
+and the dome, the 275 K grey body that `eps_eff ~ 0.15` describes; if the
+fitted per-night `eps_eff` correlates with `TUBETEMP`, the model is wrong
+and T belongs to something else (the instrument's warm window, which is
+not in the header), to be reported in S25.
+
+**P14 = D61 (Q61, agreed), sky continuum excess.** Between the OH lines the measured sky
 exceeds the Gemini model by 1.05-1.5x in J (1.14-1.34x on 2022-04-09) and
 2.4-3.5x in H, while Y agrees; a single `sky_scale` cannot fit lines and
 continuum (section 8). Proposal: a per-band **additive excess** `E_band(lam)`,
@@ -1654,9 +1733,22 @@ and added inside the `sky_scale` bracket (5.3.8). Until a band's curve is
 measured it is zero and `compute` warns for H and K that the continuum
 between lines is underpredicted. The alternative, a per-band
 `sky_continuum_scale`, is simpler but mixes the OH wings into the factor.
-Which frames qualify (moon, twilight) is part of the question.
 
-**P15 (Q62), saturation output.** `saturation` gains
+*v0.7 (Q61, Q66): which frames qualify.* Twilight frames are excluded in
+every band (Sun below -18 deg, the monitor's `twilight` flag). There is no
+Moon card in the headers; the monitor computes `moon_alt_deg`,
+`moon_illum` and `moon_sep_deg` per frame by ephemeris, exactly as it
+computes the Sun's altitude from `MJD-OBS` and the site, and records them
+for every band. The user's rule: the Moon should not matter in H or K, so
+a cut is applied **only to the Y curve**, and only if enough frames
+remain. A frame is "moonlit" when the Moon is above the horizon and more
+than 30 percent illuminated; the Y curve uses dark frames if they number
+at least 20 over at least 3 nights, otherwise it uses all frames, carries
+`moon_included = true` in its metadata, and the dark-minus-moonlit
+difference is reported so the cut can be applied at a later release. J, H
+and K use all frames (the 2022-04-09 J excess already measured stands).
+
+**P15 = D62 (Q62, agreed), saturation output.** `saturation` gains
 `frac_pix_nonlinear_1pct`, the fraction of spectral pixels whose brightest
 spatial pixel exceeds 26k ADU in one frame, so that an H-band user sees
 whether the flag means a few OH lines or the whole band. The peak and flag
@@ -1670,9 +1762,12 @@ P7; flat nodes every 250 A over the window (Y 6, H 14, K 18 nodes);
 reference and pilot nights (`select_monitor_lines.py --band`, frozen as
 for J2), including Ne/Ar lines for lamp nights; `lsf_ref_wave` per band
 (the middle node). K adds the metric `sky_continuum` (e-/s/arcsec^2/A and
-the same above the instrument) in 2.30-2.40 um on every on-sky frame, with
-the frame's ambient temperature where a header card gives it, which is the
-per-night input to P13.
+the same above the instrument) in 2.30-2.40 um on every on-sky frame, which
+with the night's median `TUBETEMP` is the per-night input to P13. *v0.7:*
+every on-sky monitor row in every band carries `tube_temp_C` (from
+`TUBETEMP`) and the ephemeris columns `moon_alt_deg`, `moon_illum` and
+`moon_sep_deg` beside the existing `sun_alt_deg`; they are recorded, not
+gated, and P14 reads them when selecting frames for the excess curves.
 
 ### 9.7 Validation (section 6)
 
@@ -1689,6 +1784,9 @@ thermal continuum at 2.30-2.40 um, to be within 30 percent.
 
 ### 9.8 Definition of done, Y/H/K milestone
 
+0. *(v0.7, Q68)* The band-neutral refactor released as a J-only tag
+   `mosfire-2026.MM` whose `compute()` outputs equal those of
+   `mosfire-J-2026.10` to 1e-6, before any H product exists.
 1. Per band: throughput trend table and plot from at least 10 KOA
    wide-slit standards over at least two eras (Y: at least 5, given its 13
    candidate nights), with era medians and MADs, under one release tag
@@ -1704,13 +1802,28 @@ thermal continuum at 2.30-2.40 um, to be within 30 percent.
    warning in place.
 6. This document updated to "as built" for the bands delivered.
 
-### 9.9 Open questions
+### 9.9 Items still to verify
 
-Q49-Q63 in the prompt doc, one per proposal above. Items that must be
-verified rather than decided: the H and K footprints (P9); the header card
-for the ambient temperature (P13); whether the Hennawi/Yang/Wang nights
-offer same-night wide-slit standards in Y, H or K (9.7); whether any
-night has both a white dwarf and an A0V star in H or K (P5).
+*v0.7:* no open questions remain (Q49-Q68 answered). Two of the four
+verification items of v0.6 are settled: the ambient-temperature card is
+`TUBETEMP` (P13) and the Moon has no card and is computed (P14). Still to
+verify, in S23 and the census: the H and K footprints (P9; measured from
+the dev-suite reference reductions before the band windows are frozen);
+whether the Hennawi/Yang/Wang nights offer same-night wide-slit standards
+in Y, H or K (9.7); and whether any night has both a white dwarf and an
+A0V star in H or K (P5).
+
+### 9.10 Implementation (v0.7)
+
+The plan (`docs/keck_mosfire_implementation.md`, v0.5) adds **Phase 7** as
+steps S23-S27 in the agreed order: **S23** band-neutral refactor (P2, P7,
+P8, P11, the census re-run with `--filters Y,H,K`, the dev-suite reference
+reductions of P9, the J rename and regeneration, the J-only tag of Q68);
+**S24** H; **S25** K (plus the thermal term, `TUBETEMP` and the saturation
+fraction); **S26** Y (plus the Moon cut); **S27** release and docs. The
+prompt docs are one per band, as the user asked:
+`keck_mosfire_prompt_H.md` (S23 and S24), `keck_mosfire_prompt_K.md` (S25)
+and `keck_mosfire_prompt_Y.md` (S26 and S27), to be run in that order.
 
 ## 10. References
 

@@ -1937,3 +1937,92 @@ What I learned about the repository:
   group (36 J and 22 J2 frames), plus
   `status_table.ecsv`; nothing in Y, H or K has been downloaded yet, so
   the Y/H/K excess curves and thermal fits wait for S23/S24.
+
+### 2026-10-26 (Other bands prompt #3: answers Q64-Q68 folded in; design v0.7, plan v0.5, per-band prompt docs H, K, Y)
+
+The prompt asked for Opus 5.5; this session ran on Claude Fable 5.1. No
+git commands were run other than `git status` and `git log`.
+
+Reread the doc: Q64-Q68 are all answered "Agree", so with Q49-Q63 every
+proposal and follow-up of the Y/H/K extension is settled.
+
+**Design doc** (`docs/keck_mosfire_design.md`, v0.6 -> v0.7; edits applied
+by scratchpad scripts with asserted exact replacements):
+- Title "(J band as built; Y, H, K decided)", version line, and a v0.7
+  change note after the v0.6 one.
+- Section 2: fifteen new rows **D48-D62**, one per proposal (P*n* =
+  D*n+47*), with the answers folded in: D49 carries the J-only tag of
+  Q68; D53 the measured `polyorder` test of Q64 (start at 5 for H and K);
+  D60 the `TUBETEMP` card of Q65; D61 the ephemeris Moon columns and the
+  Y-only cut of Q66; D62 also carries the validation and definition of
+  done of Q63.
+- Section 9: heading and preamble reworded from proposals to decisions
+  (the P numbers are kept so the pointers in sections 1-8 stay valid);
+  each `**Pn (Qxx)**` head became `**Pn = Dxx (Qxx, agreed)**`; *v0.7*
+  paragraphs under P2 (J-only tag), P6 (the polyorder test), P13
+  (`TUBETEMP`: 238 frames, 30 nights, median 1.6 C, range -3.4 to +4.9),
+  P14 (twilight, Moon by ephemeris, Y-only cut, 20 frames over 3 nights),
+  9.6 (`tube_temp_C`, `moon_alt_deg`, `moon_illum`, `moon_sep_deg` on every
+  on-sky row), 9.8 (item 0: the J-only tag), 9.9 renamed "Items still to
+  verify" (two remain: the validation nights' same-night standards and a
+  WD + A0V night in H), and a new 9.10 "Implementation" pointing at plan
+  Phase 7 and the per-band prompt docs.
+- Pointers updated in section 2 ("decided v0.7"), section 8, 5.3.6 (the
+  `polyorder` wording) and the `ambient_temp_C` row of 5.2.
+
+**Plan** (`docs/keck_mosfire_implementation.md`, v0.4 -> v0.5): title
+without "J"; v0.5 change note; the rules now name `pypeit14b`; the
+dependency map gains Phase 6 and Phase 7 lines; a one-paragraph **Phase
+6** (S19-S22, done in part 7) for completeness; **Phase 7** with
+**S23** (band-neutral refactor, J rename and regeneration, J-only tag,
+census Y/H/K, dev-suite reference reductions and the H/K footprints,
+manifests with `band`, per-band gates, dry runs), **S24** H, **S25** K
+(thermal term, `TUBETEMP`, `sky_continuum`), **S26** Y (Moon columns and
+cut), **S27** release and docs, each with Goal / Work / Verify / Depends
+on / Risk; a Phase 7 entry under "Risks across steps".
+
+**Prompt docs, one per band as the prompt asks** (not the parts 8-11 of
+Q67's default; the content is the same, regrouped):
+- `keck_mosfire_prompt_H.md` (S23 + S24; six prompts: S23a instrument
+  module/schema/calib code band-neutral; S23b the J rename, regenerated
+  J table and the J-only tag with a 1e-6 `compute()` regression; S23c
+  census `--filters Y,H,K` and validation targets; S23d reference
+  reductions, footprints, LSF rows, the Brackett-mask check, the first
+  `eps_eff` values, manifests with `band`, gates, image rebuild and dry
+  runs; S24a H `.sens` by the polyorder test, A0V to 2MASS H, pilot,
+  frozen monitor lines; S24b batches, product, H excess curve, the
+  saturation fraction, fixtures, XTcalc, validation). Q&A H-1..H-4.
+- `keck_mosfire_prompt_K.md` (S25; three prompts: the thermal term in
+  core/schema/output and the monitor columns `tube_temp_C` and
+  `sky_continuum` with the per-night `eps_eff` fit; K `.sens`, A0V to Ks,
+  pilot; batches, product, thermal defaults from the sample, K excess
+  curve with the thermal term subtracted, fixtures, XTcalc, validation
+  with the 30 percent continuum check). Q&A K-1..K-3.
+- `keck_mosfire_prompt_Y.md` (S26 + S27; three prompts: Moon columns in
+  the monitor, Y `.sens`, A0V to J, pilot; batches, product, Y excess
+  curve by the Moon rule, fixtures, XTcalc, validation; the all-band
+  release `mosfire-YYYY.MM`, documents and design v0.8 "as built"). Q&A
+  Y-1..Y-3.
+- One deliberate placement: the saturation-fraction output (D62) is built
+  in the H doc (S24b), not in K as Q67's list had it, because H is the
+  band that needs it; the H doc asks for confirmation (H-4).
+
+**Verification:** `scripts/check_docs.py` ALL CHECKS PASS; the `-W` Sphinx
+build with `KECK_ETCS_DOCS_ALLOW_PYPEIT=1` in `pypeit14b` passes on the
+changed design and plan docs (see the final check below).
+
+What I learned about the repository:
+- The decisions table of design section 2 is one Markdown row per
+  decision with "Rationale" holding the question number; nothing outside
+  the design doc parses the table, so adding rows is safe, but the row
+  text must stay on one line for the Sphinx table.
+- The plan doc's "Rules that apply to every step" still said `pypeit14`
+  (the laptop env); every other recent doc says `pypeit14b`.
+- `docs/developer/` holds `calculations.md`, `nautilus.md` and
+  `testing.md` (from the PR prompt), which is where the thermal term and
+  the excess curve get documented in S27.
+- The dev suite ships all six MOSFIRE filter curves under
+  `keck_etcs/data/mosfire/filters/`, `lsf_measurements.ecsv` already has
+  a `filter` column, and `select_monitor_lines.py` already takes
+  `--band`, so the band generalisation is mostly in the harvest, combine,
+  trend, gates and instrument modules, as the prompt #1 log listed.
