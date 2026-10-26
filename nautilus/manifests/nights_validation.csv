@@ -1,0 +1,5 @@
+night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,std_ra,std_dec,filter
+20241229,mosfire,mosfire/20241229,GD153,LONGSLIT-46x5,1,validation: rJ0933+7427; WD calspec DA1.2; J; 2 frames; flats 10; lamp arcs 0; prog U418 Hennawi; era 2017-02..2025-02,WD,,194.259675,22.031286,J
+20241230,mosfire,mosfire/20241230,GD153,LONGSLIT-46x5,1,validation: J0942+6448YJ2; WD xshooter DA1; J2; 2 frames; flats 43; lamp arcs 0; prog U418 Hennawi; era 2017-02..2025-02,WD,,194.259750,22.031306,J2
+20250125,mosfire,mosfire/20250125,GD153,LONGSLIT-46x5,1,validation: J1004+6844; WD xshooter DA1; J2; 2 frames; flats 30; lamp arcs 0; prog U418 Hennawi; era 2017-02..2025-02,WD,,194.259750,22.031306,J2
+20250723,mosfire,mosfire/20250723,GD153,LONGSLIT-46x5,1,validation: J1629+6831; WD xshooter DA1; J2; 2 frames; flats 20; lamp arcs 0; prog N110 Hennawi; era 2025-04..,WD,,194.259750,22.031306,J2

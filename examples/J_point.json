@@ -1,0 +1,14 @@
+{
+  "instrument": "keck_mosfire",
+  "band": "J",
+  "slit_width_arcsec": 0.7,
+  "source": {"type": "point", "mag": 20.0, "mag_system": "AB"},
+  "spectrum": {"shape": "flat_fnu"},
+  "seeing_fwhm_arcsec": 0.7,
+  "exptime_s": 120,
+  "n_frames": 4,
+  "readout": {"mode": "MCDS", "n_reads": 16},
+  "nod": "ABBA",
+  "airmass": 1.2,
+  "pwv_mm": 1.6
+}

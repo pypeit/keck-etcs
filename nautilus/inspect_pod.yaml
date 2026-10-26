@@ -1,0 +1,57 @@
+# Throwaway pod: test that a pod in namespace `pypeit` can read the private
+# bucket s3://keck-etcs with the mounted credentials secret (plan step S1b).
+# It lists every key in the bucket, prints the count and the keys under
+# mosfire/20220409/raw/, or reports AccessDenied. Tiny: 0.5 CPU, 512 Mi,
+# about a minute (mostly `pip install boto3`). No secret value is printed;
+# only the profile names found in the mounted credentials file.
+#
+# The secret is named by KECK_ETCS_S3_SECRET (default prp-s3-credentials; the
+# fallback is keck-etcs-s3-credentials, see nautilus/README.md). With the
+# default, the file can be applied as is; otherwise substitute the name:
+#
+#   kubectl -n pypeit delete pod keck-etcs-inspect --ignore-not-found
+#   sed "s/prp-s3-credentials/${KECK_ETCS_S3_SECRET:-prp-s3-credentials}/" nautilus/inspect_pod.yaml | kubectl apply -f -
+#   kubectl -n pypeit logs -f keck-etcs-inspect        # INSPECT_DONE at the end
+apiVersion: v1
+kind: Pod
+metadata:
+  name: keck-etcs-inspect
+  namespace: pypeit
+  labels: {app: keck-etcs, role: inspect}
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 600
+  containers:
+  - name: inspect
+    image: python:3.12-slim
+    imagePullPolicy: IfNotPresent
+    env:
+    - {name: HOME, value: /root}
+    - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
+    - {name: KECK_ETCS_BUCKET, value: keck-etcs}
+    - {name: SECRET_NAME, value: prp-s3-credentials}
+    command: ["/bin/bash", "-lc"]
+    args:
+      - |
+        set -o pipefail
+        log() { echo "=== $1 $(date -Is) ==="; }
+        log PROVENANCE
+        echo "secret=$SECRET_NAME endpoint=$ENDPOINT_URL bucket=$KECK_ETCS_BUCKET profile=${AWS_PROFILE:-default}"
+        python --version
+        python -c "import configparser; c=configparser.ConfigParser(); c.read('/root/.aws/credentials'); print('profiles in mounted credentials:', c.sections())"
+        log INSTALL
+        pip install -q --no-cache-dir boto3 || exit 1
+        log LIST
+        python -c "import os, sys, boto3; from botocore.config import Config; from botocore.exceptions import ClientError; s=boto3.session.Session(profile_name=os.environ.get('AWS_PROFILE', 'default')); c=s.client('s3', endpoint_url=os.environ['ENDPOINT_URL'], config=Config(s3={'addressing_style': 'path'})); b=os.environ['KECK_ETCS_BUCKET'];
+        try: keys=[(o['Key'], o['Size']) for p in c.get_paginator('list_objects_v2').paginate(Bucket=b) for o in p.get('Contents', [])]
+        except ClientError as e: print('ACCESS_RESULT', e.response['Error'].get('Code'), 'secret', os.environ['SECRET_NAME']); sys.exit(1)
+        print('ACCESS_RESULT OK', 'secret', os.environ['SECRET_NAME']); print('objects in s3://%s/: %d' % (b, len(keys))); raw=[k for k in keys if k[0].startswith('mosfire/20220409/raw/')]; print('under mosfire/20220409/raw/: %d' % len(raw)); [print('  %12d  %s' % (sz, k)) for k, sz in raw]" || exit 1
+        log INSPECT_DONE
+    resources:
+      requests: {cpu: "500m", memory: "512Mi", ephemeral-storage: "1Gi"}
+      limits: {cpu: "1", memory: "512Mi", ephemeral-storage: "1Gi"}
+    volumeMounts:
+    - {name: s3-credentials, mountPath: /root/.aws/credentials, subPath: credentials, readOnly: true}
+  volumes:
+  - name: s3-credentials
+    secret: {secretName: prp-s3-credentials}

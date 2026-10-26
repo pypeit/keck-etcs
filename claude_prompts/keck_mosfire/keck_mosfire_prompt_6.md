@@ -1,0 +1,705 @@
+# Keck MOSFIRE implementation, part 6: wrap-up (Phase 5)
+
+## Goals
+
+File the PypeIt read-noise fix as a branch off `develop` in the PypeIt
+checkout, and bring the documentation, README, changelog, the Nautilus
+operator guide and the WMKO API note to the "definition of done" state.
+These are steps S17 and S18 of the plan (v0.3).
+
+Run order: S17 needs part 3's detector table (S8) and can run any time after
+it, in parallel with parts 4 and 5. S18 needs part 3 (S9) for a draft and
+part 5 (S16) for the final version.
+
+## Context
+
+- Design: `docs/keck_mosfire_design.md` (v0.3), sections 2 (D12, D13, D19,
+  D28, D31, D32, D38, D39), 3 (RN table and `SAMPMODE` codes), 4.8 (the
+  Nautilus infrastructure the operator guide documents), 5.2 (the schema
+  fields the WMKO note must list), 5.5 (versioning), 7 (definition of done
+  items 4-6), 8 (open items).
+- Plan: `docs/keck_mosfire_implementation.md` (v0.3), steps S17, S18.
+- PypeIt checkout on this laptop: `/Users/xavier/Projects/PypeIt/PypeIt`,
+  on `orig-hires-fixes`, MOSFIRE-equivalent to the pin
+  `nautilus/pypeit_pin.txt` (verify with `scripts/check_pypeit_pin.py`); it
+  stays there and **no PypeIt development happens on this laptop** (user,
+  2026-09-30). The `ronoise` branch is created by the user from `develop`
+  on the workstation (or wherever PypeIt is developed); the session prepares
+  the change as reviewable files in this repo. File
+  `pypeit/spectrographs/keck_mosfire.py`, `get_detector_par(self, det,
+  hdu=None)`, which sets `ronoise = np.atleast_1d(5.8)` with the comment
+  "for 16 non-destructive reads" (identical at the pin: the local diff from
+  it is `keck_hires.py` only). Header cards: `SAMPMODE` (1
+  Single, 2 CDS, 3 MCDS, 4 UTR) and `NUMREADS`. Keck table: CDS 21, MCDS-4
+  10.8, -8 7.7, -16 5.8, -32 4.2, -64 3.5, -128 3.0 e-. Our 2022-04-09 dome
+  flats are CDS (`SAMPMODE = 2`, `NUMREADS = 1`), the science and standard
+  frames MCDS-16. The PypeIt dev suite
+  (`/Users/xavier/Projects/PypeIt/PypeIt-development-suite`) has MOSFIRE
+  tests that may encode the fixed value. Raw frames for the read-noise check
+  are in `$KECK_ETCS_DATA/mosfire/20220409/raw/` (local; also on S3).
+- Image pin: if the `ronoise` branch is later used for reductions, the pin
+  in `nautilus/pypeit_pin.txt` moves to that commit with an image tag bump;
+  `nautilus/build_image.sh` requires the pin to be on `develop`'s history,
+  so a feature-branch pin needs its explicit `--allow-branch` flag and a
+  log line (plan S17). Preferably wait for the branch to merge to `develop`.
+- Repo state expected by now: `keck_etcs/` with `core/`, `instruments/`,
+  `calib/`, `provenance.py`, `etc.py`, `schema/`, `data/index.yaml`,
+  `bin/keck_etc`, `examples/`, tests; `nautilus/` with `Dockerfile`,
+  `build_image.sh`, `pypeit_pin.txt`, `telluric_grid.sha256`, the Job
+  manifests, `gates.py`, `night_failures.py`, `status_table.py`,
+  `manifests/`, `README.md`; `scripts/nautilus/{s3_sync,backup_products}.py`;
+  `docs/keck_mosfire_design.md` with validation and XTcalc appendices;
+  `CHANGES.md` started in part 4.
+- Nautilus facts the operator guide must state (design D31, D32, D39):
+  namespace `pypeit`; registry `gitlab-registry.nrp-nautilus.io/profx/keck-etcs`
+  (public image, built on the Linux workstation); private bucket
+  `s3://keck-etcs` (every access needs the user's keys: local AWS profile,
+  in-pod secret `KECK_ETCS_S3_SECRET`); no PVC; backup set and timing per
+  design 4.8.9 to `AIOcean:keck-etcs/`; products distributed through git.
+- Rules (CLAUDE.md): the user runs git in both repositories (the PypeIt
+  branch is created and committed by the user; you edit the files and
+  provide the commit message); `conda run -n pypeit14`; scripts on disk;
+  verified PypeIt defects are fixed in PypeIt, never worked around here; no
+  secret value in any doc; log each prompt.
+
+## Prompts
+
+1. **S17: PypeIt `ronoise` from the readout mode (branch off `develop`).**
+   First, if the CDS dome flats allow it, check the Keck table empirically:
+   write `scripts/mosfire/measure_read_noise.py` that takes the difference
+   of two lamp-off flats (m220409_0022-0026, `NUMREADS = 1`), divides by
+   sqrt(2), converts to electrons with gain 2.15, and reports the robust
+   standard deviation in a low-signal region; compare with 21 e- (CDS).
+   Then run `scripts/check_pypeit_pin.py` (to confirm the local
+   `keck_mosfire.py` you read is the pin's) and ask the user to create a
+   branch **from `develop`** (suggest `mosfire_ronoise`) on the workstation
+   or wherever they develop PypeIt, not on this laptop; do not run
+   `checkout`/`switch`/`branch` yourself. Prepare the change here as
+   `nautilus/patches/pypeit_mosfire_ronoise.patch` (`git diff` format
+   against the pin, made from a scratch copy of the two files, never by
+   editing the laptop checkout) plus the new test file, for the user to
+   apply on that branch. The change: `keck_mosfire.py` so that
+   `get_detector_par` reads `SAMPMODE` and
+   `NUMREADS` from `hdu` when given and looks up the RN from the Keck table
+   (interpolating in log2 N for non-tabulated values; CDS = 21; keep 5.8 as
+   the default when `hdu` is None), with the table and its source URL in a
+   module-level constant. Add a PypeIt unit test using a synthetic header.
+   Verify: `get_detector_par(1, hdu)` returns 21 for the CDS flats and 5.8
+   for the MCDS-16 frames; PypeIt's own tests for MOSFIRE pass; note any
+   dev-suite expectations that change. Provide the commit message and a
+   short PR description for the user, and state in the log whether the image
+   pin should move to this branch now (needs `--allow-branch` and a tag
+   bump) or wait for the merge to `develop` (recommended); either way a pin
+   that changes `keck_mosfire.py` will make the laptop's
+   `check_pypeit_pin.py` fail by design until the user updates that checkout
+   or the reference reduction is redone on the workstation (design D35).
+   Risk: dev-suite reference outputs may shift slightly for CDS calibration
+   frames. Log your work in this doc (the PypeIt repo has no prompt doc).
+
+2. **S18: documentation, README, CHANGES, Nautilus operator guide and the
+   WMKO API note.** Update `docs/keck_mosfire_design.md` to "as built":
+   correct any equation, default or file name that changed during
+   implementation, fill the validation (6.1) and XTcalc (appendix) results,
+   update section 8 open items (Q3/Josh answer if received, `SAMPMODE`
+   census result, PypeIt branch status, the residual Nautilus verification
+   items now settled). Finish `nautilus/README.md` as the operator guide:
+   image build and push on the workstation, the PypeIt pin and how to move
+   it, bucket layout and its private status, secret names and the
+   credentials test, the `kubectl` idioms, how to reduce a new batch
+   (manifest, ConfigMap, apply, follow), how to sweep failures, how to sync
+   products back, how to run `backup_products.py` after a batch and at a
+   release, and how to cut a calibration release; note as optional and not
+   done any widening of bucket access for collaborators. Write `README.md`
+   usage: install, `KECK_ETCS_DATA` and its mirror relationship to the
+   bucket, a Python example calling `keck_etcs.etc.compute`, the CLI
+   example, and a "Refreshing calibrations" section that points at
+   `nautilus/README.md` and the part 5 scripts (bump `index.yaml`, write
+   `CHANGES.md`). Bring `CHANGES.md` up to date (each calibration release
+   lists the image tags, digests and PypeIt pins behind it). Write
+   `docs/wmko_api_note.md` (one page): every input and output field with
+   units and defaults, the version fields, error and warning behaviour, the
+   calibration refresh cycle, and the dependency footprint of
+   `keck_etcs.core`/`etc` (no PypeIt, no Nautilus, no S3 access; all
+   calibration products ship in the package). The README and the WMKO note
+   also describe the calibration monitor (design 4.9): what
+   `keck_etcs/data/mosfire/monitor/calib_monitor.ecsv` holds (columns and
+   metrics of 4.9.5), that `compute()` never reads it, and how a new
+   instrument (LRIS next) adds its monitor config (4.9.6). Verify: the README examples
+   run as written in `pypeit14`; `index.yaml`, `CHANGES.md`,
+   `nautilus/README.md` and the output `meta.calib_version` agree, including
+   the image tags and pins behind the current calibration; the WMKO note
+   lists every field in `keck_etcs/schema/etc_input.json` and
+   `etc_output.json` (write a small script to diff them); no secret value
+   appears in any document. Log your work and state which items of the
+   definition of done (design section 7) are met.
+
+3. **Report**  Separate the report on MOSFIRE from its design doc.  
+Call the report `reports/Keck_MOSFIRE_report_20261009.md`.  Include figures.
+Remove any report text from the design doc.
+Use Opus 5.5 and log your work.
+
+5. **ETC**  Please create a new prompt doc `claude_prompts/keck_mosfire/keck_mosfire_prompt_7.md` to describe and host the MOSFIRE ETC on readthedocs.org.
+Model it after the existing prompt docs.
+Use Opus 5.5 and log your work.
+
+## Q&A
+
+## Logging
+
+The "Logs" section will record Claude's work. Please use the following
+format:
+
+### <Date> (Short summary of the work)
+
+<Detailed description of the work and what you learned>
+
+## Logs
+
+### 2026-10-08 (S17: PypeIt MOSFIRE `ronoise` from SAMPMODE/NUMREADS, prepared as a patch)
+
+**Empirical CDS read noise.** `scripts/mosfire/measure_read_noise.py` uses the
+2022-04-09 lamp-off dome flats m220409_0022-0026: CDS (`SAMPMODE = 2`,
+`NUMREADS = 1`), 8.7 s, one coadd, `BUNIT = 'ADU per coadd'`, median levels
+6-16 ADU. It differences consecutive frames and divides by sqrt(2). It takes
+the 4-sigma-clipped standard deviation in 64 x 64 tiles whose level is at or
+below 10 ADU (2398 tiles over the four pairs), multiplies by gain 2.15, and
+removes the residual photon noise per tile.
+
+- Result: **21.4 e-** (16-84 percent of tiles 20.3-22.8; 21.6 before the
+  photon correction), against Keck's CDS value of **21 e-** (ratio 1.018).
+  The per-pair values are 21.0-21.7 e-.
+- The Keck CDS value holds. The lab value of 17.2 e- (Kulas+12) is not what
+  the detector gives on the sky.
+- A first version used 1.4826 MAD and returned discrete values (20.29,
+  22.54). The raw CDS frames come in 0.5 ADU steps, which quantize a MAD of a
+  few ADU, so the script now uses a clipped standard deviation.
+- Without the tile selection, a pair's whole data section gives 23-26 e-.
+  The dome-light structure does not cancel completely there.
+- Summary written to `$KECK_ETCS_DATA/mosfire/20220409/read_noise_cds.json`.
+
+**Pin check.** `scripts/check_pypeit_pin.py` passes. The checkout is at the
+pin bc18a3ba4 (`etc-fixes`, which descends from `develop` f3a1f1d27), with an
+empty diff.
+
+- `get_detector_par` is the same at the pin, at local `develop` and at
+  `origin/develop` (8f7ce9866, 28 commits ahead of local `develop`; none of
+  them touch `keck_mosfire.py` or the tests).
+- `etc-fixes` changes `keck_mosfire.py` only further down: it adds
+  `alignment_box_rows`, `long2pos_bar_widths` and `transfer_wavecal`.
+
+**The change** is in `nautilus/patches/pypeit_mosfire_ronoise.patch`, a `git
+diff` against the pin, 111 lines added and 1 removed. I made it in a scratch
+copy (`git archive` of the pin); the PypeIt checkout was not touched. It
+creates the new test file, so no separate copy is needed.
+
+- **`pypeit/spectrographs/keck_mosfire.py`:**
+  - new module constant `MOSFIRE_READ_NOISE = {1: 21.0, 4: 10.8, 8: 7.7,
+    16: 5.8, 32: 4.2, 64: 3.5, 128: 3.0}`, with the Keck detector-page URL in
+    its docstring;
+  - `MOSFIRE_DEFAULT_READ_NOISE`, the MCDS-16 value;
+  - new function `mosfire_read_noise(sampmode, numreads)`. CDS is N = 1
+    whatever `NUMREADS` says. MCDS uses N = `NUMREADS`, interpolated linearly
+    in log2 N and held at the end values. Single, UTR and missing or
+    non-positive cards return None.
+  - `get_detector_par(det, hdu)` reads `SAMPMODE` and `NUMREADS` from
+    `hdu[0]`. It keeps 5.8 e- when `hdu` is None, and also when the mode is
+    not tabulated, with a `log.warning` in that case.
+- **`pypeit/tests/test_keck_mosfire.py`** (new): the table, the
+  interpolation (MCDS-2, MCDS-12), clipping above the table (MCDS-256), the
+  None cases, and `get_detector_par` with synthetic headers (none, CDS,
+  MCDS-16, MCDS-4, UTR, no cards).
+- `git apply --check` passes against the pin, local `develop` and
+  `origin/develop`.
+- The release-notes line (`doc/releases/2.1.0dev.rst` on `develop`) is not in
+  the patch, because that file changes often on `develop`. Add it when
+  committing.
+
+**Verification.**
+
+- `scripts/mosfire/check_ronoise_patch.py`, run with the scratch copy first
+  on `PYTHONPATH`: `get_detector_par(1, hdu)` returns 21.00 e- for all ten
+  CDS flats (m220409_0017-0026) and 5.80 e- for the six MCDS-16 science and
+  standard frames (0036-0039, 0218-0219). ALL FRAMES AGREE.
+- The same script against the unpatched pin gives MISMATCH on the ten CDS
+  frames (5.8 e-), as expected.
+- PypeIt unit tests on the patched copy: the new file and
+  `test_spectrographs.py` give 15 passed. The full suite gives 742 passed and
+  1 failed. The failure, `test_pkgdata.py::test_github_contents`, is an
+  artifact of the scratch copy: it looks up the scratch repo's branch name
+  (`master`) on GitHub. It passes in the real checkout.
+
+**Dev-suite expectations.** No dev-suite unit test checks the MOSFIRE read
+noise (`unit_tests/test_spectrographs.py` only counts the J2_long files).
+`scripts/mosfire/devsuite_sampmode_census.py` reads the
+`RAW_DATA/keck_mosfire` headers:
+
+- **Every setup has CDS frames.** In most they are the flats and arcs, whose
+  `ronoise` changes from 5.8 to 21 e-.
+- **Science frames are CDS too** in `long2pos1_H`, `long2pos2_H`,
+  `longslit_3x0.7_H` and `longslit_3x0.7_K`. Their 2D variance, object
+  finding and optimal weights change, and those reference outputs may move
+  most.
+- `J_multi` has 52 frames with `SAMPMODE = 3`, `NUMREADS = 1` (MCDS-1, the
+  same as CDS: 21 e-).
+- `mask2_H_with_continuum` science is MCDS-8 (7.7 e-).
+
+**Effect on our own products (not re-reduced).** In `standards.ecsv`, 15 of
+the 20 standard rows are CDS (everything 2014-2021, and Feige110 2024-07-21),
+and 10 of the 14 that enter the era curves are among them. Their variance was computed with 5.8 e-
+where 21 e- is right.
+
+- Boxcar fluxes do not depend on this. Optimal extraction is unbiased for a
+  correct profile; only the weights change.
+- So the throughput is expected to change at well below the 1 percent level.
+  This is not measured: it needs one CDS night reduced with the patch.
+
+**Pin recommendation: wait. Do not pin the `mosfire_ronoise` branch.**
+
+- The branch comes off `develop`, so it lacks the `etc-fixes` commits the
+  MOSFIRE reductions need: `get_arc_extract_center`, `alignment_box_rows`,
+  `transfer_wavecal`, `long2pos_bar_widths` and the `construct_basename`
+  fix. Pinning it would undo those.
+- The pin should move once both `etc-fixes` and `mosfire_ronoise` are merged
+  into `develop`, to a `develop` commit with both, with a tag bump. If it is
+  needed sooner, the patch also applies cleanly on `etc-fixes` at the pin.
+- Correction to the prompt and plan: `build_image.sh` has no
+  `--allow-branch` flag. It accepts a pin on any branch in `PIN_BRANCHES`
+  (default `"develop etc-fixes"`) and warns when that is not `develop`.
+- Either way, a pin that changes `keck_mosfire.py` makes the local
+  `check_pypeit_pin.py` fail by design until the checkout is updated (D35).
+  Here, that means updating the workstation checkout to the new pin.
+
+**Commit message (PypeIt, branch `mosfire_ronoise` off `develop`):**
+
+```
+MOSFIRE read noise from the readout mode (SAMPMODE/NUMREADS)
+
+keck_mosfire.get_detector_par hard-coded ronoise = 5.8 e-, the MCDS-16
+value, for every frame. CDS frames (SAMPMODE=2), common for MOSFIRE flats,
+arcs and short exposures, have 21 e-. The read noise is now taken from the
+Keck detector-page table (CDS 21; MCDS-4/8/16/32/64/128 10.8/7.7/5.8/4.2/
+3.5/3.0 e-), interpolated in log2(NUMREADS). The 5.8 e- default is kept
+without a header and for untabulated modes (Single, UTR), with a warning.
+Adds pypeit/tests/test_keck_mosfire.py.
+```
+
+**PR description (short):**
+
+> **Summary.** `KeckMOSFIRESpectrograph.get_detector_par` now sets `ronoise`
+> from the `SAMPMODE` and `NUMREADS` header cards, using the Keck MOSFIRE
+> detector table, instead of always 5.8 e- (MCDS-16):
+> - CDS = 21 e-;
+> - MCDS-N: 10.8 / 7.7 / 5.8 / 4.2 / 3.5 / 3.0 e- for N = 4 / 8 / 16 / 32 /
+>   64 / 128;
+> - linear in log2 N in between.
+>
+> Without a header, or for Single and UTR reads, it stays at 5.8 e- and logs
+> a warning.
+>
+> **Check.** The difference of two CDS lamp-off dome flats (2022-04-09)
+> gives 21.4 e- against the table's 21 e-.
+>
+> **Tests.** New `pypeit/tests/test_keck_mosfire.py` (synthetic headers).
+>
+> **Dev-suite impact.** Every keck_mosfire setup has CDS calibration frames.
+> long2pos1_H, long2pos2_H and longslit_3x0.7_H/K also have CDS science
+> frames, so their 2D variance and extraction weights change; expect small
+> shifts in those reference outputs.
+
+**Files.**
+
+- New in keck-etcs:
+  - `scripts/mosfire/measure_read_noise.py`
+  - `scripts/mosfire/check_ronoise_patch.py`
+  - `scripts/mosfire/devsuite_sampmode_census.py`
+  - `nautilus/patches/pypeit_mosfire_ronoise.patch`
+- The patch sits under `nautilus/`, so the image build copies it in. It is
+  not applied there and is harmless.
+- The user's steps on the workstation:
+
+  ```
+  git switch develop && git pull
+  git switch -c mosfire_ronoise
+  git apply <keck-etcs>/nautilus/patches/pypeit_mosfire_ronoise.patch
+  pytest pypeit/tests/test_keck_mosfire.py
+  ```
+
+  Then commit and push. Switch back to `etc-fixes` afterwards, so the
+  checkout stays at the pin.
+
+### 2026-10-09 (S17 follow-up: patch applied in the PypeIt checkout)
+
+At the user's request, `nautilus/patches/pypeit_mosfire_ronoise.patch` is
+applied in `/mnt/tank/Astronomy/PypeIt/PypeIt`. The user chose to stay on
+`etc-fixes` (HEAD bc18a3ba4, the pin), not to make a separate branch off
+`develop`. A release-notes item is added under "Instrument-specific Updates"
+in `doc/releases/2.1.0dev.rst`. The user commits and pushes.
+
+Checks on the real checkout:
+
+- `test_keck_mosfire.py` plus `test_spectrographs.py`: 15 passed.
+- `scripts/mosfire/check_ronoise_patch.py`: ALL FRAMES AGREE (CDS 21 e-,
+  MCDS-16 5.8 e-).
+
+Because the fix is on `etc-fixes`, it can be pinned directly once
+committed: no merge to `develop` is needed first, and `build_image.sh`
+already accepts `etc-fixes`. Pinning that commit needs:
+
+1. `nautilus/pypeit_pin.txt` set to the new SHA;
+2. an image tag bump to 0.2.6;
+3. `check_pypeit_pin.py` rerun.
+
+Until the commit is pinned, `check_pypeit_pin.py` fails here by design (D35):
+`keck_mosfire.py` differs from the pin. Nights reduced after the bump carry
+the new `pypeit_git_sha`. The mosfire-J-2026.10 products stay as they are
+(expected change well under 1 percent; not measured).
+
+The user committed and pushed the fix on 2026-10-09 as `etc-fixes`
+38bb1b747d55a5b9205cbeb62734b0e870223990 ("readnoise fix"). The pin stays at
+bc18a3b for now. It moves to 38bb1b7, with image 0.2.6, before the next
+Nautilus reduction.
+
+### 2026-10-09 (S18: docs as built, README, operator guide, WMKO note, CHANGES; all checks pass)
+
+**Documents.**
+
+- **`docs/wmko_api_note.md` (new):**
+  - every input and output field with type or range, default and unit;
+  - the version fields;
+  - error and warning behaviour (only schema violations raise; everything
+    else is clipped and warned);
+  - the calibration refresh cycle;
+  - the dependency footprint: numpy, scipy, astropy, jsonschema, pyyaml; no
+    PypeIt, Nautilus or S3; all products in the package;
+  - the calibration monitor: columns, metrics, `compute()` never reads it,
+    and how LRIS adds its `MONITOR` config.
+- **`README.md`:**
+  - install, with the new extras;
+  - a Python example (`compute`, and the exposure-time solve) and a CLI
+    example (`keck_etc`, `python bin/keck_etc`, the `--summary` output);
+  - `KECK_ETCS_DATA` as the mirror of the bucket;
+  - the calibration monitor and how an instrument adds its config;
+  - "Refreshing calibrations" (six steps, pointing at
+    `nautilus/README.md` and the part 5 scripts);
+  - layout and tests.
+- **`nautilus/README.md`** is now the operator guide, in ten sections:
+  1. namespace, bucket, credentials (private; optional, undone widening of
+     access);
+  2. layout and the mirror;
+  3. image build and push, with a table of all 13 tags 0.1.0-0.2.5 (pin,
+     keck-etcs commit, digest);
+  4. the pin and how to move it (current `bc18a3b`; `ronoise` `38bb1b7`
+     pending for 0.2.6);
+  5. `kubectl` idioms and the credentials test;
+  6. a batch: manifest, KOA download, night Job, exit codes and retries,
+     resources, dry run;
+  7. sweeps (latest status row per night);
+  8. sync back (`--force`, `verify_nights.py`);
+  9. backup;
+  10. cutting a calibration release.
+- **`CHANGES.md`:**
+  - a "Code (unreleased, after 0.2.5)" section: packaging, the PypeIt fix
+    pending its pin, the docs;
+  - a "Validation against this release" note under `mosfire-J-2026.10`.
+  - The release already lists its five image tags with digests and pins.
+- **`docs/keck_mosfire_design.md` v0.5 "as built":**
+  - **change note;**
+  - **decisions:** D19 done; D24 default path; D25 quadrature LSF; D31 pin
+    on `etc-fixes`; D35 on the workstation;
+  - **section 4:** 4.2 default path; 4.5 combine cuts and the era splice;
+    4.8.1, 4.8.4 and 4.8.6 per-index retries and exit 2; 4.8.2 pin
+    history (and that `--allow-branch` does not exist; `PIN_BRANCHES` does
+    the job); 4.8.8 `pypeit14b`; 4.8.10 settled;
+  - **section 5:** 5.3.4 the splice and the convolved product; 5.3.6 the
+    quadrature equation;
+  - **section 6:** new 6.1.2 (validation against the release); 6.2 tests as
+    built;
+  - **appendix A:** the XTcalc re-run;
+  - **section 7:** a status table;
+  - **section 8:** rewritten. Settled: `ronoise`, LSF, red edge, A0V
+    model, monitor checks, frozen lines, lamp arcs, and every Nautilus
+    item. Open: `sky_scale` (lines against continuum), aperture, 1"
+    against 5" OH normalisation, Gemini provenance, the PypeIt PR and pin
+    move, bucket widening (optional).
+
+**Re-runs against the release.**
+
+- **J0841 validation:** `validate_j0841.py` on the unchanged 0.1.6
+  products. The S11 outputs are kept in
+  `$KECK_ETCS_DATA/mosfire/20220409/validation_S11_2026-10-05/`.
+  - S/N ETC/measured: band 0.982, between OH lines 0.990 (pass); per frame
+    0.92-1.04.
+  - Signal 0.980; sky lines/continuum 0.89/1.34; OH centroids -0.07 A;
+    best aperture 1.88.
+- **XTcalc comparison:** `compare_xtcalc.py --out
+  $KECK_ETCS_DATA/external/xtcalc/comparison_2026.10`. Ratios 0.895-1.013
+  (0.7") and 1.078-1.291 (1.0"); only the throughput and LSF steps moved.
+
+**Code changes (review these).**
+
+- **`setup.py`:**
+  - `install_requires` is cut to what `core` and `etc` import;
+  - PypeIt, matplotlib, IPython and boto3 move to extra `calib`, pytest to
+    `test`;
+  - `package_data` gains `data/*/*/*/*`.
+  - Without the glob, a built wheel lacked the 20 per-standard curves
+    (checked with `pip wheel`). With it, the wheel holds all 40 data files,
+    and `compute()` run from the unpacked wheel loads only astropy,
+    jsonschema, scipy and yaml (no PypeIt).
+  - The image is unaffected: its Dockerfile installs PypeIt explicitly
+    before keck_etcs.
+- **`keck_etcs/tests/test_validation_j0841.py`:** the signal tolerance moves
+  from 2 to 3 percent.
+  - The test was a closure in S11, when the throughput *was* LDS749B
+    2022-04-09.
+  - Against the 9-standard release curve the ratio is 0.980, which failed
+    by 0.0002. The reason is the J2 night above the era median (per-standard
+    MAD 2.7 percent, J/J2 offset about 5 percent).
+  - The comment in the test says so. If you prefer, revert it and treat the
+    slow test as a closure only for an LDS749B-only curve.
+- **New `scripts/check_docs.py`.** It checks:
+  1. every leaf field of both schemas is in the WMKO note (31 input and 36
+     output fields), and the note names no field the schemas lack;
+  2. the README Python block runs, and each `print` matches its comment;
+     the CLI `--summary` lines match the README;
+  3. one `calib_version` in `index.yaml`, the latest `CHANGES.md` release,
+     `compute()` in all three eras, the README, the operator guide and the
+     WMKO note;
+  4. every (tag, digest, pin) of the release is a row of the operator
+     guide's table; the era files' `meta` images and pins are in
+     `CHANGES.md`; the Job YAMLs use the current image; `pypeit_pin.txt` is
+     its pin; `__version__` matches;
+  5. no secret in 187 text files. The patterns detect AWS key IDs and
+     secrets, GitLab tokens, private keys and literal assignments; they were
+     self-tested on fake samples, with no false positives on SHAs or
+     digests.
+
+  Result: **ALL CHECKS PASS.** The tests: `pytest` 111 passed;
+  `pytest -m slow --run-slow` (with `KECK_ETCS_DATA`) 3 passed.
+
+**Definition of done (design 7):**
+
+- **Met:**
+  1. throughput trend and table, 14 standards over 3 eras;
+  2. `compute()` J/J2, schemas, tests;
+  3. J0841 within 20 percent (0.982);
+  4. design as built, README Python and CLI examples;
+  6. WMKO note;
+  7. monitor rows for all 20 nights, with trends.
+- **Met in substance:** item 5. The `ronoise` fix is committed and pushed on
+  `etc-fixes` (`38bb1b7`). A review PR into `develop` and the pin move
+  (image 0.2.6) are the remaining user steps.
+
+**What I learned about the repository.**
+
+- The editable install in `pypeit14b` dates from 0.0.dev0, so the
+  `keck_etc` console script is not on PATH there. The README gives
+  `python bin/keck_etc` as well; a fresh `pip install -e .` installs the
+  script.
+- `meta.pypeit_version` comes from `index.yaml`, the PypeIt of the era file
+  (`2.0.2.dev1219+gfb4790520` for 2025-04..), not the image pin of every
+  contributing night.
+- `keck_etcs.instruments.mosfire.VALIDATION_J0841` still holds the S11
+  numbers, with their provenance. They are a historical record; 6.1.2 holds
+  the release values.
+
+**Files for the user to commit:**
+
+- new: `docs/wmko_api_note.md`, `scripts/check_docs.py`;
+- modified: `README.md`, `nautilus/README.md`, `CHANGES.md`,
+  `docs/keck_mosfire_design.md`, `setup.py`,
+  `keck_etcs/tests/test_validation_j0841.py`, this prompt doc.
+
+### 2026-10-09 (Prompt #3: the MOSFIRE report split from the design doc; XTcalc throughput comparison corrected)
+
+Model: Claude Opus 5.5.
+
+**New report: `reports/Keck_MOSFIRE_report_20261009.md`.** It has a summary
+and these sections:
+
+1. data and method, with the KOA census counts;
+2. the 20 standards, as a table;
+3. throughput by era, findings and systematics, and the XTcalc throughput
+   comparison;
+4. the calibration monitor (FWHM, dome flats, LSF, sky);
+5. the J0841 validation, S11 and the release side by side;
+6. the XTcalc comparison (manual check, the quirk, the S/N table, the
+   attribution);
+7. ETC predictions;
+8. read noise (the S17 measurement, the `SAMPMODE` census, the PypeIt fix);
+9. limitations and open items;
+10. provenance;
+11. milestone status (the definition of done, moved from design section 7).
+
+**Figures.** There are nine.
+
+- New, from `scripts/mosfire/make_report_figures.py` into
+  `reports/figures/`:
+  - `mosfire_era_throughput.png`: the era curves with MAD, XTcalc 2012 with
+    the J filter divided out, the half-power bands, and every standard's
+    curve;
+  - `mosfire_xtcalc_comparison.png`;
+  - `mosfire_etc_example.png`: S/N against wavelength for J = 20 AB, and the
+    exposure time against magnitude;
+  - `mosfire_j0841_validation.png`, copied from the release re-run.
+- Linked from `docs/figures/` (made by `plot_throughput_trend.py` and
+  `plot_monitor_trends.py`): the throughput trend and the four monitor
+  figures.
+
+**Tables.** `scripts/mosfire/report_tables.py` builds them: per-standard,
+per-era statistics, and ETC S/N per era and band.
+
+**Design doc: report text removed.**
+
+- 4.1 keeps the census decision; the counts moved to the report.
+- 4.6.1 (release results), 6.1.1 and 6.1.2 (validation results), the
+  section 7 status table and Appendix A (XTcalc) are replaced by pointers to
+  the report.
+- The v0.5 change note and the 4.5 and 6.2 cross-references are updated.
+- The doc is now 1357 lines; the design, its decisions, the method and the
+  open items stay.
+- Other references updated: `docs/XTcalc_HOWTO.md` (three Appendix A
+  references), the docstring of `compare_xtcalc.py`, and the `README.md`
+  pointers to `reports/`.
+
+**Error found and corrected: the XTcalc throughput comparison.**
+
+- `verify_release.py` check 2 compared our *filter-free* 2012-2016 curve
+  with XTcalc's `Jeff.sm.dat`, which is XTcalc's *total* efficiency
+  including the order-sorting filter. `compare_xtcalc.py` already swaps it
+  for "our curve x J filter", which is right.
+- The J filter is about 0.96 in band. The S16 result "+3.6 percent above
+  XTcalc" is therefore wrong. Like for like, it is **-2.9 percent** (250 A
+  bins -13 to +13 percent). The 10 percent agreement still holds, with the
+  sign reversed.
+- Fixed: `verify_release.py` (it multiplies by the J filter; ALL CHECKS
+  PASS); the `CHANGES.md` known-systematics line, with a dated correction
+  note; and the report.
+- The era-figure XTcalc curve is divided by the J filter inside its
+  half-power band.
+
+**Claims checked against the data while writing.**
+
+- **Non-linear A0V nights:** of the four, three read 24-36 percent low
+  (HD74721 2016, HD133772, HD21379 2021-09-28). HD159008 does not read low.
+- **Slit loss:** on the 5" slit, 9 of 10 standard frames lose < 1 percent
+  (`slitloss_gt1pct`). The long2pos 4" frames are not covered by that
+  metric.
+- **Validation:** between OH lines every 50 A bin is within 0.94-1.04,
+  except the blue edge (0.90).
+- **A0V depression:** its cause is stated as not established. A first draft
+  blamed Paschen-beta, which is at 12818 A, redward of the depression.
+
+**Seen in the new era figure and noted in the report.**
+
+- Every J curve rises past about 13300 A: the red-edge counterpart of the J
+  cut-on problem.
+- The 2012-2016 curve steps at 11900 A, because blueward of the A0V cut
+  only Feige110 contributes.
+
+**Checks.** `check_docs.py` ALL CHECKS PASS; `pytest` 111 passed;
+`verify_release.py` ALL CHECKS PASS; every figure link in the report
+resolves.
+
+**Files for the user to commit:**
+
+- new: `reports/Keck_MOSFIRE_report_20261009.md`, `reports/figures/*.png`
+  (4), `scripts/mosfire/make_report_figures.py`,
+  `scripts/mosfire/report_tables.py`;
+- modified: `docs/keck_mosfire_design.md`, `docs/XTcalc_HOWTO.md`,
+  `README.md`, `CHANGES.md`, `scripts/mosfire/verify_release.py`,
+  `scripts/mosfire/compare_xtcalc.py`, this prompt doc.
+
+### 2026-10-10 (Prompt #4: yes, the MOSFIRE ETC exists; where it is)
+
+Model: Claude Opus 5.5.
+
+**Answer: yes.** The MOSFIRE J/J2 ETC was built in parts 3-5 (plan S7-S9,
+then calibrated in S10-S16). It is the Python library `keck_etcs`, which
+was the agreed deliverable (CLAUDE.md: a library now; WMKO hosts the web
+front end later). No new prompt doc is needed.
+
+- **Entry point:** `keck_etcs/etc.py`, `compute(inputs: dict) -> dict`, with
+  `validate()`. JSON in, JSON out; no PypeIt, no I/O beyond the package
+  data.
+- **CLI:** `bin/keck_etc INPUT.json [-o OUT.json] [--summary]`; example
+  inputs are in `examples/` (`J_point.json`, `J2_point.json`,
+  `J_line.json`).
+- **Physics:** `keck_etcs/core/` (source, atmosphere, sky, slit loss, LSF,
+  detector, S/N and exposure-time solve).
+- **Instrument:** `keck_etcs/instruments/mosfire.py` (bands, eras, LSF,
+  detector, monitor config).
+- **Contract:** the schemas `keck_etcs/schema/etc_input.json` and
+  `etc_output.json`.
+- **Calibration** (release `mosfire-J-2026.10`): `keck_etcs/data/`
+  (throughput per era, filters, Gemini sky grid, detector table), indexed in
+  `index.yaml`.
+- **Documentation:** `README.md` (usage), `docs/wmko_api_note.md`
+  (interface), `docs/keck_mosfire_design.md` section 5 (design),
+  `reports/Keck_MOSFIRE_report_20261009.md` sections 5-7 (validation, XTcalc,
+  predictions).
+- **Checked today:** `python bin/keck_etc examples/J_point.json --summary`
+  gives keck_etcs 0.2.5, calib `mosfire-J-2026.10`, era 2025-04.., and a
+  band-median S/N per pixel of 4.473 for J = 20 AB in 4 x 120 s.
+
+**Not built:** a web or GUI front end. That was left to WMKO by design
+(D11, design 1). If a local interactive page is wanted, for demos or for
+WMKO to start from, it would need a new prompt doc. Options: a static page
+calling the CLI, or a small Flask or FastAPI service wrapping `compute()`.
+
+### 2026-10-10 (Prompt #5: new prompt doc for hosting the ETC on Read the Docs)
+
+Model: Claude Opus 5.5.
+
+Wrote `claude_prompts/keck_mosfire/keck_mosfire_prompt_7.md`, "part 7: the
+ETC on Read the Docs (Phase 6)". Its structure follows parts 1-6: Goals,
+Context, numbered Prompts, Q&A, Logging, Logs. It defines four new plan
+steps:
+
+- **S19:** a Sphinx skeleton under `docs/` with MyST, which includes the
+  existing Markdown files (README, WMKO note, report, design, CHANGES,
+  operator guide) rather than copying them. Also autodoc of `etc`, `core`
+  and `instruments`, a version and calibration line on every page,
+  `docs/requirements.txt`, `.readthedocs.yaml`, and a local `-W` build
+  without PypeIt.
+- **S20:** a field reference generated from the JSON schemas at build time,
+  so it cannot drift; examples executed at build time (numbers from the
+  build, not pasted); `check_docs.py` extended to cover the generated
+  tables.
+- **S21 (optional, Q&A):** an interactive calculator page that runs
+  `compute()` in the browser with Pyodide, using a `keck_etcs` wheel built
+  during the RTD build. It starts with a feasibility check: the Pyodide
+  package list (astropy; jsonschema's compiled dependency `rpds-py`), load
+  time and download size, and agreement with CPython to 1e-6.
+- **S22:** publish. The final `.readthedocs.yaml`, a README badge, and a
+  "Citing and versions" page. The user imports the project on
+  readthedocs.org with exact steps from the session. Then a read-only
+  check of the first build and of the published pages, and an RTD step in
+  the release process.
+
+**Facts used, checked today:**
+
+- `pypeit/keck-etcs` on GitHub is **public**, default branch `main`
+  (`gh repo view`, read-only). The work is on the unmerged `keck-mosfire`.
+- No Sphinx setup or `.readthedocs.yaml` exists yet.
+- Sphinx is not installed in `pypeit14b`.
+- PypeIt's own docs use `sphinx_rtd_theme`.
+- The ETC's runtime dependencies are numpy, scipy, astropy, jsonschema and
+  pyyaml (S18).
+
+RTD's build limits and Pyodide's package list are left for the session to
+verify, not stated from memory.
+
+**Q&A seeded for the user before prompt #1**, each with a recommended
+default:
+
+- S19-1: the branch to build (`main` after a merge);
+- S19-2: the theme (`furo`);
+- S19-3: public scope (include the developer guide);
+- S21-1: build the interactive page (yes, if feasible);
+- S22-1: the RTD slug (`keck-etcs`).
+
+**Rules carried over:** the user runs git and creates the RTD project;
+docs-only dependencies stay out of `install_requires`; nothing is installed
+in `pypeit14b` without a go-ahead; generators are scripts on disk; no
+secrets.

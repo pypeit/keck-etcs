@@ -1,0 +1,38 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: wave, datatype: float64}
+# - {name: amplitude_list, datatype: float64}
+# - {name: frac_identified, datatype: float64}
+# - {name: isolated, datatype: bool}
+# - {name: gemini_trans, datatype: float64}
+# - {name: rule1, datatype: bool}
+# - {name: rule2, datatype: bool}
+# - {name: rule4, datatype: bool}
+# - {name: flux_1arcsec, datatype: float64}
+# - {name: raw_peak_p999, datatype: float64}
+# - {name: rule3, datatype: bool}
+# - {name: chosen, datatype: bool}
+# meta: !!omap
+# - dates: ['20220409', '20241230', '20250723']
+# - {band: J2}
+# - {rules: design 4.9.4}
+# - chosen: [11591.847, 11788.495, 12229.206, 12287.158]
+# - {fwhm_5arcsec_A: 4.693140794223827}
+# schema: astropy-2.0
+wave amplitude_list frac_identified isolated gemini_trans rule1 rule2 rule4 flux_1arcsec raw_peak_p999 rule3 chosen
+11565.288 160.0 1.0 True 0.9197076271320211 True True True 65.39822230032559 5641.49526562501 True False
+11591.847 455.0 1.0 True 0.9119582910622869 True True True 349.7588604879619 5641.49526562501 True True
+11627.826 130.0 1.0 True 0.959486009819167 True True True 108.6919254855629 5641.49526562501 True False
+11651.0 321.0 1.0 True 0.9571643535579953 True True True 266.47640520335057 5641.49526562501 True False
+11696.254 76.0 1.0 True 0.9826475094104635 True True True 72.0848258989027 5641.49526562501 True False
+11770.65 33.6 1.0 True 0.9706772097519466 True True True 36.09287211025258 5641.49526562501 True False
+11788.495 67.5 1.0 True 0.9835473831210818 True True True 91.73331730680839 5641.49526562501 True True
+12055.844 93.9 1.0 True 0.9788961240223476 True True True 114.92875985977471 5641.49526562501 True False
+12229.206 467.0 1.0 True 0.9888848811388016 True True True 610.1727065071279 5641.49526562501 True True
+12257.777 183.0 1.0 True 0.994665332909288 True True True 255.78500063972007 5641.49526562501 True False
+12287.158 526.0 1.0 True 0.998181415455682 True True True 722.5482909576717 5641.49526562501 True True
+12325.925 154.0 1.0 True 0.998072224003928 True True True 220.44766622841257 5641.49526562501 True False
+12351.329 383.0 1.0 True 0.9992248586245945 True True True 542.0455228441683 5641.49526562501 True False
+12400.967 93.9 1.0 True 0.9996686811958041 True True True 129.8022574333336 5641.49526562501 True False
+12482.53 43.8 1.0 True 0.9991961994341442 True True True 37.93322618218224 5641.49526562501 True False

@@ -1,0 +1,15 @@
+{
+  "instrument": "keck_mosfire",
+  "band": "J2",
+  "slit_width_arcsec": 1.0,
+  "source": {"type": "point", "mag": 19.0, "mag_system": "AB"},
+  "spectrum": {"shape": "power_law", "alpha": -1.0},
+  "seeing_fwhm_arcsec": 0.9,
+  "exptime_s": 150,
+  "n_frames": 4,
+  "readout": {"mode": "MCDS", "n_reads": 16},
+  "nod": "ABBA",
+  "airmass": 1.075,
+  "pwv_mm": 1.6,
+  "throughput": {"date": "2022-04-09"}
+}

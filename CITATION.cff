@@ -1,0 +1,23 @@
+# Citation metadata (Q&A S22-3 (a)). No DOI yet: a Zenodo DOI is planned at the first tag after the
+# merge of keck-mosfire into main. Keep `version` equal to keck_etcs.__version__.
+cff-version: 1.2.0
+message: >-
+  If you use keck_etcs, please cite it with these metadata and quote the code version and the
+  calibration release (e.g. mosfire-J-2026.10) that every output reports in meta.keck_etcs_version and
+  meta.calib_version.
+title: "keck_etcs: exposure time calculators for the Keck spectrographs, grounded in PypeIt reductions"
+type: software
+authors:
+  - family-names: Prochaska
+    given-names: J. Xavier
+    affiliation: University of California, Santa Cruz
+version: 0.2.5
+license: BSD-3-Clause
+repository-code: "https://github.com/pypeit/keck-etcs"
+url: "https://keck-etcs.readthedocs.io"
+keywords:
+  - astronomy
+  - exposure time calculator
+  - Keck
+  - MOSFIRE
+  - PypeIt
