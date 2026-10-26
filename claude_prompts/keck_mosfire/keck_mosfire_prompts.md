@@ -58,6 +58,14 @@ Use Fable if you can.  Log your work.
 If you have any additional questions put them under Q&A/Calibrations.
 Use Fable if you can.  Log your work.
 
+### PR
+
+1.  I have just submitted a PR for the first efforts to build the ETC, focused on MOSFIRE.  Please:
+   - Write a better summary of the PR than what I wrote.
+   - Add CI tests on GitHub Actions.
+   - Add more to the Developers docs how the calculations are performed.  Reference the PypeIt code used and the fundamental equations. 
+Use Opus 5.5.  Log your work.
+
 ## Registry
 
 *2026-09-30. One-time setup of the container registry for the keck-etcs image
