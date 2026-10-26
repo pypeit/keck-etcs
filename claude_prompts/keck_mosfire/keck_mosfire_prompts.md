@@ -66,6 +66,12 @@ Use Fable if you can.  Log your work.
    - Add more to the Developers docs how the calculations are performed.  Reference the PypeIt code used and the fundamental equations. 
 Use Opus 5.5.  Log your work.
 
+### Other bands
+
+1. We wish to build out the ETC for the other primary bands of MOSFIRE.  Please examine the code and files in context and then modify the design doc
+(`docs/keck_mosfire_design.md`). If you have any questions put them under Q&A/Other bands.
+Use Opus 5.5.  Log your work.
+
 ## Registry
 
 *2026-09-30. One-time setup of the container registry for the keck-etcs image
@@ -145,6 +151,8 @@ image, so pods in namespace `pypeit` pull it without an `imagePullSecret`.
   Deploy tokens and repeat steps 2-3. Already-pushed images are unaffected.
 
 ## Q&A
+
+### Other bands
 
 ### Calibrations
 
