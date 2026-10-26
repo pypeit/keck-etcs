@@ -76,6 +76,10 @@ Use Opus 5.5.  Log your work.
 additional questions.
 Use Opus 5.5.  Log your work.
 
+3. I have answered your next round of questions about the other bands.  Please read the answers and proceed to modify the design doc. 
+Then generate a series of prompt docs, one per Band in the `claude_prompts/keck_mosfire/` folder.  Name them `keck_mosfire_prompt_<band>.md`.
+Use Opus 5.5.  Log your work.
+
 ## Registry
 
 *2026-09-30. One-time setup of the container registry for the keck-etcs image
@@ -332,6 +336,7 @@ header and into design 9.3; the fallback of S5 (polyorder 4-5 or a BOX
 extraction when the fit is unstable) stays. Y keeps 6 unless the same test
 says lower. *Default: start H and K at `polyorder = 5` and let the test
 raise or lower it.*
+>A. Agree
 
 **Q65. `TUBETEMP` as the ambient-temperature card (Q60, P13).** Use
 `TUBETEMP` as the ambient temperature for the K thermal term: (a) the
@@ -349,6 +354,7 @@ proxy for the mirrors and the dome, which is what a 275 K grey body at
 `TUBETEMP` once fitted, the model is wrong and T belongs to something else
 (the instrument's warm window, which is not in the header). *Default:
 agree.*
+>A. Agree
 
 **Q66. The Moon by ephemeris, and the Y-only cut (Q61, P14).** There is no
 Moon card, but the monitor already computes the Sun's altitude per frame
@@ -364,6 +370,7 @@ least 20 over at least 3 nights; otherwise it uses all frames, carries
 difference is reported so the cut can be applied at a later release. J, H
 and K use all frames (the 2022-04-09 J excess already measured stands).
 *Default: agree.*
+>A. Agree
 
 **Q67. Where the work goes: plan and prompt docs.** The plan
 (`docs/keck_mosfire_implementation.md`, "Keck/MOSFIRE J", v0.4, S0-S18;
@@ -385,6 +392,7 @@ section 9 becomes decisions D48-D62 (one per proposal, Q64-Q66 folded into
 D53, D60 and D61) in v0.7, with 9.9 reduced to the two items still to
 verify (same-night Y/H/K standards on the validation nights; a white dwarf
 and an A0V star on one H night). *Default: agree.*
+>A. Agree
 
 **Q68. A J-only release after the refactor (Q50, Q54).** S23 renames the
 J throughput files and changes the harvest columns, which is a
@@ -394,6 +402,7 @@ lands) whose products carry the same numbers as the current release under
 the new names and columns, verified by a regression comparison of
 `compute()` outputs before and after (identical to 1e-6). The Y/H/K tag of
 S27 is then a second release. *Default: agree.*
+>A. Agree
 
 ### Calibrations
 
