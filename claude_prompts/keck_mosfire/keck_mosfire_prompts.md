@@ -303,6 +303,98 @@ examples per band, the thermal term and the saturation fraction, one release
 tag, and this design "as built". *Default: agree.*
 >A. Agree
 
+*2026-10-26, from "Other bands" prompt #2. Settled so far: Q49-Q63 are all
+agreed, with three notes that change the proposals: Q53 (prefer a lower
+`polyorder` for H and K if it holds), Q60 (a temperature header card was
+doubtful) and Q61 (the Moon matters only in Y). Two of the "verify" items
+of design 9.9 are now verified from real headers
+(`scripts/mosfire/inspect_raw_headers.py`, in `pypeit14b`): every MOSFIRE
+frame we hold, 238 frames on 30 nights from 2012-09 to 2025-07 (dev suite
+and our KOA downloads), carries `TUBETEMP`, the Keck telescope tube
+temperature in degrees C (median 1.6, range -3.4 to +4.9, per-night spread
+usually below 0.5 K); no frame carries a Moon card of any kind. Five
+follow-ups below, same format: each ends with a default, so "agree" is a
+complete answer. Nothing in the design doc was changed in this round; the
+answers to Q49-Q68 are folded in together by the next prompt.*
+
+**Q64. How to pick the lower `polyorder` for H and K (Q53).** Decide it
+by measurement rather than by guess, with the existing
+`scripts/mosfire/sensfunc_perturbation_test.py` extended to loop over
+`polyorder`: on each band's dev-suite reference night (`longslit_3x0.7_H`
+and `_K`, HIP 17971, 2012-11-28, 0.7") and on the first wide-slit KOA
+standard reduced per band, fit polyorder 4, 5, 6 and 8 and take the lowest
+order that passes both tests: (a) the 1e-5 perturbation stability of the
+zero point stays below 1 percent, and (b) the zero point differs from the
+next order up by less than 1 percent rms over the band's common window and
+less than 2 percent within 100 A of its edges (where an underfit shows
+first). The chosen order and the test table go into the `.sens` file
+header and into design 9.3; the fallback of S5 (polyorder 4-5 or a BOX
+extraction when the fit is unstable) stays. Y keeps 6 unless the same test
+says lower. *Default: start H and K at `polyorder = 5` and let the test
+raise or lower it.*
+
+**Q65. `TUBETEMP` as the ambient-temperature card (Q60, P13).** Use
+`TUBETEMP` as the ambient temperature for the K thermal term: (a) the
+monitor records `tube_temp_C` per on-sky frame in every band (one column,
+no cost); (b) the per-night K thermal fit holds T at the night's median
+`TUBETEMP` and fits only `eps_eff`, since the two are degenerate (about 50
+percent in `eps_eff` per 5 K); (c) the ETC default for `ambient_temp_C`
+becomes the median `TUBETEMP` of the K throughput sample, set when that
+sample exists (the 238 frames give 1.6 C, so the provisional 2 C stands),
+and the ETC states which night-to-night spread it covers: -3.4 to +4.9 C
+over our frames, i.e. the thermal term varies by about -40 to +35 percent
+around the default, which is why the input is worth exposing. The tube is a
+proxy for the mirrors and the dome, which is what a 275 K grey body at
+`eps_eff ~ 0.15` describes; if the per-night `eps_eff` correlates with
+`TUBETEMP` once fitted, the model is wrong and T belongs to something else
+(the instrument's warm window, which is not in the header). *Default:
+agree.*
+
+**Q66. The Moon by ephemeris, and the Y-only cut (Q61, P14).** There is no
+Moon card, but the monitor already computes the Sun's altitude per frame
+with astropy from `MJD-OBS` and the site (`twilight` flag, design 4.9); the
+same two lines give the Moon's altitude, illuminated fraction and
+separation from the target. Proposal: record `moon_alt_deg`, `moon_illum`
+and `moon_sep_deg` in the monitor cards for every band (cheap, keeps the
+information), and apply a cut only when selecting frames for the Y excess
+curve: a frame is "moonlit" when the Moon is above the horizon and more than
+30 percent illuminated. The Y curve uses dark frames if they number at
+least 20 over at least 3 nights; otherwise it uses all frames, carries
+`moon_included = true` in its metadata, and the dark-minus-moonlit
+difference is reported so the cut can be applied at a later release. J, H
+and K use all frames (the 2022-04-09 J excess already measured stands).
+*Default: agree.*
+
+**Q67. Where the work goes: plan and prompt docs.** The plan
+(`docs/keck_mosfire_implementation.md`, "Keck/MOSFIRE J", v0.4, S0-S18;
+S19-S22 live only in `keck_mosfire_prompt_7.md`) gets a v0.5 change note,
+drops the "J" from its title, lists S19-S22 as Phase 6 in one paragraph for
+completeness, and adds **Phase 7, Y/H/K**, as S23-S27 in the agreed order:
+**S23** band-neutral refactor (P2, P7, P8, P11: schema, instrument module,
+harvest columns, S3 layout, the J rename and the J table regenerated; the
+census re-run with `--filters Y,H,K`; the dev-suite reference reductions
+of Q56 run locally, which also fixes the H and K footprints before the
+windows are frozen); **S24** H (standards, sensfunc parameters by Q64,
+Brackett mask, harvest, throughput product, validation night); **S25** K
+(same plus the thermal term, `TUBETEMP`, the saturation fraction); **S26**
+Y (same plus the Moon cut); **S27** release and docs (one tag
+`mosfire-YYYY.MM`, examples, fixtures, Read the Docs page, design "as
+built"). Prompt docs follow the parts convention: `keck_mosfire_prompt_8.md`
+(S23), `_9.md` (S24), `_10.md` (S25), `_11.md` (S26 and S27). Design
+section 9 becomes decisions D48-D62 (one per proposal, Q64-Q66 folded into
+D53, D60 and D61) in v0.7, with 9.9 reduced to the two items still to
+verify (same-night Y/H/K standards on the validation nights; a white dwarf
+and an A0V star on one H night). *Default: agree.*
+
+**Q68. A J-only release after the refactor (Q50, Q54).** S23 renames the
+J throughput files and changes the harvest columns, which is a
+calibration-release change (D28). Rather than hold that under the H and K
+timeline, S23 ends with a J-only tag (`mosfire-2026.11` or whenever S23
+lands) whose products carry the same numbers as the current release under
+the new names and columns, verified by a regression comparison of
+`compute()` outputs before and after (identical to 1e-6). The Y/H/K tag of
+S27 is then a second release. *Default: agree.*
+
 ### Calibrations
 
 *2026-10-04, from Prompt #7. Same format as before: each question ends with
@@ -1762,3 +1854,77 @@ What I learned:
   Ne/Ar for `long2pos_specphot`.
 - The docs build (`sphinx-build -W`) includes the design doc, so markdown
   table errors there fail CI; it takes about 2 minutes locally.
+
+### 2026-10-26 (Other bands prompt #2: answers Q49-Q63 read; Q64-Q68 posed)
+
+The prompt asked for Opus 5.5; this session ran on Claude Fable 5.1. No
+git commands were run other than `git status` and `git log`. The design,
+plan and prompt docs were not edited in this round; the answers to Q49-Q68
+are meant to be folded in together by the next prompt.
+
+Reread the doc: all fifteen questions Q49-Q63 are answered, twelve with a
+plain "Agree" and three with notes: Q53 (the `polyorder` 8 for H and K is a
+fair first guess but lower values are preferred if possible), Q60 (the
+user doubts a header card for the ambient temperature exists; otherwise
+agreed) and Q61 (the Moon should not matter in H or K; avoid it only in Y,
+and only if enough exposures remain).
+
+Appended a second round under the Other bands Q&A, after the user's
+answers and without editing them: a "Settled so far" summary, then five
+questions Q64-Q68, each ending with a default: Q64 a measured criterion
+for the lower H/K `polyorder` (extend `sensfunc_perturbation_test.py` to
+loop over orders 4-8 on the dev-suite reference nights; lowest order with
+perturbation stability below 1 percent and a difference below 1 percent
+rms from the next order up; start at 5); Q65 `TUBETEMP` as the ambient
+temperature (monitor column, T held per night while `eps_eff` is fitted,
+ETC default from the K sample's median); Q66 Moon altitude, illumination
+and separation by astropy ephemeris in the monitor cards, a cut only for
+the Y excess curve (dark frames if >= 20 over >= 3 nights, otherwise all
+frames with `moon_included` set), no cut in J, H or K; Q67 the layout of
+the plan (v0.5, title without "J", S19-S22 summarised as Phase 6, new
+Phase 7 S23-S27 in the order refactor, H, K, Y, release) and the prompt
+docs (parts 8-11), with design section 9 becoming D48-D62 in v0.7; Q68 a
+J-only calibration tag at the end of the refactor step so the J rename
+and the band-neutral columns are released before H lands.
+
+New script `scripts/mosfire/inspect_raw_headers.py` (run in `pypeit14b`):
+prints the environment-related cards of raw MOSFIRE frames (default: the
+first frame of the dev suite's `K_long`, `Y_long`, `longslit_3x0.7_K` and
+`J2_long`), or with `--stat KEY [--by-night]` summarises a numeric card
+over many frames. Findings, which settle two of the "verify" items of
+design 9.9:
+- **`TUBETEMP` exists** ("tube temperature", degrees C) in every frame
+  checked: 238 frames on 30 nights from 2012-09-10 to 2025-07-23, dev
+  suite and our KOA downloads alike; median 1.6 C, range -3.4 to +4.9 C,
+  per-night spread usually below 0.5 K (2022-04-09 has one outlier at
+  -2.3 C). The provisional ETC default of 2 C is therefore close to the
+  median, and the night-to-night range moves the K thermal term by about
+  -40 to +35 percent.
+- **No Moon card** of any kind (nothing matching MOON or LUNAR); the
+  headers do carry `EL`, `AIRMASS`, `DOMEPOSN`, `DOMESTAT`, `PARANTEL`,
+  `SKYPA*`, `SECFOCUS` and the dewar temperatures (`DWRTMP1-8`, 11-121 K,
+  cold and irrelevant to the thermal term). The dewar `PRESSURE` card reads
+  0 in every frame.
+- The 2012 frames have 505 cards, the 2019-2022 dev-suite frames 518-519,
+  the KOA frames 553-554 (KOA adds `SEMESTER` and its own provenance
+  cards); `SATURATE = 33000` DN in all of them, which is above the 26k ADU
+  1 percent nonlinearity limit used by the saturation fraction (P15).
+
+What I learned about the repository:
+- `keck_etcs/calib/monitor.py` already has `sun_altitude(mjd_mid, site)`
+  (astropy `get_sun` plus `AltAz`) driven by `MJD-OBS` and the site dict in
+  `keck_etcs/instruments/mosfire.py` (`twilight_sun_alt_deg = -18`), so a
+  Moon flag is the same code path with `get_body('moon')`.
+- The plan doc `docs/keck_mosfire_implementation.md` is still titled
+  "Keck/MOSFIRE J", at v0.4 with S0-S18; the Read the Docs steps S19-S22
+  exist only in `keck_mosfire_prompt_7.md`, so a band extension that wants
+  to be a plan phase has to add Phase 6 and Phase 7 to the plan at once.
+- `keck_etcs/data/pypeit_par/keck_mosfire_J.sens` records its reasons in
+  its header (polyorder 13 -> 6, tell_npca 5 -> 3 from the perturbation
+  test); the same file convention and the same test script carry over to
+  the per-band `.sens` files of Q53/Q64.
+- Our local data root `/mnt/tank/Astronomy/PypeIt/keck-etcs-data/mosfire/`
+  holds raw frames for 20 nights (2014-06-01 to 2025-07-23), all in the J
+  group (36 J and 22 J2 frames), plus
+  `status_table.ecsv`; nothing in Y, H or K has been downloaded yet, so
+  the Y/H/K excess curves and thermal fits wait for S23/S24.
