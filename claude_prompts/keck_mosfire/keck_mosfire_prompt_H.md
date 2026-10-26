@@ -260,15 +260,19 @@ proposed for each):
 - **H-1. Where the per-band candidate rows live.** (a) one table
   `koa_standards_candidates.ecsv` with a `filter` column (recommended:
   one census, one provenance block); (b) one file per band.
+>A. I agree with (a).  Note that we will eventually have different Keck instruments included in the analysis.  
 - **H-2. Pilot size and parallelism for H.** (a) 4 nights, `parallelism`
   4, sized from the J pilot's memory (recommended); (b) other.
+>A. (a)
 - **H-3. The first wide-slit H standard for the polyorder test.** (a)
   the brightest A0V `long2pos_specphot` night in the 2017-2025 era that
   the census returns (recommended: brightest means the cleanest test);
   (b) a WD night if one exists, so the test has no Brackett issue.
+>A. (a)
 - **H-4. Saturation fraction here or in K.** Q67 listed the output under
   S25 (K); this doc builds it in S24b because H is the band that needs it.
   (a) agree (recommended); (b) keep it for K.
+>A. (a)
 
 ## Logging
 
