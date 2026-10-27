@@ -631,3 +631,106 @@ What I learned about the repository:
   the value is silently truncated.
 - The 2022-04-09 night is the only one with all raw frames local, which
   is why it is the re-harvest check.
+
+### 2026-10-27 (Prompt #3 / S23c: KOA census for Y, H and K in the one candidate table; validation targets per band)
+
+The prompt asked for Opus 5.5; this session ran on Claude Fable 5.1. No
+git command other than `git status`, `git log`, `git tag` and `git show
+HEAD:<file>` (the committed J table, for the comparison) was run. No new
+Q&A answers. The S23b commits are in (`b0fc83c`, `c334e35`); `git tag`
+lists no tag on this checkout.
+
+**Census script.** `scripts/koa/search_mosfire_standards.py --filters`
+takes band groups (`Y`, `J` = J/J2/J3 as in S14, `H`, `K`) or KOA filter
+names; the default `J` reproduces the S14 census from its cache
+(`koa_mosfire_J_longslit_frames.xml`, kept under its old name; the other
+groups cache as `koa_mosfire_<group>_longslit_frames.xml`). `BASE_WHERE`
+is now `base_where(filters)`; the frames of every group are stacked and
+run through the unchanged rules (archive and SIMBAD A0 matches within
+60", wide slit >= 3", flats in the band and on the same mask kind, OH
+frames >= 55 s or long2pos arcs in the band). 2MASS is queried for J, H
+and Ks (`tmass_mags`, cache `tmass_jhk.json`; columns `hmag_2mass`,
+`e_hmag_2mass`, `kmag_2mass`, `e_kmag_2mass` after `e_jmag_2mass`). The
+`meta` carries `instrument`, `filters`, `filter_groups`, `koa_queries` and
+`koa_rows` per group and the command line; nothing MOSFIRE-specific is in
+the column names (H-1). `report()` gains the per-band block and
+`design_counts()` recomputes the 9.2 TAP counts from the cached frames.
+The committed table was built with `--filters J Y H K` (the Y/H/K frame
+queries and 2MASS cones ran in about ten minutes).
+
+**Verification.** A scratch comparison of the new table's J-group rows
+with the committed one (`git show HEAD:...`): the same 594 (night,
+standard, mask, filter) keys and **every one of the 43 common columns
+unchanged**; the four 2MASS columns are new. The 9.2 TAP counts from the
+cached frames: Y 11317 / 230 / 13, J2 714 / 14 / 2, H 15409 / 415 / 92
+and K 27575 / 372 / 72 equal design 9.2; J gives 12051 / 332 / 50 against
+12052: the J cache is from 2026-10-05 and the survey ran later, when one
+more frame had become public (KOA's public set only grows). `pytest
+keck_etcs/tests`: 125 passed (new: every band in the table, 2MASS H and
+Ks finite for > 95 percent of the A0V rows, `expand_filters`,
+`base_where`); `check_docs.py` ALL CHECKS PASS after letting it list,
+instead of fail on, products rebuilt after a release (`mosfire-2026.10-dev`
+on the three census files until the next release stamps them).
+
+**Per-band census** (usable = WD/archive/A0V with flats on a wide slit;
+reducible = also a wavelength calibrator; "WD+A0V" = nights holding both
+classes, on a wide slit and, in brackets, on any slit):
+
+| | Y | J | J2 | H | K |
+|---|---|---|---|---|---|
+| Candidate rows / nights | 451 / 272 | 570 / 364 | 24 / 18 | 758 / 464 | 722 / 414 |
+| Usable wide-slit rows / nights | 23 / 21 | 43 / 38 | 9 / 8 | 87 / 72 | 77 / 60 |
+| of which reducible nights | 12 | 16 | 4 | 35 | 55 |
+| WD / archive / A0V rows (usable wide) | 9 / 0 / 14 | 3 / 1 / 39 | 7 / 0 / 2 | 1 / 1 / 85 | 1 / 1 / 75 |
+| Distinct stars (usable wide) | 11 | 26 | 4 | 45 | 40 |
+| Reducible nights per era 2012-16 / 2017-25 / 2025- | 0 / 8 / 4 | 7 / 9 / 0 | 0 / 3 / 1 | 16 / 19 / 0 | 19 / 36 / 0 |
+| WD+A0V nights, wide (any slit) | 0 (10) | 0 (7) | 0 (0) | 0 (6) | 0 (9) |
+
+Whole table: 2525 rows on 716 nights; 239 usable wide-slit rows on 101
+nights (WD 21, archive 3, A0V 215), 144 of them reducible on 77 nights
+(OH 15, lamp arcs 129); 42 percent of candidate nights have matching
+lamp arcs (20 percent in J alone: the H and K `long2pos_specphot`
+nights usually carry Ne/Ar arcs). The 2022-04-09 LDS749B check passes.
+
+What this means for the H and K plan: H and K each have more usable
+wide-slit nights than J (72 and 60 against 38), nearly all A0V stars on
+`long2pos_specphot` with arcs, and only one white dwarf and one archive
+star each on a wide slit, so **D52's cross-tie in H and K has no night
+with both classes on a wide slit**; it will compare a white dwarf night
+with A0V nights of the same era, or use the 6 (H) and 9 (K) nights that
+hold both classes on narrow slits. No H or K wide-slit night falls in era
+2025-04.. yet. Y has 9 white-dwarf rows (GD153, LDS749B) on wide slits
+and no 2012-2016 wide-slit night.
+
+**Validation targets.** `scripts/koa/find_validation_targets.py` reads
+every cached band group (`--filters` to restrict), keeps the J-only
+rules, prints a per-band summary with the 9.7 fallbacks, and writes the
+table for all bands (202 program targets on 24 nights, 107 validation
+points on 15 nights). `nights_validation.csv` stays the J-group manifest
+(4 nights, unchanged) until S23d adds the `band` column; the Y/H/K
+validation nights are only listed. Per band: Y 15 validation nights, 9 of
+them with a same-night wide-slit standard (LDS749B 2022-04-09, GD153
+2024-12-29/30, 2025-01-08/25, 2025-07-17/18/22/23), so Y does not need
+the J2132-1434 fallback; H one point (J1532+2237, 2022-01-11, GD153 on a
+1" slit); K two (J0313-1806, 2020-12-09, GD153 1"; J1342+0928,
+2021-04-18, P330E 1"); no H or K program night has a wide-slit standard,
+so those validations flux with a narrow-slit standard (slit loss enters,
+as the design notes for the Y fallback) or use Per-emb 25 in K
+(2019-10-13, thermal continuum only). The design doc records both
+results (9.3 P3 and 9.7).
+
+**Docs:** `CHANGES.md` code entry; design 9.3 and 9.7 result paragraphs.
+`docs/keck_mosfire_design.md` section 4.1 keeps its "Other bands" note.
+
+What I learned about the repository:
+- `conda run` drops stdin: a heredoc-piped `python -` under it runs
+  nothing and prints nothing (the memory note was right; the scratch
+  analyses had to be files).
+- KOA's long2pos nights in H and K carry Ne/Ar arcs far more often than
+  in J, which is why their reducible fractions are high.
+- `check_docs.py` treated any `-dev` entry after a release as a failure,
+  which would have blocked every census or monitor rebuild between
+  releases; it now lists them as pending.
+- A `(align)` mask name (`LONGSLIT-46x1 (align)`) is grouped separately
+  from the science mask in the validation table, so some nights appear
+  twice for one target.

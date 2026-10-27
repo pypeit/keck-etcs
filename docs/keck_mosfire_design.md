@@ -1563,6 +1563,28 @@ Ne/Ar arcs on the long2pos mask), flats in the band. CALSPEC white dwarfs
 are the absolute anchors as in J; they are faint in K (GD153 K ~ 14.1
 Vega), so the A0V series will dominate H and K.
 
+*Census results (S23c, 2026-10-27; `search_mosfire_standards.py --filters
+J Y H K`, 2525 rows on 716 nights; the J rows unchanged; the 9.2 TAP
+counts reproduced, J by one frame less because its cache predates the
+survey):*
+
+| | Y | J | J2 | H | K |
+|---|---|---|---|---|---|
+| Candidate rows / nights | 451 / 272 | 570 / 364 | 24 / 18 | 758 / 464 | 722 / 414 |
+| Usable wide-slit rows / nights | 23 / 21 | 43 / 38 | 9 / 8 | 87 / 72 | 77 / 60 |
+| of which reducible nights | 12 | 16 | 4 | 35 | 55 |
+| WD / archive / A0V rows (usable wide) | 9 / 0 / 14 | 3 / 1 / 39 | 7 / 0 / 2 | 1 / 1 / 85 | 1 / 1 / 75 |
+| Reducible nights per era (2012-16 / 2017-25 / 2025-) | 0 / 8 / 4 | 7 / 9 / 0 | 0 / 3 / 1 | 16 / 19 / 0 | 19 / 36 / 0 |
+| Nights with a WD and an A0V star, wide slit (any slit) | 0 (10) | 0 (7) | 0 (0) | 0 (6) | 0 (9) |
+
+H and K each hold more wide-slit nights than J, almost all A0V on
+`long2pos_specphot` with lamp arcs (K: 55 of 60 usable nights reducible),
+and one white dwarf each (plus one archive star), so D52's cross-tie in H
+and K must use a white dwarf and an A0V star from different nights of the
+same era, or the narrow-slit pairs (6 nights in H, 9 in K hold both
+classes on some slit). Y has 9 white-dwarf rows (GD153, LDS749B) but no
+2012-2016 wide-slit night; its 2025 era has 4.
+
 **P4 = D51 (Q51, agreed), A0V model per band.** N3 scales PypeIt's Vega spectrum to the
 star's 2MASS J. For the other bands the scaling uses the **band's own 2MASS
 magnitude**: J for Y and J, H for H, Ks for K, with PypeIt's `TMASS-J/H/K`
@@ -1786,6 +1808,19 @@ calibration and the test is weaker) and Per-emb 25 in K (2019-10-13; a
 bright embedded source, useful for the thermal continuum, not for the
 faint-source regime). In K the sky comparison of 6.1 step 4 includes the
 thermal continuum at 2.30-2.40 um, to be within 30 percent.
+
+*Results (S23c, 2026-10-27; `find_validation_targets.py` over all bands,
+202 program targets on 24 nights):* Y has 15 validation nights, 9 of them
+with a same-night wide-slit standard (LDS749B 2022-04-09, which the
+program also observed in Y; GD153 2024-12-29/30, 2025-01-08/25 and
+2025-07-17/18/22/23, the last four in era 2025-04..), so the Y validation
+night is a KOA night, not the dev-suite fallback. H has one validation
+point (J1532+2237, 2022-01-11, GD153 on a 1" slit) and K two (J0313-1806,
+2020-12-09, GD153, 1"; J1342+0928, 2021-04-18, P330E, 1"), all with
+narrow-slit standards; no H or K program night carries a wide-slit
+standard, so the H and K validation nights flux with a narrow-slit
+standard (slit loss enters, as for the Y fallback) or use Per-emb 25 in
+K.
 
 ### 9.8 Definition of done, Y/H/K milestone
 

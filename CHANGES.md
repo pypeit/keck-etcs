@@ -10,6 +10,25 @@ fed it.
 
 ## Code (unreleased, after 0.2.5)
 
+- **KOA census per band (S23c; D50; "Other bands" part H prompt 3):**
+  `scripts/koa/search_mosfire_standards.py --filters` (band groups `Y`,
+  `J` = J/J2/J3, `H`, `K`, or KOA filter names; default `J` reproduces the
+  S14 census from its cache) queries KOA once per group, records 2MASS H
+  and Ks beside J for every A0V star (`hmag_2mass`, `kmag_2mass`; D51),
+  and writes all bands into the one table
+  `keck_etcs/data/mosfire/koa_standards_candidates.ecsv` (a `filter`
+  column; instrument-neutral columns and `meta`, H-1). The report adds a
+  per-band block (candidate nights, usable wide-slit nights, WD / archive
+  / A0V, era coverage, nights holding both a white dwarf and an A0V star
+  for D52) and recomputes the design 9.2 TAP counts from the cached
+  frames. `scripts/koa/find_validation_targets.py` reads every cached
+  band, reports per band whether the Hennawi/Yang/Wang nights carry a
+  same-night wide-slit standard, names the design 9.7 dev-suite fallbacks,
+  and keeps `nights_validation.csv` to the J group until the multi-band
+  manifests of S23d. The J rows of the census are unchanged.
+  `check_docs.py` lists products rebuilt after a release (`<tag>-dev`)
+  instead of failing on them.
+
 - **Band-neutral refactor, part 2 (S23b; D49; "Other bands" part H
   prompt 2):** throughput products are named per band group,
   `mosfire_thru_<group>_<era>.ecsv` (`Instrument.throughput_pattern` must

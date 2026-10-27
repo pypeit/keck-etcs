@@ -1,25 +1,36 @@
 #!/usr/bin/env python
-"""KOA census of MOSFIRE J-band long-slit standards, and the SAMPMODE census (plan S14; design 4.1, D13, D44).
+"""KOA census of MOSFIRE long-slit standards per band, and the SAMPMODE census (plan S14, S23c; design 4.1, D13, D44, D50).
 
 Usage:
-    conda run -n pypeit14b python scripts/koa/search_mosfire_standards.py [--refresh]
+    conda run -n pypeit14b python scripts/koa/search_mosfire_standards.py [--filters J Y H K] [--refresh]
+
+``--filters`` names band groups (``Y``, ``J`` = J, J2 and J3, ``H``, ``K``;
+:data:`FILTER_GROUPS`) or single KOA filter names. The default, ``J``,
+reproduces the S14 census; the committed table is built with ``--filters
+J Y H K`` (S23c). Every band is treated by the same rules; the per-band
+reductions differ only through the ``filter`` column (design D50; one
+table per instrument, H-1).
 
 Queries, all over plain HTTP TAP (no ``pykoa``/``astroquery``/``pyvo``
 needed); raw answers are cached under ``$KECK_ETCS_DATA/koa/`` (local, never
 committed) and reused unless ``--refresh``:
 
-1. **KOA** (``koa_mosfire``): every frame with ``gratmode = 'spectroscopy'``,
-   ``filter`` in J, J2, J3 and ``maskname LIKE 'LONGSLIT%'`` or
-   ``'long2pos%'``. KOA's TAP returns **public frames only**: anonymous
-   queries are rewritten with ``current_date > add_months(date_obs,
-   propint)``, so every candidate is public.
+1. **KOA** (``koa_mosfire``), one query per ``--filters`` token: every frame
+   with ``gratmode = 'spectroscopy'``, ``filter`` in the token's filters and
+   ``maskname LIKE 'LONGSLIT%'`` or ``'long2pos%'`` (:func:`base_where`;
+   cache ``koa_mosfire_<token>_longslit_frames.xml``). KOA's TAP returns
+   **public frames only**: anonymous queries are rewritten with
+   ``current_date > add_months(date_obs, propint)``, so every candidate is
+   public.
 2. **The SAMPMODE census**: the ``SAMPMODE`` x ``NUMREADS`` histogram of
    every public on-sky MOSFIRE spectroscopy frame (all masks and filters),
    to answer the UTR question (D13).
 3. **SIMBAD**: every star with a spectral type starting ``A0`` and V < 11
    (one all-sky query, matched locally).
-4. **VizieR II/246** (2MASS PSC): J and its error for each A0V standard
-   found (one cone of 5" per star).
+4. **VizieR II/246** (2MASS PSC): J, H and Ks with their errors for each
+   A0V standard found (one cone of 5" per star; ``jmag_2mass``,
+   ``hmag_2mass``, ``kmag_2mass``: the A0V model of a band is scaled to
+   the band's own 2MASS magnitude, D51).
 
 Frame classes. KOA's ``koaimtyp`` is unreliable for MOSFIRE: on 2022-04-09
 the J0841 and LDS749 frames and the lamp-off dome flats are all
@@ -72,15 +83,24 @@ file-name date for the night itself.
 Outputs (committed, registered in ``keck_etcs/data/index.yaml``):
 
 - ``keck_etcs/data/mosfire/koa_standards_candidates.ecsv``: one row per
-  (night, standard, mask, filter) with the fields of design 4.1 plus
-  ``std_class``, ``slit_width_arcsec``, ``wide_slit`` (>= 3"), ``era``,
-  ``public``, ``has_flats``, ``n_lamp_arcs``, ``lamp_arcs_match`` and
-  ``priority`` (the Hennawi/Yang/Wang program, D9);
+  (night, standard, mask, filter), all bands in one table, with the fields
+  of design 4.1 plus ``std_class``, ``slit_width_arcsec``, ``wide_slit``
+  (>= 3"), ``era``, ``public``, ``has_flats``, ``n_lamp_arcs``,
+  ``lamp_arcs_match`` and ``priority`` (the Hennawi/Yang/Wang program,
+  D9). Column names and ``meta`` keys are instrument-neutral (the
+  instrument is a ``meta`` key and the band a column), so that the other
+  Keck instruments can ship the same layout under
+  ``keck_etcs/data/<instrument>/``;
 - ``keck_etcs/data/mosfire/koa_sampmode_census.ecsv``.
 
-Prints the counts per era and slit class, the SAMPMODE percentages, the
-fraction of candidate nights with matching lamp arcs, and the check that
-the 2022-04-09 LDS749B frames are found with ``wide_slit = True``.
+Prints, per band: candidate nights, usable wide-slit nights, the WD /
+archive / A0V counts, the era coverage and the nights that hold both a
+white dwarf and an A0V star (design D52's cross-tie); then the counts per
+era and slit class, the SAMPMODE percentages, the fraction of candidate
+nights with matching lamp arcs, the check that the 2022-04-09 LDS749B
+frames are found with ``wide_slit = True`` (when J2 is queried), and the
+design 9.2 TAP counts recomputed from the cached frames
+(:func:`design_counts`).
 """
 import argparse
 import datetime
@@ -113,8 +133,30 @@ SCRIPT = 'scripts/koa/search_mosfire_standards.py'
 KOA_TAP = 'https://koa.ipac.caltech.edu/TAP/sync'
 SIMBAD_TAP = 'https://simbad.cds.unistra.fr/simbad/sim-tap/sync'
 VIZIER_TAP = 'https://tapvizier.cds.unistra.fr/TAPVizieR/tap/sync'
-BASE_WHERE = ("gratmode = 'spectroscopy' AND filter IN ('J', 'J2', 'J3') "
-              "AND (maskname LIKE 'LONGSLIT%' OR maskname LIKE 'long2pos%')")
+FILTER_GROUPS = {'Y': ('Y',), 'J': ('J', 'J2', 'J3'), 'H': ('H',), 'K': ('K',)}
+"""``--filters`` token -> KOA filter names (the band groups of design D49; J3 is queried with the J group
+as in S14 although the ETC does not model it, D48)."""
+
+
+def expand_filters(tokens):
+    """``--filters`` tokens -> ``[(token, (filter, ...)), ...]`` (a group of :data:`FILTER_GROUPS` or one filter)."""
+    return [(t, FILTER_GROUPS.get(t, (t,))) for t in tokens]
+
+
+def base_where(filters):
+    """The KOA ``WHERE`` clause of the long-slit spectroscopy frames in ``filters``."""
+    names = ', '.join(f"'{f}'" for f in filters)
+    return (f"gratmode = 'spectroscopy' AND filter IN ({names}) "
+            "AND (maskname LIKE 'LONGSLIT%' OR maskname LIKE 'long2pos%')")
+
+
+BASE_WHERE = base_where(FILTER_GROUPS['J'])
+"""The S14 (J-only) clause."""
+STAR_PREFIXES = ('HIP', 'HD', 'GD', 'Feige', 'G191', 'LDS', 'BD+')
+"""Target-name prefixes of the design 9.2 TAP count (``scripts/mosfire/survey_other_bands.py --koa``)."""
+DESIGN_COUNTS = {'Y': (11317, 230, 13), 'J': (12052, 332, 50), 'J2': (714, 14, 2), 'H': (15409, 415, 92), 'K': (27575, 372, 72)}
+"""Design 9.2 (survey of 2026-10-2x): per filter, (long-slit + long2pos frames, nights with star-like
+target names, long2pos_specphot nights with star-like names)."""
 COLUMNS = ('koaid', 'date_obs', 'ut', 'mjd_obs', 'targname', 'object', 'ra', 'dec', 'maskname', 'filter',
            'gratmode', 'obsmode', 'sampmode', 'numreads', 'truitime', 'airmass', 'pattern', 'frameid',
            'yoffset', 'progid', 'progpi', 'koaimtyp', 'propint', 'semid', 'axestat', 'domestat', 'flatspec',
@@ -203,15 +245,24 @@ def slit_length_bars(mask):
     return int(w.group(1)) if w else -1
 
 
-def tmass_j(stars, cache_dir, refresh=False, pause=0.2):
-    """2MASS J, e_J for (name, ra, dec) from VizieR II/246, one 5" cone per star (cached as JSON)."""
+TMASS_BANDS = ('j', 'h', 'k')
+
+
+def tmass_mags(stars, cache_dir, refresh=False, pause=0.2):
+    """2MASS J, H, Ks and errors for (name, ra, dec) from VizieR II/246, one 5" cone per star (cached as JSON).
+
+    The S14 cache ``tmass_j.json`` held J only; since S23c the cache is
+    ``tmass_jhk.json`` with ``jmag, e_jmag, hmag, e_hmag, kmag, e_kmag``
+    (``k`` is Ks; a missing or blank magnitude is None).
+    """
     import requests
-    cache = Path(cache_dir) / 'tmass_j.json'
+    cache = Path(cache_dir) / 'tmass_jhk.json'
     known = json.loads(cache.read_text()) if cache.exists() and not refresh else {}
+    num = lambda v: float(v) if str(v).strip() not in ('', '--', 'nan') else None
     for name, ra, dec in stars:
         if name in known:
             continue
-        adql = ('SELECT "2MASS", RAJ2000, DEJ2000, Jmag, e_Jmag FROM "II/246/out" WHERE '
+        adql = ('SELECT "2MASS", RAJ2000, DEJ2000, Jmag, e_Jmag, Hmag, e_Hmag, Kmag, e_Kmag FROM "II/246/out" WHERE '
                 f"1=CONTAINS(POINT('ICRS', RAJ2000, DEJ2000), CIRCLE('ICRS', {ra:.6f}, {dec:.6f}, {5 / 3600:.6f}))")
         r = requests.post(VIZIER_TAP, data={'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv', 'QUERY': adql},
                           timeout=120)
@@ -222,9 +273,9 @@ def tmass_j(stars, cache_dir, refresh=False, pause=0.2):
         else:
             sep = SkyCoord(t['RAJ2000'], t['DEJ2000'], unit='deg').separation(SkyCoord(ra, dec, unit='deg')).arcsec
             k = int(np.argmin(sep))
-            known[name] = {'id': str(t['2MASS'][k]).strip(), 'jmag': float(t['Jmag'][k]),
-                           'e_jmag': float(t['e_Jmag'][k]) if str(t['e_Jmag'][k]) not in ('', '--') else None,
-                           'sep_arcsec': float(sep[k])}
+            known[name] = {'id': str(t['2MASS'][k]).strip(), 'sep_arcsec': float(sep[k]),
+                           **{f'{b}mag': num(t[f'{b.upper()}mag'][k]) for b in TMASS_BANDS},
+                           **{f'e_{b}mag': num(t[f'e_{b.upper()}mag'][k]) for b in TMASS_BANDS}}
         cache.write_text(json.dumps(known, indent=1))
         time.sleep(pause)
     return known
@@ -256,15 +307,33 @@ def register(entries):
     INDEX.write_text(header + yaml.safe_dump(index, sort_keys=False, width=100))
 
 
-def main(refresh=False):
+def frames_cache(cache, token):
+    """Cache file of a ``--filters`` token's KOA frames (the J group keeps its S14 name)."""
+    return Path(cache) / f'koa_mosfire_{token}_longslit_frames.xml'
+
+
+def load_frames(cache, tokens, refresh=False):
+    """KOA long-slit spectroscopy frames of the tokens, one query each; returns ``(table, {token: adql}, {token: n})``."""
+    from astropy.table import vstack
+    parts, queries, counts = [], {}, {}
+    for token, filters in expand_filters(tokens):
+        adql = f"SELECT {', '.join(COLUMNS)} FROM koa_mosfire WHERE {base_where(filters)}"
+        t = tap(KOA_TAP, adql, frames_cache(cache, token), refresh, fmt='votable')
+        print(f'KOA {token} ({"/".join(filters)}): {len(t)} public MOSFIRE LONGSLIT/long2pos spectroscopy frames')
+        queries[token], counts[token] = adql, len(t)
+        parts.append(t)
+    fr = vstack(parts, metadata_conflicts='silent') if len(parts) > 1 else parts[0]
+    fr['night'] = [night_of(d, ut) for d, ut in zip(fr['date_obs'], fr['ut'])]
+    return fr, queries, counts
+
+
+def main(refresh=False, tokens=('J',)):
     cache = paths.data_root() / 'koa'
     now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    filters = [f for _, fs in expand_filters(tokens) for f in fs]
 
-    # 1. KOA frames
-    adql = f"SELECT {', '.join(COLUMNS)} FROM koa_mosfire WHERE {BASE_WHERE}"
-    fr = tap(KOA_TAP, adql, cache / 'koa_mosfire_J_longslit_frames.xml', refresh, fmt='votable')
-    print(f'KOA: {len(fr)} public MOSFIRE J/J2/J3 LONGSLIT/long2pos spectroscopy frames')
-    fr['night'] = [night_of(d, ut) for d, ut in zip(fr['date_obs'], fr['ut'])]
+    # 1. KOA frames, per band group
+    fr, queries, counts = load_frames(cache, tokens, refresh)
     on_sky, dome, arc = frame_classes(fr)
     print(f'  on sky {on_sky.sum()}, dome flats {dome.sum()}, lamp arcs {arc.sum()}, other {len(fr) - on_sky.sum() - dome.sum() - arc.sum()}')
 
@@ -312,9 +381,9 @@ def main(refresh=False):
                                  'std_archive': 'none', 'std_sptype': '', 'std_vmag': np.nan,
                                  'std_ra': float(r['ra']), 'std_dec': float(r['dec']), 'match_sep_arcsec': np.nan}))
 
-    # 2MASS J for the A0V stars
+    # 2MASS J, H, Ks for the A0V stars
     a0v = {(v['standard'], v['std_ra'], v['std_dec']) for _, v in std_rows if v['std_class'] == 'A0V'}
-    jm = tmass_j(sorted(a0v), cache, refresh)
+    jm = tmass_mags(sorted(a0v), cache, refresh)
 
     # 4. group into candidates: (night, standard, mask, filter)
     groups = {}
@@ -355,13 +424,15 @@ def main(refresh=False):
         uniq = lambda col: sorted({str(x) for x in (r[col] for r in rows)})
         pis = ' '.join(uniq('progpi')).lower()
         j = jm.get(v['standard']) if v['std_class'] == 'A0V' else None
+        mag = lambda key: (j[key] if j and j.get(key) is not None else np.nan)
         out.append({
             'night': night, 'date': date_iso, 'era': era, 'era_note': '; '.join(ew),
             'standard': v['standard'], 'std_class': v['std_class'], 'std_archive': v['std_archive'],
             'std_sptype': v['std_sptype'], 'std_vmag': v['std_vmag'], 'std_ra': v['std_ra'], 'std_dec': v['std_dec'],
             'match_sep_arcsec': v['match_sep_arcsec'],
-            'jmag_2mass': j['jmag'] if j else np.nan,
-            'e_jmag_2mass': (j['e_jmag'] if j and j['e_jmag'] is not None else np.nan),
+            'jmag_2mass': mag('jmag'), 'e_jmag_2mass': mag('e_jmag'),
+            'hmag_2mass': mag('hmag'), 'e_hmag_2mass': mag('e_hmag'),
+            'kmag_2mass': mag('kmag'), 'e_kmag_2mass': mag('e_kmag'),
             'tmass_id': j['id'] if j else '',
             'targname': ','.join(uniq('targname')), 'koaids': ','.join(str(r['koaid']) for r in rows),
             'n_frames': len(rows), 'maskname': mask, 'slit_width_arcsec': width,
@@ -379,15 +450,20 @@ def main(refresh=False):
             'priority': any(p in pis for p in PRIORITY_PI),
         })
     cand = Table(rows=out)
-    meta = {'description': 'KOA census of public MOSFIRE J/J2/J3 long-slit and long2pos standard-star observations '
-                           '(design 4.1; plan S14)', 'instrument': 'keck_mosfire',
-            'koa_query': adql, 'koa_rows': len(fr), 'public_only': 'KOA TAP returns public frames only',
+    meta = {'description': f'KOA census of public MOSFIRE long-slit and long2pos standard-star observations in '
+                           f'{", ".join(filters)} (design 4.1, D50; plan S14, S23c); one table per instrument, '
+                           'all bands, the band in the filter column',
+            'instrument': 'keck_mosfire', 'filters': filters, 'filter_groups': {t: list(f) for t, f in expand_filters(tokens)},
+            'koa_queries': dict(queries), 'koa_rows': dict(counts), 'koa_rows_total': len(fr),
+            'public_only': 'KOA TAP returns public frames only',
             'archives': list(ARCHIVES), 'match_arcsec': MATCH_ARCSEC, 'wide_slit_arcsec': WIDE_SLIT,
-            'a0v_source': 'SIMBAD sp_type A0* V<11, dwarfs/unclassified', 'tmass': 'VizieR II/246, 5" cone',
+            'a0v_source': 'SIMBAD sp_type A0* V<11, dwarfs/unclassified', 'tmass': 'VizieR II/246, 5" cone, J/H/Ks',
             'night_definition': 'UT date of (UT + 6 h)', 'calib_version': CALIB_VERSION,
-            'keck_etcs_version': keck_etcs.__version__, 'created': now, 'script': SCRIPT}
+            'keck_etcs_version': keck_etcs.__version__, 'created': now, 'script': SCRIPT,
+            'command': f'{SCRIPT} --filters {" ".join(tokens)}'}
     cand.meta = dict(meta)
-    for c in ('std_vmag', 'std_ra', 'std_dec', 'match_sep_arcsec', 'jmag_2mass', 'e_jmag_2mass', 'truitime_s', 'airmass'):
+    for c in ('std_vmag', 'std_ra', 'std_dec', 'match_sep_arcsec', 'jmag_2mass', 'e_jmag_2mass', 'hmag_2mass',
+              'e_hmag_2mass', 'kmag_2mass', 'e_kmag_2mass', 'truitime_s', 'airmass'):
         cand[c].format = '.6g'
     cand.write(OUT_CAND, format='ascii.ecsv', overwrite=True)
     sm.meta = {'description': 'SAMPMODE x NUMREADS histogram of all public on-sky MOSFIRE spectroscopy frames '
@@ -397,15 +473,52 @@ def main(refresh=False):
     register({str(p.relative_to(DATA)): {'calib_version': CALIB_VERSION, 'created': now,
                                          'sha256': hashlib.sha256(p.read_bytes()).hexdigest(), 'script': SCRIPT,
                                          'provenance': prov}
-              for p, prov in ((OUT_CAND, f'KOA TAP census, {len(fr)} public frames; SIMBAD A0 V<11; 2MASS J (II/246)'),
+              for p, prov in ((OUT_CAND, f'KOA TAP census in {"/".join(filters)}, {len(fr)} public frames; '
+                                         'SIMBAD A0 V<11; 2MASS J/H/Ks (II/246)'),
                               (OUT_SAMP, f'KOA TAP SAMPMODE histogram of {total} public on-sky spectroscopy frames'))})
     report(cand, sm)
+    design_counts(fr)
     return 0
+
+
+def per_band(cand):
+    """Per filter: the counts the S23c prompt asks for; returns a list of dicts (printed by :func:`report`)."""
+    rows = []
+    for filt in sorted(set(str(f) for f in cand['filter']), key=lambda f: (f[0], f)):
+        sub = cand[cand['filter'] == filt]
+        use = sub[np.isin(sub['std_class'], USABLE) & sub['has_flats'] & sub['wide_slit']]
+        red = use[use['reducible']]
+        eras = {e.name: len(set(red[red['era'] == e.name]['night'])) for e in MOSFIRE.eras}
+        by_night = {}
+        for r in use:
+            by_night.setdefault(str(r['night']), set()).add('WD' if str(r['std_class']) in ('WD', 'archive') else 'A0V')
+        both = sorted(n for n, c in by_night.items() if c == {'WD', 'A0V'})
+        # D52's weaker form: the same night holds a white dwarf and an A0V star on any slit (usable class, flats)
+        any_slit = {}
+        for r in sub[np.isin(sub['std_class'], USABLE) & sub['has_flats']]:
+            any_slit.setdefault(str(r['night']), set()).add('WD' if str(r['std_class']) in ('WD', 'archive') else 'A0V')
+        both_any = sorted(n for n, c in any_slit.items() if c == {'WD', 'A0V'})
+        rows.append({'filter': filt, 'rows': len(sub), 'nights': len(set(sub['night'])),
+                     'wide_usable_rows': len(use), 'wide_usable_nights': len(set(use['night'])),
+                     'reducible_nights': len(set(red['night'])),
+                     'wd': int(np.sum(use['std_class'] == 'WD')), 'archive': int(np.sum(use['std_class'] == 'archive')),
+                     'a0v': int(np.sum(use['std_class'] == 'A0V')), 'stars': len(set(use['standard'])),
+                     'eras': eras, 'wd_and_a0v_nights': both, 'wd_and_a0v_nights_any_slit': both_any})
+    return rows
 
 
 def report(cand, sm):
     print(f'\ncandidates: {len(cand)} rows (night x standard x mask x filter), '
-          f'{len(set(cand["night"]))} nights')
+          f'{len(set(cand["night"]))} nights, filters {sorted(set(str(f) for f in cand["filter"]))}')
+    print('\nper band (usable = WD/archive/A0V with flats on a wide slit; reducible = also a wavelength calibrator):')
+    print(f"{'filter':6s} {'rows':>5s} {'nights':>6s} | {'wide usable rows':>16s} {'nights':>6s} {'reducible':>9s} | "
+          f"{'WD':>3s} {'arch':>4s} {'A0V':>4s} {'stars':>5s} | reducible nights per era | WD+A0V nights (wide; any slit)")
+    for b in per_band(cand):
+        eras = ', '.join(f'{k[:7]} {v}' for k, v in b['eras'].items())
+        print(f"{b['filter']:6s} {b['rows']:5d} {b['nights']:6d} | {b['wide_usable_rows']:16d} {b['wide_usable_nights']:6d} "
+              f"{b['reducible_nights']:9d} | {b['wd']:3d} {b['archive']:4d} {b['a0v']:4d} {b['stars']:5d} | {eras} | "
+              f"{len(b['wd_and_a0v_nights'])} {b['wd_and_a0v_nights'][:6]}; "
+              f"{len(b['wd_and_a0v_nights_any_slit'])} {b['wd_and_a0v_nights_any_slit'][:6]}")
     for cls in ('WD', 'archive', 'A0V', 'other'):
         sub = cand[cand['std_class'] == cls]
         print(f'  {cls:5s}: {len(sub)} rows, {len(set(sub["night"]))} nights, {len(set(sub["standard"]))} stars')
@@ -439,14 +552,41 @@ def report(cand, sm):
     for r in sm:
         by_mode[r['mode']] = by_mode.get(r['mode'], 0) + float(r['fraction'])
     print('  by mode: ' + ', '.join(f'{m} {100 * f:.2f}%' for m, f in sorted(by_mode.items())))
-    chk = cand[(cand['night'] == '20220409') & (cand['filter'] == 'J2')]
-    ok = any(('MF.20220409.55932' in r['koaids'] and 'MF.20220409.56084' in r['koaids'] and r['wide_slit'])
-             for r in chk)
-    print(f"\ncheck 2022-04-09: {[(r['standard'], r['maskname'], r['wide_slit'], r['koaids']) for r in chk]} -> "
-          f"{'PASS' if ok else 'FAIL'}")
+    if 'J2' in set(str(f) for f in cand['filter']):
+        chk = cand[(cand['night'] == '20220409') & (cand['filter'] == 'J2')]
+        ok = any(('MF.20220409.55932' in r['koaids'] and 'MF.20220409.56084' in r['koaids'] and r['wide_slit'])
+                 for r in chk)
+        print(f"\ncheck 2022-04-09: {[(r['standard'], r['maskname'], r['wide_slit'], r['koaids']) for r in chk]} -> "
+              f"{'PASS' if ok else 'FAIL'}")
+
+
+def design_counts(fr):
+    """The design 9.2 TAP counts recomputed from the cached frames, against :data:`DESIGN_COUNTS`.
+
+    Per filter: long-slit + long2pos frames; distinct ``date_obs`` with a
+    star-like target name (:data:`STAR_PREFIXES`, as the survey's SQL
+    ``LIKE``); ``long2pos_specphot`` such nights. The survey counted
+    ``date_obs`` (UT dates), not census nights, and ran on a different day:
+    KOA's public set grows as proprietary periods end, so later counts are
+    expected to be equal or larger.
+    """
+    print('\ndesign 9.2 TAP counts from the cached frames (frames, star-named UT dates, long2pos_specphot star dates):')
+    targ = np.array([str(x).strip() for x in fr['targname']])
+    star = np.array([any(t.startswith(p) for p in STAR_PREFIXES) for t in targ])
+    l2p = np.array(['long2pos_specphot' in str(m) for m in fr['maskname']])
+    dates = np.array([str(d)[:10] for d in fr['date_obs']])
+    for filt in sorted(set(str(f) for f in fr['filter']), key=lambda f: (f[0], f)):
+        s = np.asarray(fr['filter']).astype(str) == filt
+        got = (int(s.sum()), len(set(dates[s & star])), len(set(dates[s & star & l2p])))
+        ref = DESIGN_COUNTS.get(filt)
+        verdict = '' if ref is None else (' = design 9.2' if got == ref else f' vs design 9.2 {ref}')
+        print(f'  {filt:3s} {got[0]:6d} {got[1]:5d} {got[2]:4d}{verdict}')
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--refresh', action='store_true', help='re-run the queries instead of using the cache')
-    sys.exit(main(p.parse_args().refresh))
+    p.add_argument('--filters', nargs='+', default=['J'], metavar='BAND',
+                   help='band groups (Y, J = J/J2/J3, H, K) or KOA filter names; default J (the S14 census)')
+    a = p.parse_args()
+    sys.exit(main(a.refresh, tuple(a.filters)))

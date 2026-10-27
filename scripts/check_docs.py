@@ -16,8 +16,10 @@ Usage:
    --summary`` prints.
 3. **One calibration version everywhere:**
    - the ``calib_version`` of every ``index.yaml`` entry (the
-     ``provisional-*`` placeholders excepted), and every throughput entry
-     named per band group with its ``bands`` (D49);
+     ``provisional-*`` placeholders excepted; a product rebuilt after the
+     release may carry ``<release>-dev`` until the next release stamps it,
+     and is listed), and every throughput entry named per band group with
+     its ``bands`` (D49);
    - the latest release heading of ``CHANGES.md``;
    - ``meta.calib_version`` of ``compute`` in every era;
    - the tag named in ``README.md``, ``nautilus/README.md`` and the WMKO note.
@@ -169,10 +171,13 @@ def check_versions_and_images():
     # placeholder products of band groups without reduced standards (S23a) carry 'provisional-*'
     # versions by design and are not part of a release; every other entry must carry the release tag
     provisional = sorted(k for k, v in index.items() if str(v['calib_version']).startswith('provisional'))
-    idx_versions = sorted({v['calib_version'] for k, v in index.items() if k not in provisional})
+    # a product rebuilt after the release carries '<tag>-dev' until the next release stamps it (S23c)
+    pending = sorted(k for k, v in index.items() if str(v['calib_version']) == f'{tag}-dev')
+    idx_versions = sorted({v['calib_version'] for k, v in index.items() if k not in provisional and k not in pending})
     ok = idx_versions == [tag]
     print(f"   index.yaml calib_version {idx_versions}, CHANGES.md latest release {tag} -> {'OK' if ok else 'FAIL'}"
-          + (f" ({len(provisional)} provisional placeholder(s) excluded: {provisional})" if provisional else ''))
+          + (f" ({len(provisional)} provisional placeholder(s) excluded: {provisional})" if provisional else '')
+          + (f" ({len(pending)} development product(s) pending the next release: {pending})" if pending else ''))
     if not ok:
         bad.append('index.yaml vs CHANGES')
     # throughput products are per band group (D49): mosfire_thru_<group>_<era tag | provisional>.ecsv with bands

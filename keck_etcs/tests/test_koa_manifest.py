@@ -27,6 +27,19 @@ def test_candidate_table_has_the_dry_run_night():
     assert set(t['std_class']) <= {'WD', 'archive', 'A0V', 'other'}
     a0v = t[t['std_class'] == 'A0V']
     assert np.all(np.isfinite(a0v['jmag_2mass']))
+    # S23c: every band in one table (D50), with the band's 2MASS magnitude beside J for the A0V model (D51)
+    assert {'Y', 'J', 'J2', 'H', 'K'} <= set(str(f) for f in t['filter'])
+    for c in ('hmag_2mass', 'kmag_2mass'):
+        assert np.mean(np.isfinite(a0v[c])) > 0.95, c
+    assert t.meta['instrument'] == 'keck_mosfire' and 'filters' in t.meta
+
+
+def test_census_filter_tokens():
+    sm = load(REPO / 'scripts' / 'koa' / 'search_mosfire_standards.py', 'search_mosfire_standards')
+    assert sm.expand_filters(['J', 'H', 'J2']) == [('J', ('J', 'J2', 'J3')), ('H', ('H',)), ('J2', ('J2',))]
+    assert sm.base_where(('H',)) == ("gratmode = 'spectroscopy' AND filter IN ('H') "
+                                     "AND (maskname LIKE 'LONGSLIT%' OR maskname LIKE 'long2pos%')")
+    assert sm.BASE_WHERE == sm.base_where(('J', 'J2', 'J3'))
 
 
 @pytest.mark.parametrize('name', ['nights_dryrun.csv', 'nights_pilot.csv'])
@@ -60,7 +73,9 @@ def test_validation_targets_and_spec2d():
     assert '20220409' in set(val['night']) and np.all(val['std_reducible'])
     mm = load(REPO / 'scripts' / 'koa' / 'make_night_manifest.py', 'make_night_manifest')
     probs, n = mm.check(MANIFESTS / 'nights_validation.csv')
-    assert probs == [] and n == len(set(val['night']) - {'20220409'})
+    # the manifest holds the J-group validation nights (S23c); other bands wait for the S23d manifests
+    valj = val[np.isin(val['filter'], ['J', 'J2', 'J3'])]
+    assert probs == [] and n == len(set(valj['night']) - {'20220409'})
     vn = {r['night'] for r in csv.DictReader(open(MANIFESTS / 'nights_validation.csv'))}
     assert all(r['spec2d'] == '1' for r in csv.DictReader(open(MANIFESTS / 'nights_validation.csv')))
     for name in ('nights_batch1.csv', 'nights_pilot.csv'):

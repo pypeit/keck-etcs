@@ -92,24 +92,24 @@ files:
     provenance: 'Keck MOSFIRE detector page https://www2.keck.hawaii.edu/inst/mosfire/detector.html: read
       noise vs reads, gain, dark, linearity, minimum integration; plate scales from PypeIt and XTcalc'
   mosfire/koa_standards_candidates.ecsv:
-    calib_version: mosfire-2026.10
-    created: '2026-10-05T22:55:38Z'
-    sha256: c194a931da5618d7afc110012f4f3a16266527aaea7404dba8743d9c9178185f
+    calib_version: mosfire-2026.10-dev
+    created: '2026-10-27T17:58:58Z'
+    sha256: 6026c7361f7badeb196e2f007dbce5f2d1a0ffbf559ef1908b0afa2862f0ed97
     script: scripts/koa/search_mosfire_standards.py
-    provenance: KOA TAP census, 12769 public frames; SIMBAD A0 V<11; 2MASS J (II/246)
+    provenance: KOA TAP census in J/J2/J3/Y/H/K, 67070 public frames; SIMBAD A0 V<11; 2MASS J/H/Ks (II/246)
   mosfire/koa_sampmode_census.ecsv:
-    calib_version: mosfire-2026.10
-    created: '2026-10-05T22:55:38Z'
-    sha256: 79916ab5194ad28653f5e53ee75b4c45e410d7edf26bbc5aa80eb5efd05a2f2f
+    calib_version: mosfire-2026.10-dev
+    created: '2026-10-27T17:58:58Z'
+    sha256: 78b1c2f5c33fad2681f0a812fa2f83628261f481cf45e7819c581bce419e0e19
     script: scripts/koa/search_mosfire_standards.py
     provenance: KOA TAP SAMPMODE histogram of 168038 public on-sky spectroscopy frames
   mosfire/koa_validation_targets.ecsv:
-    calib_version: mosfire-2026.10
-    created: '2026-10-06T01:37:42Z'
-    sha256: 789bf5cc9563bf170f7b8e3995ba1908c4017246c3b49b2c6dda1c3b999b4315
+    calib_version: mosfire-2026.10-dev
+    created: '2026-10-27T17:59:25Z'
+    sha256: 24b57af03dc1fc26139ccbd16c94d5a0e53c86b28d4e3c3c70c1c8a4f728df48
     script: scripts/koa/find_validation_targets.py
-    provenance: 9 Hennawi/Yang/Wang science targets from the KOA census; 5 with a reducible same-night
-      standard
+    provenance: 202 Hennawi/Yang/Wang science targets from the KOA census (Y/J/H/K); 107 with a reducible
+      same-night standard
   mosfire/throughput/mosfire_thru_Y_provisional.ecsv:
     calib_version: provisional-xtcalc-2012
     bands:
