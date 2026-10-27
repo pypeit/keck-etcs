@@ -10,7 +10,7 @@ NIR sky from the Gemini Maunakea models, and the detector terms from Keck's
 measured values. The ETCs can be refreshed as new data come in.
 
 The first instrument is **Keck/MOSFIRE, J and J2 long-slit spectroscopy**.
-The current code is `keck_etcs` 0.2.5, with calibration `mosfire-J-2026.10`.
+The current code is `keck_etcs` 0.2.5, with calibration `mosfire-2026.10`.
 The documentation, with an in-browser calculator, is at
 <https://keck-etcs.readthedocs.io/en/keck-mosfire/> (the `latest` version follows `main`
 once `keck-mosfire` is merged). The results are in
@@ -44,7 +44,7 @@ out = compute({'band': 'J', 'slit_width_arcsec': 0.7,
                'source': {'type': 'point', 'mag': 20.0, 'mag_system': 'AB'},
                'seeing_fwhm_arcsec': 0.7, 'exptime_s': 120, 'n_frames': 4,
                'readout': {'mode': 'MCDS', 'n_reads': 16}, 'nod': 'ABBA'})
-print(out['meta']['calib_version'], out['meta']['era'])       # mosfire-J-2026.10 2025-04..
+print(out['meta']['calib_version'], out['meta']['era'])       # mosfire-2026.10 2025-04..
 print(round(out['summary']['snr_pixel_median'], 2))           # 4.47 (S/N per pixel, band median)
 print(out['saturation']['flag'], out['warnings'][:1])
 
@@ -65,7 +65,7 @@ python bin/keck_etc examples/J_point.json --summary   # from a checkout without 
 `--summary` prints:
 
 ```
-keck_etcs 0.2.5 | keck_mosfire J | calib mosfire-J-2026.10 | era 2025-04..
+keck_etcs 0.2.5 | keck_mosfire J | calib mosfire-2026.10 | era 2025-04..
 window 11534.7-13522.1 A, 1539 pix at 1.2922 A/pix; LSF 2.63 pix (R 3687)
 ...
 band-median S/N per pixel 4.473, per resolution element 7.253
@@ -149,13 +149,18 @@ with a `MONITOR` config and register it in
    `calib_monitor.ecsv`.
 3. **Combine and check.** Set `CALIB_VERSION` in
    `scripts/mosfire/combine_throughput.py` to the new tag
-   (`mosfire-J-YYYY.MM`), then run it. It rebuilds the era curves and bumps
-   their `index.yaml` entries.
+   (`mosfire-YYYY.MM`, one tag for all band groups), then run it. It
+   rebuilds the era curves, one file per band group
+   (`mosfire_thru_<group>_<era>.ecsv`), and bumps their `index.yaml`
+   entries; `scripts/mosfire/stamp_release.py <tag>` then stamps every
+   other entry.
 4. **Plot and verify:**
    - `scripts/mosfire/plot_throughput_trend.py`;
    - `scripts/mosfire/plot_monitor_trends.py` (sets the `trend_3mad`
      flags);
    - `scripts/mosfire/verify_release.py` (must print ALL CHECKS PASS);
+   - `scripts/compare_release_outputs.py` (every example and fixture against
+     the previous release tree, field by field);
    - `scripts/regen_regression_fixtures.py --regen --note "why"` when
      outputs change (the note goes into `CHANGES.md`).
 5. **Write the `CHANGES.md` section:**

@@ -67,7 +67,7 @@ THRU_DIR = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'throughput'
 TABLE = THRU_DIR / 'standards.ecsv'
 MONITOR = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'monitor' / 'calib_monitor.ecsv'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-2026.10-dev'
 KEY = ('standard', 'date', 'koa_id')
 
 
@@ -208,7 +208,9 @@ def cmd_merge(dirs):
     created = {} if table is None else dict(table.meta.get('row_created', {}))
     index = {tuple(str(r[k]) for k in KEY): i for i, r in enumerate(rows)}
     for r, curve_path, when in new:
-        rd = {c: (None if np.ma.is_masked(r[c]) else (r[c].item() if hasattr(r[c], 'item') else r[c]))
+        # a column a row file lacks (rows harvested before S23a renamed the metric columns) is masked
+        rd = {c: (None if c not in r.colnames or np.ma.is_masked(r[c])
+                  else (r[c].item() if hasattr(r[c], 'item') else r[c]))
               for c in hv.ROW_COLUMNS}
         key = tuple(str(rd[k]) for k in KEY)
         action = 'added'

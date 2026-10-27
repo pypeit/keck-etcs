@@ -107,7 +107,7 @@ DATA = REPO / 'keck_etcs' / 'data'
 OUT_CAND = DATA / 'mosfire' / 'koa_standards_candidates.ecsv'
 OUT_SAMP = DATA / 'mosfire' / 'koa_sampmode_census.ecsv'
 INDEX = DATA / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-2026.10-dev'
 SCRIPT = 'scripts/koa/search_mosfire_standards.py'
 
 KOA_TAP = 'https://koa.ipac.caltech.edu/TAP/sync'

@@ -19,17 +19,26 @@ Inputs for one standard on one night:
 
 Conventions:
 
-- ``zp_*``: the zero point (AB mag for 1 e-/s/A) of PypeIt's fit at that
-  wavelength, masked where the fit does not reach. J2 ends at 1.260 um, so
-  ``zp_1300`` is masked for J2.
-- ``thru_median_1117_1260``: the median ``thru_raw`` over 1.117-1.260 um
-  (design 4.4). ``thru_median_1117_1250`` is the same over the window that
-  S5 found free of red-edge artefacts.
+- ``zp_lo``, ``zp_mid``, ``zp_hi``: the zero point (AB mag for 1 e-/s/A)
+  of PypeIt's fit at the band's three nodes (``Band.zp_nodes_A`` of the
+  instrument module, design 9.3 / D54; the nodes are repeated in the row
+  as ``zp_nodes_A``, "lo/mid/hi" in A), masked where the fit does not
+  reach. Until S23a (part H) the J columns were ``zp_1200``, ``zp_1250``,
+  ``zp_1300`` at the J nodes for every J-group row; J2 rows now use the
+  J2 nodes 11500/12000/12500 A.
+- ``thru_median_common``: the median of the **filter-free** ``thru`` over
+  the group's common window (``Band.common_window_A``, repeated in the row
+  as ``common_window_A``, "lo-hi" in A), the band-neutral quantity that
+  ``trend.curve_common_median`` also computes; masked for ``nofilter``
+  rows. It replaces ``thru_median_1117_1260`` and ``thru_median_1117_1250``
+  (medians of ``thru_raw``, filter included, over J-specific windows).
 - ``pwv_fit``: PypeIt's PCA telluric model fits no PWV, so this is the PWV
   at which the Gemini ATRAN grid (``keck_etcs/data/sky/gemini_mk_sky_grid.fits``),
   interpolated per design N4 to the sensfunc's airmass and smoothed to the
   fitted resolution, best matches PypeIt's fitted transmission
-  (:func:`estimate_pwv`).
+  (:func:`estimate_pwv`) over the band's PWV windows
+  (``Band.pwv_window_A``). Bands whose windows hold little water (Y, H)
+  carry ``flag = pwv_weak``; the value is still recorded.
 - ``seeing_fwhm_pix``: the median PypeIt spatial FWHM of the standard's
   extracted objects.
 - ``slit_width``, ``slit_length``: arcsec and CSU bars, from the mask name
@@ -59,21 +68,43 @@ from scipy.ndimage import gaussian_filter1d
 
 EFF_APERTURE = 72.3674           # m^2, Keck (decision N1)
 GRID_START = 9000.0              # A; the common 1 A vacuum grid is GRID_START + k
-ZP_WAVES = {'zp_1200': 12000.0, 'zp_1250': 12500.0, 'zp_1300': 13000.0}
-MEDIAN_WINDOWS = {'thru_median_1117_1260': (11170.0, 12600.0),
-                  'thru_median_1117_1250': (11170.0, 12500.0)}
+ZP_KEYS = ('zp_lo', 'zp_mid', 'zp_hi')
 PWV_SEARCH = (0.5, 10.0)         # mm
 SKYGRID = Path(__file__).resolve().parents[1] / 'data' / 'sky' / 'gemini_mk_sky_grid.fits'
 
 ROW_COLUMNS = ('date', 'mjd', 'koa_id', 'standard', 'std_class', 'std_model', 'filter',
                'slit_width', 'slit_length', 'sampmode', 'numreads', 'exptime', 'airmass',
-               'pwv_fit', 'seeing_fwhm_pix', 'zp_1200', 'zp_1250', 'zp_1300',
-               'thru_median_1117_1260', 'thru_median_1117_1250', 'thru_curve_file',
+               'pwv_fit', 'seeing_fwhm_pix', 'zp_lo', 'zp_mid', 'zp_hi', 'thru_median_common',
+               'zp_nodes_A', 'common_window_A', 'thru_curve_file',
                'pypeit_version', 'keck_etcs_version', 'image', 'image_digest', 'pypeit_git_sha',
                'keck_etcs_git_sha', 'job_name', 's3_prefix', 'flag')
 UNITS = {'mjd': 'd', 'slit_width': 'arcsec', 'exptime': 's', 'pwv_fit': 'mm',
-         'seeing_fwhm_pix': 'pix', 'zp_1200': 'mag', 'zp_1250': 'mag', 'zp_1300': 'mag'}
+         'seeing_fwhm_pix': 'pix', 'zp_lo': 'mag', 'zp_mid': 'mag', 'zp_hi': 'mag'}
 PROVENANCE = ('image', 'image_digest', 'pypeit_git_sha', 'keck_etcs_git_sha', 'job_name', 's3_prefix')
+
+
+def band_of(manifest):
+    """The :class:`~keck_etcs.instruments.base.Band` of a night (``run_manifest.json``), or None.
+
+    The manifest's ``instrument`` (default ``keck_mosfire``) selects the
+    instrument module and its ``filter`` the band.
+    """
+    from keck_etcs import instruments
+    try:
+        inst = instruments.get(manifest.get('instrument') or 'keck_mosfire')
+    except KeyError:
+        return None
+    return inst.bands.get(str(manifest.get('filter')))
+
+
+def zp_nodes_str(nodes):
+    """``(lo, mid, hi)`` in A -> ``'12000/12500/13000'`` (the row's ``zp_nodes_A``)."""
+    return '/'.join(f'{float(x):.0f}' for x in nodes)
+
+
+def window_str(window):
+    """``(lo, hi)`` in A -> ``'11900-12450'`` (the row's ``common_window_A``)."""
+    return f'{float(window[0]):.0f}-{float(window[1]):.0f}'
 
 
 def sha256sum(path, chunk=1 << 20):
@@ -141,8 +172,10 @@ def zp_at(curve, w):
 
 
 def median_in(curve, lo, hi, col='thru_raw'):
-    sel = (curve['wave'] >= lo) & (curve['wave'] <= hi)
-    return float(np.median(np.asarray(curve[col])[sel])) if sel.any() else None
+    """Median of a curve column over ``lo``-``hi`` (None without samples; masked values excluded)."""
+    vals = np.ma.filled(np.ma.asarray(curve[col], float), np.nan)
+    sel = (np.asarray(curve['wave'], float) >= lo) & (np.asarray(curve['wave'], float) <= hi) & np.isfinite(vals)
+    return float(np.median(vals[sel])) if sel.any() else None
 
 
 # ------------------------------------------------------------------ PWV
@@ -169,16 +202,28 @@ def gemini_trans(airmass, pwv, skygrid=SKYGRID):
     return wave_nm * 10.0, np.clip(t, 0, 1)
 
 
-def estimate_pwv(tell_wave, tell_trans, resolution, airmass, window=(11170.0, 12600.0),
+def estimate_pwv(tell_wave, tell_trans, resolution, airmass, window=((11170.0, 12600.0),),
                  skygrid=SKYGRID):
     """PWV (mm) at which the Gemini grid best matches a fitted telluric transmission.
 
+    ``window`` is one ``(lo, hi)`` or a tuple of them (the band's
+    ``pwv_window_A``); None uses the whole fitted curve.
+
     Returns a dict: ``pwv_mm``, ``rms_resid``, ``extrapolated`` (outside the
-    grid's 1-5 mm), ``at_search_edge``.
+    grid's 1-5 mm), ``at_search_edge``, ``window_A``.
     """
     w = np.asarray(tell_wave, float)
     tell = np.asarray(tell_trans, float)
-    sel = (w >= window[0]) & (w <= window[1]) & np.isfinite(tell) & (tell > 0)
+    if window is None:
+        windows = ((float(np.nanmin(w)), float(np.nanmax(w))),)
+    elif np.ndim(window[0]) == 0:
+        windows = (tuple(window),)
+    else:
+        windows = tuple(tuple(x) for x in window)
+    inside = np.zeros(w.size, bool)
+    for lo, hi in windows:
+        inside |= (w >= lo) & (w <= hi)
+    sel = inside & np.isfinite(tell) & (tell > 0)
     w, tell = w[sel], tell[sel]
     pwvs = np.exp(np.linspace(np.log(PWV_SEARCH[0]), np.log(PWV_SEARCH[1]), 121))
     chi2 = []
@@ -192,7 +237,8 @@ def estimate_pwv(tell_wave, tell_trans, resolution, airmass, window=(11170.0, 12
     i = int(np.argmin(chi2))
     return {'pwv_mm': float(pwvs[i]), 'rms_resid': float(np.sqrt(chi2[i] / len(w))),
             'extrapolated': bool(pwvs[i] < 1.0 or pwvs[i] > 5.0),
-            'at_search_edge': bool(i in (0, len(pwvs) - 1))}
+            'at_search_edge': bool(i in (0, len(pwvs) - 1)),
+            'window_A': [[float(lo), float(hi)] for lo, hi in windows]}
 
 
 # ------------------------------------------------------------------ inputs
@@ -363,12 +409,18 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
     curve = throughput_curve(sf['wave'], sf['zeropoint'], fwave, ftrans)
     flags = [] if filter_curve is not None else ['nofilter']
 
+    band = band_of(m)
+    if band is None:
+        raise ValueError(f"run_manifest.json names filter {m.get('filter')!r}, which the instrument module "
+                         f"{m.get('instrument', 'keck_mosfire')} does not define")
     pwv = None
     if sf['telluric'] is not None and sf['telluric']['resolution']:
         pwv = estimate_pwv(sf['telluric']['wave'], sf['telluric']['trans'],
-                           sf['telluric']['resolution'], sf['airmass'])
+                           sf['telluric']['resolution'], sf['airmass'], window=band.pwv_window_A)
         if pwv['extrapolated'] or pwv['at_search_edge']:
             flags.append('pwv_extrapolated')
+        if band.pwv_weak:
+            flags.append('pwv_weak')
     fwhm = [o['fwhm_pix'] for o in m.get('objects', [])
             if o['frame'] in files and o.get('fwhm_pix') is not None]
     from keck_etcs.instruments.mosfire import NONLINEAR_ADU
@@ -389,7 +441,8 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
         'koa_id': '+'.join(raw[f]['koaid'] for f in files),
         'standard': standard,
         'std_class': std_class_of(sf['std_cal'], model),
-        'std_model': (f"vega_tspectool_vacuum.dat J={model['j_2mass']} (V_eq {model['v_equivalent']})"
+        'std_model': (f"vega_tspectool_vacuum.dat {model.get('band_2mass', 'J')}="
+                      f"{model.get('mag_2mass', model.get('j_2mass'))} (V_eq {model['v_equivalent']})"
                       if model is not None else str(sf['std_cal'])),
         'filter': m.get('filter'),
         'slit_width': width, 'slit_length': length,
@@ -399,8 +452,11 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
         'airmass': sf['airmass'],
         'pwv_fit': None if pwv is None else pwv['pwv_mm'],
         'seeing_fwhm_pix': float(np.median(fwhm)) if fwhm else None,
-        **{k: zp_at(curve, w) for k, w in ZP_WAVES.items()},
-        **{k: median_in(curve, *w) for k, w in MEDIAN_WINDOWS.items()},
+        **{k: zp_at(curve, w) for k, w in zip(ZP_KEYS, band.zp_nodes_A)},
+        'thru_median_common': (median_in(curve, *band.common_window_A, col='thru')
+                               if filter_curve is not None else None),
+        'zp_nodes_A': zp_nodes_str(band.zp_nodes_A),
+        'common_window_A': window_str(band.common_window_A),
         'thru_curve_file': curve_file,
         'pypeit_version': m.get('pypeit_version'),
         'keck_etcs_version': m.get('keck_etcs_version'),
@@ -414,7 +470,8 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
         row['keck_etcs_git_sha'] = row['keck_etcs_git_sha'] or shas['keck_etcs']
 
     curve.meta.update({
-        'instrument': m.get('instrument', 'keck_mosfire'), 'band': m.get('filter'), 'era': None,
+        'instrument': m.get('instrument', 'keck_mosfire'), 'band': m.get('filter'), 'band_group': band.group_name,
+        'era': None,
         'standards': [{'name': standard, 'date': date_iso, 'koa_id': row['koa_id']}],
         'row': {k: row[k] for k in ROW_COLUMNS},
         'pypeit_version': row['pypeit_version'], 'keck_etcs_version': row['keck_etcs_version'],

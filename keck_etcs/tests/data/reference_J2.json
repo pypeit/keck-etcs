@@ -30,7 +30,7 @@
   "meta": {
    "keck_etcs_version": "0.2.5",
    "pypeit_version": "2.0.2.dev1218+g8017f4799,2.0.2.dev1220+gfb6fb62c4,2.0.2.dev1221+gbc18a3ba4",
-   "calib_version": "mosfire-J-2026.10",
+   "calib_version": "mosfire-2026.10",
    "era": "2017-02..2025-02",
    "inputs": {
     "instrument": "keck_mosfire",

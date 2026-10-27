@@ -35,7 +35,7 @@ def test_every_input_field_has_a_default_or_is_conditional():
     ({'readout': {'n_reads': 12}}, 'readout.n_reads'),
     ({'source': {'mag': 40}}, 'source.mag'),
     ({'spectrum': {'line': {'wave_A': 12800.0, 'flux_cgs': 1e-17, 'fwhm_kms': 1.0}}}, 'spectrum.line.fwhm_kms'),
-    ({'band': 'K'}, 'band'),
+    ({'band': 'J3'}, 'band'),                       # J3 is not built (D48); Y, H and K are allowed since S23a
     ({'throughput': {'date': '22-04-09'}}, 'throughput.date'),
 ])
 def test_out_of_range_field_is_rejected_by_name(bad, field):

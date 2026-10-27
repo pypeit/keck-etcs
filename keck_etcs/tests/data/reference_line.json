@@ -32,7 +32,7 @@
   "meta": {
    "keck_etcs_version": "0.2.5",
    "pypeit_version": "2.0.2.dev1219+gfb4790520",
-   "calib_version": "mosfire-J-2026.10",
+   "calib_version": "mosfire-2026.10",
    "era": "2025-04..",
    "inputs": {
     "instrument": "keck_mosfire",
@@ -15518,7 +15518,7 @@
   "warnings": [
    "LSF for a 0.7\" slit from the interim rule sqrt((w / 0.292)^2 + 1.08^2) (D25); only measured slit widths are exact",
    "throughput of era 2025-04.. measured over 11171-12462 A; 12462-13457 A from era 2017-02..2025-02 scaled by 1.024 (median ratio over 11900-12450 A)",
-   "throughput measured over 11171-13457 A (mosfire/throughput/mosfire_thru_2025-on.ecsv); held constant at the edge value over the rest of the J window (11535-13523 A)"
+   "throughput measured over 11171-13457 A (mosfire/throughput/mosfire_thru_J_2025-on.ecsv); held constant at the edge value over the rest of the J window (11535-13523 A)"
   ]
  }
 }

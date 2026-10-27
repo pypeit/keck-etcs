@@ -7,7 +7,7 @@ both:
 - `meta.keck_etcs_version`: the code, a semantic version (here
   `keck_etcs.__version__`);
 - `meta.calib_version`: the calibration release, a date tag such as
-  `mosfire-J-2026.10`. A release changes only the shipped data
+  `mosfire-2026.10` (one tag for all bands; `mosfire-J-2026.10` was the first). A release changes only the shipped data
   (`keck_etcs/data/`) and is described in the [release notes](changes.md):
   the standards used, the era medians, and the reduction images and PypeIt
   versions behind them;

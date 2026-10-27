@@ -9,10 +9,12 @@ that violate the schema raise :class:`InputError`. No PypeIt, no network.
 Method (design 5.3): on the sky grid's uniform 0.5 A vacuum grid around the
 band window, the source photon rate N0 (5.3.2) is multiplied by the
 atmospheric transmission (5.3.3) and the system throughput (5.3.4, the
-filter-free era curve times the band's filter times ``throughput.scale``;
-completed from the nearest era that measured the rest of the window,
-scaled to this era in 11900-12450 A, else held constant beyond the curve's
-measured range, with a warning),
+filter-free era curve of the band's group times the band's filter times
+``throughput.scale``; completed from the nearest era of the group that
+measured the rest of the window, scaled to this era over the group's common
+window (11900-12450 A for J), else held constant beyond the curve's
+measured range, with a warning; a group without any reduced standard uses
+its provisional placeholder curve with a PROVISIONAL warning),
 convolved with the Gaussian LSF (5.3.6) and sampled at the pixel centres.
 The product is convolved, rather than each factor separately, so that a
 line on a telluric feature is handled correctly; for a smooth source the two
@@ -158,15 +160,25 @@ def compute(inputs):
     p, warnings = validate(inputs)
     inst = instruments.get(p['instrument'])
     band = p['band']
+    group = inst.group_of(band)
 
     # ---- pixel grid, LSF (5.3.6)
     lo, hi = inst.band_window(band)
+    if inst.bands[band].footprint_provisional:
+        flo, fhi = inst.bands[band].footprint_A
+        warnings.append(f'PROVISIONAL {band} detector footprint ({flo:.0f}-{fhi:.0f} A) is the nominal coverage, '
+                        f'not measured; the window edges may move once the footprint is measured')
     dlam = inst.bands[band].dispersion_A_per_pix
     wave = lsf.pixel_grid(lo, hi, dlam)
     w = p['slit_width_arcsec']
-    fwhm_pix, lsf_source = inst.lsf_fwhm_pix(w)
+    fwhm_pix, lsf_source = inst.lsf_fwhm_pix(w, band)
     if not lsf_source.startswith('measured'):
-        warnings.append(f'LSF for a {w}" slit from the interim rule {lsf_source}; only measured slit widths are exact')
+        if '(provisional)' in lsf_source:
+            warnings.append(f'PROVISIONAL LSF for {band}: the J rule {lsf_source.replace(" (provisional)", "")} '
+                            f'is assumed in pixels (D59) until {band} OH-line widths are measured')
+        else:
+            warnings.append(f'LSF for a {w}" slit from the interim rule {lsf_source}; only measured slit widths '
+                            'are exact')
     fwhm_A = fwhm_pix * dlam
 
     # ---- fine grid: atmosphere, sky, throughput (5.3.3, 5.3.4, 5.3.8)
@@ -181,9 +193,9 @@ def compute(inputs):
     f_filt = np.interp(fw, filt['wave_A'], filt['transmission'], left=0.0, right=0.0)
     era, w2 = inst.era_for_date(p['throughput']['date'])
     warnings += w2
-    th = inst.throughput_for_window(era, lo, hi, margin=fwhm_A)
+    th = inst.throughput_for_window(era, lo, hi, margin=fwhm_A, group=group)
     warnings += th['warnings']
-    era = th['era']
+    era = th['era'] or era                       # a provisional curve belongs to no era; keep the date's
     t_lo, t_hi = th['covered_A']
     if lo < t_lo - fwhm_A or hi > t_hi + fwhm_A:          # more than one LSF FWHM uncovered
         warnings.append(f'throughput measured over {t_lo:.0f}-{t_hi:.0f} A ({th["file"]}); held constant at the edge '

@@ -15,7 +15,9 @@ Usage:
    ``--summary`` block must equal what ``bin/keck_etc examples/J_point.json
    --summary`` prints.
 3. **One calibration version everywhere:**
-   - the ``calib_version`` of every ``index.yaml`` entry;
+   - the ``calib_version`` of every ``index.yaml`` entry (the
+     ``provisional-*`` placeholders excepted), and every throughput entry
+     named per band group with its ``bands`` (D49);
    - the latest release heading of ``CHANGES.md``;
    - ``meta.calib_version`` of ``compute`` in every era;
    - the tag named in ``README.md``, ``nautilus/README.md`` and the WMKO note.
@@ -132,7 +134,7 @@ def check_readme_examples():
 
 
 def latest_release(changes):
-    m = re.search(r'^### (mosfire-J-\d{4}\.\d{2})(?!-dev)\b.*$', changes, re.M)
+    m = re.search(r'^### (mosfire-(?:J-)?\d{4}\.\d{2})(?!-dev)\b.*$', changes, re.M)    # mosfire-YYYY.MM since S23b (D49)
     return m.group(1), m.start()
 
 
@@ -164,11 +166,24 @@ def check_versions_and_images():
     changes = (REPO / 'CHANGES.md').read_text()
     tag, start = latest_release(changes)
     index = yaml.safe_load((REPO / 'keck_etcs' / 'data' / 'index.yaml').read_text())['files']
-    idx_versions = sorted({v['calib_version'] for v in index.values()})
+    # placeholder products of band groups without reduced standards (S23a) carry 'provisional-*'
+    # versions by design and are not part of a release; every other entry must carry the release tag
+    provisional = sorted(k for k, v in index.items() if str(v['calib_version']).startswith('provisional'))
+    idx_versions = sorted({v['calib_version'] for k, v in index.items() if k not in provisional})
     ok = idx_versions == [tag]
-    print(f"   index.yaml calib_version {idx_versions}, CHANGES.md latest release {tag} -> {'OK' if ok else 'FAIL'}")
+    print(f"   index.yaml calib_version {idx_versions}, CHANGES.md latest release {tag} -> {'OK' if ok else 'FAIL'}"
+          + (f" ({len(provisional)} provisional placeholder(s) excluded: {provisional})" if provisional else ''))
     if not ok:
         bad.append('index.yaml vs CHANGES')
+    # throughput products are per band group (D49): mosfire_thru_<group>_<era tag | provisional>.ecsv with bands
+    groups = {b.group_name for b in MOSFIRE.bands.values()}
+    for key, entry in index.items():
+        if key.startswith('mosfire/throughput/mosfire_thru_'):
+            m = re.search(r'mosfire_thru_([A-Za-z0-9]+)_[^_]+\.ecsv$', key)
+            ok = m is not None and m.group(1) in groups and isinstance(entry.get('bands'), list) and entry['bands']
+            print(f"   {key}: group {m.group(1) if m else None}, bands {entry.get('bands')} -> {'OK' if ok else 'FAIL'}")
+            if not ok:
+                bad.append(f'throughput entry {key}')
     for era in MOSFIRE.eras:
         d = era.start if len(era.start) == 10 else era.start[:7] + '-15'
         m = etc.compute({'throughput': {'date': d}})['meta']

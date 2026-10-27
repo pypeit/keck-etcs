@@ -9,18 +9,18 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2015-04-28', koa_id: MF.20150428.50917.fits+MF.20150428.51096.fits+MF.20150428.51112.fits+MF.20150428.51127.fits+MF.20150428.51150.fits+MF.20150428.51166.fits+MF.20150428.51181.fits,
 #     name: HD159008}
-# - row: {airmass: 1.21705324, date: '2015-04-28', exptime: 2.90958, filter: J, flag: excluded_nonlinear, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.5',
-#     image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4', job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f,
-#     keck_etcs_version: 0.2.5, koa_id: MF.20150428.50917.fits+MF.20150428.51096.fits+MF.20150428.51112.fits+MF.20150428.51127.fits+MF.20150428.51150.fits+MF.20150428.51166.fits+MF.20150428.51181.fits,
+# - row: {airmass: 1.21705324, common_window_A: 11900-12450, date: '2015-04-28', exptime: 2.90958, filter: J, flag: excluded_nonlinear,
+#     image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.5', image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4',
+#     job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f, keck_etcs_version: 0.2.5, koa_id: MF.20150428.50917.fits+MF.20150428.51096.fits+MF.20150428.51112.fits+MF.20150428.51127.fits+MF.20150428.51150.fits+MF.20150428.51166.fits+MF.20150428.51181.fits,
 #     mjd: 57140.591520815724, numreads: 1, pwv_fit: 4.848243431228263, pypeit_git_sha: bc18a3ba46d1d331da0875424c63999e578a4937, pypeit_version: 2.0.2.dev1221+gbc18a3ba4,
 #     s3_prefix: mosfire/20150428, sampmode: 2, seeing_fwhm_pix: 4.037440730714902, slit_length: 1.0, slit_width: 4.0, standard: HD159008,
 #     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=6.822 (V_eq 6.82782), thru_curve_file: standards/HD159008_20150428.ecsv,
-#     thru_median_1117_1250: 0.21351493951204134, thru_median_1117_1260: 0.22635140063890058, zp_1200: 19.751719815912967, zp_1250: 19.81559878581441,
-#     zp_1300: 19.91059624737384}
+#     thru_median_common: 0.25984859096844315, zp_hi: 19.91059624737384, zp_lo: 19.751719815912967, zp_mid: 19.81559878581441, zp_nodes_A: 12000/12500/13000}
 # - {pypeit_version: 2.0.2.dev1221+gbc18a3ba4}
 # - {keck_etcs_version: 0.2.5}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -44,6 +44,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:42:55Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11038.0 0.10374234244370474 -1.0 "" ""

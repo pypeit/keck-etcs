@@ -1,7 +1,7 @@
 # keck_etcs: API note for WMKO
 
 *For WMKO staff hosting a web front end. keck_etcs 0.2.5, calibration
-`mosfire-J-2026.10`, 2026-10-09. The schemas
+`mosfire-2026.10`, 2026-10-27. The schemas
 `keck_etcs/schema/etc_input.json` and `etc_output.json` are the contract. This
 page summarises them; `scripts/check_docs.py` checks that it lists every
 field. The full generated table of every field is the
@@ -28,7 +28,7 @@ default. An unknown field, or a value outside its range, raises
 | Field | Type, range | Default | Unit, meaning |
 |---|---|---|---|
 | `instrument` | `keck_mosfire` | `keck_mosfire` | PypeIt spectrograph name |
-| `band` | `J`, `J2` | `J` | filter |
+| `band` | `Y`, `J`, `J2`, `H`, `K` | `J` | filter; Y, H and K return a `PROVISIONAL` warning until their calibrations are measured (design section 9) |
 | `slit_width_arcsec` | 0.3-5.0 | 0.7 | arcsec, CSU long slit |
 | `source.type` | `point`, `extended` | `point` | |
 | `source.mag` | 5-30 | 20.0 | mag (total; per arcsec^2 if extended), in the band |
@@ -65,7 +65,7 @@ extraction aperture, summed over all frames, unless the name says
 
 | Field | Unit, meaning |
 |---|---|
-| `meta.keck_etcs_version`, `meta.calib_version`, `meta.pypeit_version` | code version; calibration tag (`mosfire-J-YYYY.MM`); PypeIt that built the throughput |
+| `meta.keck_etcs_version`, `meta.calib_version`, `meta.pypeit_version` | code version; calibration tag (`mosfire-YYYY.MM`, one tag for all bands; `mosfire-J-YYYY.MM` before 2026-10-27); PypeIt that built the throughput |
 | `meta.era`, `meta.inputs` | era of the throughput used; the inputs with defaults filled |
 | `wave_A` | A (vacuum) |
 | `dispersion_A_per_pix`, `lsf_fwhm_A`, `n_spec_per_resel` | A/pix; A; LSF FWHM in pixels |
@@ -96,7 +96,7 @@ model's range is clipped and reported in `warnings`, never raised:
 The front end should show `warnings` to the user.
 
 **Versions.** Code is semantic (`keck_etcs.__version__`). Calibration releases
-are date tags, `mosfire-J-YYYY.MM`, in `index.yaml` and each file's metadata.
+are date tags, `mosfire-YYYY.MM`, in `index.yaml` and each file's metadata.
 Every output echoes both versions and `pypeit_version`. `CHANGES.md` has one
 section per calibration release, giving:
 

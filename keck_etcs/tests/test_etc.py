@@ -35,7 +35,7 @@ def test_output_matches_schema_and_is_json(default):
         assert len(out[k]) == n, k
     # the latest era's curve (one J2 night) is completed over the J window from the 2017-2025 era (S16)
     assert out['meta']['era'] == '2025-04..' and out['meta']['inputs']['band'] == 'J'
-    assert out['meta']['calib_version'] == 'mosfire-J-2026.10'
+    assert out['meta']['calib_version'] == 'mosfire-2026.10'
     assert any('from era 2017-02..2025-02 scaled by' in w for w in out['warnings'])
     assert not any('no throughput curve yet' in w for w in out['warnings'])
     assert not any('PROVISIONAL' in w for w in out['warnings'])
@@ -163,3 +163,30 @@ def test_etc_runs_without_pypeit_or_boto3():
             "print(','.join(m for m in ('pypeit', 'boto3', 'botocore', 'requests') if m in sys.modules))\n")
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == ''
+
+
+def test_other_bands_run_on_provisional_data():
+    """S23a: Y, H and K compute on placeholder throughput and the J LSF rule, each warned once (design 9.5)."""
+    for band in ('Y', 'H', 'K'):
+        out = etc.compute({'band': band})
+        lo, hi = MOSFIRE.band_window(band)
+        wave = np.array(out['wave_A'])
+        assert wave[0] == lo and wave[-1] <= hi and np.allclose(np.diff(wave), MOSFIRE.bands[band].dispersion_A_per_pix)
+        assert out['meta']['calib_version'] == 'provisional-xtcalc-2012' and out['meta']['inputs']['band'] == band
+        prov = [w for w in out['warnings'] if w.startswith('PROVISIONAL')]
+        kinds = {w.split()[1] for w in prov}
+        assert 'throughput' in kinds and 'LSF' in kinds
+        assert (band in ('H', 'K')) == any('footprint' in w for w in prov)
+        assert np.isfinite(out['summary']['snr_pixel_median']) and out['summary']['snr_pixel_median'] > 0
+        assert 0.1 < np.median(out['throughput']) < 0.6 and 0 < np.median(out['atm_transmission']) <= 1
+    j = etc.compute({'band': 'J'})
+    assert not any(w.startswith('PROVISIONAL') for w in j['warnings'])
+
+
+def test_examples_exist_for_every_band():
+    import json
+    from pathlib import Path
+    ex = Path(__file__).resolve().parents[2] / 'examples'
+    for band in ('Y', 'J', 'J2', 'H', 'K'):
+        inp = json.loads((ex / f'{band}_point.json').read_text())
+        assert inp['band'] == band and etc.validate(inp)[1] == []

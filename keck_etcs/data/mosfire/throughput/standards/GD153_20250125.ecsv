@@ -9,16 +9,17 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J2}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2025-01-25', koa_id: MF.20250125.58993.48.fits+MF.20250125.59114.35.fits, name: GD153}
-# - row: {airmass: 1.06206483, date: '2025-01-25', exptime: 88.74219, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4',
+# - row: {airmass: 1.06206483, common_window_A: 11900-12450, date: '2025-01-25', exptime: 88.74219, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4',
 #     image_digest: 'sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b', job_name: keck-etcs-nights, keck_etcs_git_sha: 58d5652,
 #     keck_etcs_version: 0.2.4, koa_id: MF.20250125.58993.48.fits+MF.20250125.59114.35.fits, mjd: 60700.683494445, numreads: 16, pwv_fit: 3.251724563121182,
 #     pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd, pypeit_version: 2.0.2.dev1220+gfb6fb62c4, s3_prefix: mosfire/20250125,
 #     sampmode: 3, seeing_fwhm_pix: 5.2264754966041895, slit_length: 46.0, slit_width: 5.0, standard: GD153, std_class: WD, std_model: fGD153.dat,
-#     thru_curve_file: standards/GD153_20250125.ecsv, thru_median_1117_1250: 0.19578742350866896, thru_median_1117_1260: 0.18789793069938493,
-#     zp_1200: 19.677939625963475, zp_1250: 18.61325102715824, zp_1300: null}
+#     thru_curve_file: standards/GD153_20250125.ecsv, thru_median_common: 0.2845011098209661, zp_hi: 18.61325102715824, zp_lo: 19.265427337720435,
+#     zp_mid: 19.677939625963475, zp_nodes_A: 11500/12000/12500}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.4}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -41,6 +42,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:44:26Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11171.0 18.404628008552645 0.06480821591824219 0.4547812938215017 0.1425041372604893

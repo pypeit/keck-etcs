@@ -31,7 +31,7 @@ def test_vega_synthetic_j_and_round_trip():
     jv = standards.vega_tmass_j()
     assert abs(jv - standards.TMASS_J_VEGA) < 0.05            # +0.024 photon-counting (see the module docstring)
     for j in (5.5, 9.0):
-        w, f = standards.a0v_model(j)
+        w, f = standards.a0v_model('J', j)
         assert standards.synthetic_tmass_j(w, f) == pytest.approx(j, abs=1e-9)
         assert standards.v_equivalent(j) == pytest.approx(standards.VEGA_V + j - jv)
 
@@ -40,7 +40,7 @@ def test_model_equals_pypeit_vega_standard_at_v_equivalent():
     from pypeit.core.standard import VegaStandard
     j = 8.5
     s = VegaStandard(standards.v_equivalent(j))
-    w, f = standards.a0v_model(j)
+    w, f = standards.a0v_model('J', j)
     pw, pf = np.asarray(s.wave, float).ravel(), np.asarray(s.flux, float).ravel()
     np.testing.assert_allclose(pf, np.interp(pw, w, f) * 1e17, rtol=1e-10)
 
@@ -108,3 +108,25 @@ def test_driver_flat_typing_without_flamp_cards(driver):
     assert driver.classify({**old, 'FLATSPEC': 0}, 10.0, 10.0, None) == 'lampoffflats'
     assert driver.classify({'AXESTAT': 'tracking', 'TARGNAME': 'X', 'FLATSPEC': 1, 'FLAMP1': 'off',
                             'FLAMP2': 'off'}, 10.0, 10.0, None) == 'arc,science,tilt'   # 2022: FLATSPEC=1 on sky
+
+
+def test_a0v_model_per_band_round_trip():
+    """D51: the model is scaled in the band's own 2MASS band; Y/J/J2 in J, H in H, K in Ks."""
+    assert [standards.tmass_band(b) for b in ('Y', 'J', 'J2', 'J3', 'H', 'K')] == ['J', 'J', 'J', 'J', 'H', 'K']
+    for tb in ('J', 'H', 'K'):
+        assert abs(standards.vega_tmass(tb) - standards.TMASS[tb]['vega_mag']) < 0.06, tb
+    for band, m in (('H', 7.0), ('K', 6.5), ('Y', 8.0)):
+        w, f = standards.a0v_model(band, m)
+        assert standards.synthetic_tmass(w, f, standards.tmass_band(band)) == pytest.approx(m, abs=1e-9)
+        assert standards.v_equivalent(m, band) == pytest.approx(
+            standards.VEGA_V + m - standards.vega_tmass(standards.tmass_band(band)))
+    assert standards.jhk_offset_mag('J', 7.0, 7.0) == 0.0
+    # an A0V star has Vega's colours: scaling in H or Ks then equals scaling in J to within the colour error
+    jv, hv_, kv = (standards.vega_tmass(b) for b in ('J', 'H', 'K'))
+    assert standards.jhk_offset_mag('H', 7.0 + (hv_ - jv), 7.0) == pytest.approx(0.0, abs=1e-9)
+    text, rec = standards.write_sens_par('[sensfunc]\n', 7.0, band='K', j_mag=7.3)
+    assert rec['band_2mass'] == 'K' and rec['a0v_scaled_to'] == '2MASS K' and rec['mag_2mass'] == 7.0
+    assert rec['j_2mass'] == 7.3 and rec['a0v_jhk_offset_mag'] == pytest.approx((7.0 - kv) - (7.3 - jv), abs=1e-4)
+    assert '2MASS K = 7.0' in text and f"star_mag = {rec['v_equivalent']:.5f}" in text
+    _, rj = standards.sens_par_lines(7.0)
+    assert rj['band_2mass'] == 'J' and rj['j_2mass'] == 7.0 and rj['a0v_jhk_offset_mag'] == 0.0

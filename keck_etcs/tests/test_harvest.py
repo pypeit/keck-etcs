@@ -44,12 +44,12 @@ def test_throughput_curve_filter_division():
 
 def test_row_table_masks_none():
     row = {c: None for c in hv.ROW_COLUMNS}
-    row.update({'standard': 'LDS749B', 'date': '2022-04-09', 'koa_id': 'MF.1', 'zp_1200': 19.6,
-                'flag': 'nofilter'})
+    row.update({'standard': 'LDS749B', 'date': '2022-04-09', 'koa_id': 'MF.1', 'zp_lo': 19.6,
+                'zp_nodes_A': '12000/12500/13000', 'common_window_A': '11900-12450', 'flag': 'nofilter'})
     t = hv.row_table([row])
     assert list(t.colnames) == list(hv.ROW_COLUMNS)
-    assert np.ma.is_masked(t['zp_1300'][0]) and t['zp_1200'][0] == 19.6
-    assert str(t['zp_1200'].unit) == 'mag'
+    assert np.ma.is_masked(t['zp_hi'][0]) and t['zp_lo'][0] == 19.6
+    assert str(t['zp_lo'].unit) == 'mag'
 
 
 def test_standard_peak_adu(tmp_path):
@@ -82,3 +82,37 @@ def test_slit_of_night_and_narrow_threshold():
     sp['specphot']['bars'] = None
     assert hv.slit_of_night(sp, [{'decker': 'long2pos_specphot'}]) == (4.0, 1.0)
     assert hv.slit_from_decker('long2pos_specphot') == (None, None)
+
+
+def test_band_of_and_row_strings():
+    from keck_etcs.instruments.mosfire import MOSFIRE
+    assert hv.band_of({'instrument': 'keck_mosfire', 'filter': 'J2'}) is MOSFIRE.bands['J2']
+    assert hv.band_of({'filter': 'H'}) is MOSFIRE.bands['H']
+    assert hv.band_of({'filter': 'J3'}) is None and hv.band_of({'instrument': 'keck_lris', 'filter': 'J'}) is None
+    assert hv.zp_nodes_str(MOSFIRE.bands['J'].zp_nodes_A) == '12000/12500/13000'
+    assert hv.zp_nodes_str(MOSFIRE.bands['J2'].zp_nodes_A) == '11500/12000/12500'
+    assert hv.window_str(MOSFIRE.bands['K'].common_window_A) == '19800-23700'
+    assert MOSFIRE.bands['Y'].pwv_weak and MOSFIRE.bands['H'].pwv_weak and not MOSFIRE.bands['K'].pwv_weak
+
+
+def test_median_in_skips_masked():
+    from astropy.table import MaskedColumn, Table
+    w = np.arange(11000.0, 13000.0)
+    c = Table({'wave': w, 'thru_raw': np.full(w.size, 0.3)})
+    c['thru'] = MaskedColumn(np.full(w.size, 0.25), mask=w < 12000)
+    assert hv.median_in(c, 11900, 12450, col='thru') == 0.25
+    assert hv.median_in(c, 11000, 11500, col='thru') is None
+    assert hv.median_in(c, 11000, 11500) == 0.3
+
+
+def test_shipped_standards_table_has_the_band_neutral_columns():
+    # standards.ecsv was migrated to the S23a columns at release mosfire-2026.10 (S23b, D49)
+    from pathlib import Path
+    from astropy.table import Table
+    t = Table.read(Path(hv.__file__).resolve().parents[1] / 'data' / 'mosfire' / 'throughput' / 'standards.ecsv',
+                   format='ascii.ecsv')
+    assert list(t.colnames) == list(hv.ROW_COLUMNS)
+    nodes = {str(f): str(n) for f, n in zip(t['filter'], t['zp_nodes_A'])}
+    assert nodes == {'J': '12000/12500/13000', 'J2': '11500/12000/12500'}
+    assert set(str(w) for w in t['common_window_A']) == {'11900-12450'}
+    assert not any(np.ma.is_masked(v) for v in t['thru_median_common'])

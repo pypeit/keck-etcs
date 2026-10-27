@@ -9,16 +9,17 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2024-12-29', koa_id: MF.20241229.59040.95.fits+MF.20241229.59160.29.fits, name: GD153}
-# - row: {airmass: 1.00457899, date: '2024-12-29', exptime: 88.74219, filter: J, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4',
+# - row: {airmass: 1.00457899, common_window_A: 11900-12450, date: '2024-12-29', exptime: 88.74219, filter: J, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.4',
 #     image_digest: 'sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b', job_name: keck-etcs-nights, keck_etcs_git_sha: 58d5652,
 #     keck_etcs_version: 0.2.4, koa_id: MF.20241229.59040.95.fits+MF.20241229.59160.29.fits, mjd: 60673.684035025, numreads: 16, pwv_fit: 1.2592759804536295,
 #     pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd, pypeit_version: 2.0.2.dev1220+gfb6fb62c4, s3_prefix: mosfire/20241229,
 #     sampmode: 3, seeing_fwhm_pix: 6.689191229216407, slit_length: 46.0, slit_width: 5.0, standard: GD153, std_class: WD, std_model: fGD153.dat,
-#     thru_curve_file: standards/GD153_20241229.ecsv, thru_median_1117_1250: 0.223671803693283, thru_median_1117_1260: 0.22408224942492252,
-#     zp_1200: 19.671278053264533, zp_1250: 19.89474411617545, zp_1300: 19.837370141917578}
+#     thru_curve_file: standards/GD153_20241229.ecsv, thru_median_common: 0.24816647715197726, zp_hi: 19.837370141917578, zp_lo: 19.671278053264533,
+#     zp_mid: 19.89474411617545, zp_nodes_A: 12000/12500/13000}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.4}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -41,6 +42,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:44:14Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11124.0 0.0732484595322247 -1.0 "" ""

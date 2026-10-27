@@ -8,8 +8,8 @@
   "properties": {
     "instrument": {"type": "string", "enum": ["keck_mosfire"], "default": "keck_mosfire",
                    "description": "PypeIt spectrograph name"},
-    "band": {"type": "string", "enum": ["J", "J2"], "default": "J",
-             "description": "filter; Y, J3, H and K later"},
+    "band": {"type": "string", "enum": ["Y", "J", "J2", "H", "K"], "default": "J",
+             "description": "filter (J3 is not built, D48); Y, H and K run on provisional data until their standards are reduced (design 9, parts H, K, Y)"},
     "slit_width_arcsec": {"type": "number", "minimum": 0.3, "maximum": 5.0, "default": 0.7,
                           "x-unit": "arcsec", "description": "CSU long-slit width"},
     "source": {

@@ -54,7 +54,7 @@ from keck_etcs.calib import monitor as mo
 REPO = Path(__file__).resolve().parents[2]
 TABLE = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'lsf_measurements.ecsv'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-2026.10-dev'
 REF_WAVE = 12500.0       # A
 SLOPE_ARCSEC_PER_PIX = 0.24   # design D25 (anamorphic dispersion-direction pixel)
 FLOOR_PIX = 2.2

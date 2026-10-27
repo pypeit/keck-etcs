@@ -26,7 +26,7 @@ Usage:
      and airmass.
 3. Prints the per-group era statistics that flagged a night, the D25 refit,
    the ``sky_scale`` distribution, and the correlation of the dome-flat
-   rate at 12000 and 12500 A with ``zp_1250`` (``standards.ecsv``).
+   rate at 12000 and 12500 A with ``zp_mid`` (``standards.ecsv``).
 
 Proposals that follow from these (D25 constants, the default ``sky_scale``)
 are printed, never applied.
@@ -230,9 +230,9 @@ def main(argv=None):
           'not measured by this monitor '
           '(S11: x1.14-1.33), so SKY_SCALE_DEFAULT stays 1.0 unless lines and continuum get separate scales')
 
-    # 3. dome-flat rate vs zp_1250 (same night)
+    # 3. dome-flat rate vs zp_mid (same night)
     st = Table.read(STANDARDS, format='ascii.ecsv')
-    zp = {str(r['s3_prefix']).rstrip('/').split('/')[-1]: (float(r['zp_1250']), str(r['filter'])) for r in st}
+    zp = {str(r['s3_prefix']).rstrip('/').split('/')[-1]: (float(r['zp_mid']), str(r['filter'])) for r in st}
     for node in (12000.0, 12500.0):
         nm = night_medians(t, 'flat_rate_per_arcsec', wave_A=node)
         common = [n for n in nm if n in zp]
@@ -241,7 +241,7 @@ def main(argv=None):
         for band in sorted({zp[n][1] for n in common}):
             ns = [n for n in common if zp[n][1] == band]
             c = trend.correlation([nm[n] for n in ns], [zp[n][0] for n in ns])
-            print(f'flat rate at {node:.0f} A vs zp_1250 ({band}): nights {ns}, FPOWER '
+            print(f'flat rate at {node:.0f} A vs zp_mid ({band}): nights {ns}, FPOWER '
                   f'{[power.get(n) for n in ns]} -> n={c["n"]} r={c["r"]:+.2f} ({c["sigma"]:.1f} sigma)')
     print(f'figures in {figdir.relative_to(REPO) if figdir.is_relative_to(REPO) else figdir}: '
           'mosfire_monitor_{fwhm,flat_rate,lsf,sky_scale}.png')

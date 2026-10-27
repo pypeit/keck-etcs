@@ -6,16 +6,21 @@ Pure numpy/scipy, no I/O: the callers (``scripts/mosfire/plot_throughput_trend.p
 Throughput metrics:
 
 - ``thru_common``: the median of a standard's filter-free curve (``thru``,
-  the filter divided out at harvest) over :data:`COMMON_WINDOW`, inside both
+  the filter divided out at harvest) over the band's common window
+  (:func:`common_window`; the harvest row's ``thru_median_common`` is the
+  same number since S23a). For J that is :data:`COMMON_WINDOW`, inside both
   the J (11530-13500 A) and the J2 (11170-12463 A) bands and redward of
   two systematics found in S16: the J filter curve's cut-on (J and J2
   curves of GD153 differ by 10 percent at 11650 A, 3 percent at 11800 A,
   0 at 12000 A) and a depression of the A0V curves blueward of about
   11900 A. It compares nights taken through different filters. The row columns
-  ``thru_median_1117_1260`` and ``zp_1250`` include the filter (and J2's
+  ``thru_median_1117_1260`` and ``zp_1250`` (before S23b) include the filter (and J2's
   red cut-off falls at 1.25 um), so they are only compared within one
   filter (plan S16: GD153 gives 0.176 in J2 and 0.224 in J for those, but
-  0.240 and 0.240 for ``thru_common``).
+  0.240 and 0.240 for ``thru_common``). Since S23b the row carries
+  ``zp_lo``, ``zp_mid``, ``zp_hi`` at the band's own nodes (``zp_nodes_A``)
+  and ``thru_median_common``; ``zp_mid`` is likewise compared within one
+  filter only.
 - Per era: median, MAD, and an ordinary least-squares slope of
   ``value / era median - 1`` against the year, in percent per year with
   its standard error (:func:`era_stats`).
@@ -30,6 +35,7 @@ nights more than 3 MAD from their era's median of night medians.
 import numpy as np
 
 COMMON_WINDOW = (11900.0, 12450.0)
+"""The J group's common window (as built); :func:`common_window` gives any band's from the instrument module."""
 MAD_FLAG = 3.0
 MIN_NIGHTS = 3
 MONITOR_FLAG = 'trend_3mad'
@@ -51,6 +57,14 @@ def decimal_year(date):
     """ISO date -> decimal year (no leap-day care needed at this precision)."""
     y, m, d = (int(x) for x in str(date)[:10].split('-'))
     return y + ((m - 1) * 30.44 + (d - 1)) / 365.25
+
+
+def common_window(filter_name, bands=None):
+    """The common window of a row's band: ``bands[filter].common_window_A`` (instrument module), else :data:`COMMON_WINDOW`."""
+    b = bands.get(str(filter_name)) if bands else None
+    if b is None or b.common_window_A is None:
+        return COMMON_WINDOW
+    return tuple(float(x) for x in b.common_window_A)
 
 
 def curve_common_median(wave, thru, window=COMMON_WINDOW):

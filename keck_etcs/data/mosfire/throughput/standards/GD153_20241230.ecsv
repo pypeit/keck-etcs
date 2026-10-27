@@ -9,16 +9,17 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J2}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2024-12-30', koa_id: MF.20241230.58714.62.fits+MF.20241230.58865.58.fits, name: GD153}
-# - row: {airmass: 1.0052087, date: '2024-12-30', exptime: 119.29278, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3',
+# - row: {airmass: 1.0052087, common_window_A: 11900-12450, date: '2024-12-30', exptime: 119.29278, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.3',
 #     image_digest: 'sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf', job_name: keck-etcs-nights-rerun, keck_etcs_git_sha: fdfb1d7,
 #     keck_etcs_version: 0.2.3, koa_id: MF.20241230.58714.62.fits+MF.20241230.58865.58.fits, mjd: 60674.680441050004, numreads: 16, pwv_fit: 1.7420709385712705,
 #     pypeit_git_sha: fb6fb62c46383b09c5c13f1edcad97d3367fa0cd, pypeit_version: 2.0.2.dev1220+gfb6fb62c4, s3_prefix: mosfire/20241230,
 #     sampmode: 3, seeing_fwhm_pix: 7.491645675833029, slit_length: 46.0, slit_width: 5.0, standard: GD153, std_class: WD, std_model: fGD153.dat,
-#     thru_curve_file: standards/GD153_20241230.ecsv, thru_median_1117_1250: 0.18362718265964642, thru_median_1117_1260: 0.17627181180133544,
-#     zp_1200: 19.617786546692138, zp_1250: 18.459030292989127, zp_1300: null}
+#     thru_curve_file: standards/GD153_20241230.ecsv, thru_median_common: 0.26143495662808014, zp_hi: 18.459030292989127, zp_lo: 19.196713190768687,
+#     zp_mid: 19.617786546692138, zp_nodes_A: 11500/12000/12500}
 # - {pypeit_version: 2.0.2.dev1220+gfb6fb62c4}
 # - {keck_etcs_version: 0.2.3}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -42,6 +43,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:44:20Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11172.0 18.30386425765008 0.059069519884598604 0.46144948429780847 0.1280086377699288

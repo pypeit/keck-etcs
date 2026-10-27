@@ -1,13 +1,61 @@
 # Changes
 
 Code versions follow `keck_etcs.__version__`; calibration releases are tagged
-`mosfire-J-YYYY.MM` (design 5.5, D28). A calibration release is one commit
-touching only `keck_etcs/data/` and this file, with a section listing the
-standards added, the era medians before and after, any detector-table
+`mosfire-YYYY.MM`, one tag for all band groups (design 5.5, D28, D49;
+`mosfire-J-YYYY.MM` before `mosfire-2026.10`). A calibration release is one
+commit touching only `keck_etcs/data/` and this file, with a section listing
+the standards added, the era medians before and after, any detector-table
 change, and the image tags (with digests) of the Nautilus reductions that
 fed it.
 
 ## Code (unreleased, after 0.2.5)
+
+- **Band-neutral refactor, part 2 (S23b; D49; "Other bands" part H
+  prompt 2):** throughput products are named per band group,
+  `mosfire_thru_<group>_<era>.ecsv` (`Instrument.throughput_pattern` must
+  carry `{group}`; the S23a `legacy_throughput_group` stop-gap is gone),
+  and one tag covers all groups (`mosfire-YYYY.MM`). New scripts:
+  `scripts/mosfire/migrate_standards_table.py` (one-off: the J table's
+  `zp_1200/1250/1300`, `thru_median_1117_*` columns recomputed from the
+  committed curves as `zp_lo/mid/hi`, `thru_median_common`),
+  `scripts/mosfire/stamp_release.py` (stamps a release tag into every
+  non-provisional `index.yaml` entry) and `scripts/compare_release_outputs.py`
+  (`compute()` on every example and fixture in this tree and in an old
+  release tree, a table of the maximum relative difference per output
+  field). `combine_throughput.py` writes one file per group and era with
+  `bands` in the file `meta` and the `index.yaml` entry;
+  `combine.combine_era` reports rows an earlier run flagged
+  `excluded_3mad` as excluded again (a rerun reproduces the `meta`).
+  `verify_release.py` checks every group (names, `bands`, `compute` per
+  band, XTcalc per group, `zp_mid` against airmass); `verify_harvest.py`
+  accepts the pin of any image in the operator guide, compares the curve
+  `meta.row` without the combine-time flag, and re-harvests with the
+  night's filter; `check_docs.py` accepts both tag forms and checks the
+  per-group names. The trend and report scripts read `zp_mid`. The build
+  scripts' development tag is `mosfire-2026.10-dev`.
+
+- **Band-neutral refactor, part 1 (S23a; design 9, D49-D59; "Other bands"
+  part H prompt 1):** the ETC and the calibration code no longer hard-code
+  J. `Band` gains `group`, `order`, `zp_nodes_A`, `common_window_A`,
+  `pwv_window_A`, `pwv_weak`, `edge_trim_frac`, `a0v_min_wave_A`, `lsf`
+  and `footprint_provisional`; the MOSFIRE module defines **Y, H and K**
+  (Y footprint measured on the dev suite's `Y_long`; H and K nominal and
+  flagged provisional); `band` accepts `Y`, `J`, `J2`, `H`, `K`. A band
+  group without a reduced standard runs on a **provisional placeholder**
+  curve (`mosfire_thru_<group>_provisional.ecsv`, XTcalc 2012 efficiency
+  with the filter divided out, `calib_version = provisional-xtcalc-2012`,
+  `scripts/mosfire/build_provisional_throughput.py`) and every provisional
+  item (footprint, LSF rule, throughput) is a `PROVISIONAL` warning.
+  Harvest rows carry `zp_lo`, `zp_mid`, `zp_hi`, `thru_median_common`,
+  `zp_nodes_A`, `common_window_A` instead of `zp_1200/1250/1300` and
+  `thru_median_1117_1260/1250` (the committed J table is regenerated under
+  the new names at the next release, S23b); `combine_era` and `trend` read
+  the common window, edge trim and A0V cut per band from the instrument
+  module (J values unchanged); `standards.a0v_model(band, mag)` scales the
+  Vega model to the band's own 2MASS magnitude (J, H, Ks; D51) and records
+  the J/band offset; `lsf_fwhm_pix(slit, band)` prefers measured rows of the
+  band's group. J outputs are unchanged (regression fixtures identical).
+  New examples `Y_point`, `H_point`, `K_point`.
 
 - **Packaging (S18):**
   - `install_requires` is now what `keck_etcs.core` and `keck_etcs.etc`
@@ -43,6 +91,74 @@ fed it.
   each step uses) and `docs/developer/testing.md` (the suite and CI).
 
 ## Calibration releases
+
+### mosfire-2026.10 (2026-10-27, plan S23b; J-only: the mosfire-J-2026.10 products under the per-group names and columns)
+
+**No number changed.** Design D49 (Q50, Q68) organises the throughput
+products by band group (grating order) and uses one calibration tag per
+release for all groups. This release carries the J products of
+`mosfire-J-2026.10`, from the same 20 standards with the same exclusions,
+under the new names and columns, before any Y, H or K product exists, so
+the rename is not held under the H and K timeline. The Y, H and K
+placeholders (`mosfire_thru_{Y,H,K}_provisional.ecsv`, `calib_version =
+provisional-xtcalc-2012`) are registered but are not part of the release.
+
+**Era curves** (`keck_etcs/data/mosfire/throughput/mosfire_thru_J_<era>.ecsv`,
+were `mosfire_thru_<era>.ecsv`; `scripts/mosfire/combine_throughput.py`
+per group): pixel-wise identical to the mosfire-J-2026.10 files
+(`wave`, `thru_median`, `thru_mad`, `n_std` differ by 0; same standards and
+exclusions in `meta`). The `meta` gains `band_group`, `bands` and
+`common_window_A`; the `index.yaml` entries carry `bands: [J, J2]`.
+
+| Era | Standards used | Range [A] | Curve median 11900-12450 A | Before |
+|---|---|---|---|---|
+| 2012-04..2016-09 | 4 | 11633-13457 | 0.257 | 0.257 |
+| 2017-02..2025-02 | 9 | 11172-13457 | 0.255 | 0.255 |
+| 2025-04.. | 1 | 11171-12462 | 0.270 | 0.270 |
+
+**Standards table** (`standards.ecsv`, 20 rows, 14 in the era curves):
+the columns `zp_1200`, `zp_1250`, `zp_1300`, `thru_median_1117_1260` and
+`thru_median_1117_1250` are replaced by `zp_lo`, `zp_mid`, `zp_hi` (the
+zero point at the band's own nodes, `zp_nodes_A`: J 12000/12500/13000 A,
+J2 11500/12000/12500 A) and `thru_median_common` (median of the
+filter-free curve over `common_window_A` = 11900-12450 A, the quantity the
+trend analysis calls `thru_common`). The values were recomputed from the
+committed curves with the harvest's own functions
+(`scripts/mosfire/migrate_standards_table.py`; the synced in-pod harvest
+files carry the old columns and a local re-harvest could not reproduce
+every `excluded_nonlinear` flag without all raw frames): for every J row
+`zp_lo/mid/hi` equal the old `zp_1200/1250/1300` exactly, and for every J2
+row `zp_mid` and `zp_hi` the old `zp_1200` and `zp_1250`. Every other
+column is unchanged; each curve's `meta.row` carries the new columns.
+
+**Standards added:** none. **Excluded:** as mosfire-J-2026.10 (four
+nonlinear nights; 55 Dra 2014-10-05 and GD153 2025-01-25 by 3 MAD).
+
+**Method changes:** none. **Detector table:** unchanged.
+
+**Regression** (`scripts/compare_release_outputs.py` against `git archive`
+of the mosfire-J-2026.10 tree; the table is in the part-H prompt log of
+2026-10-27): `compute()` on the six examples and three fixtures. The six
+J/J2 inputs agree on all 36 output fields with a largest relative
+difference of 0; the only text differences are `meta.calib_version` and
+the renamed file inside one warning. The Y, H and K examples have no
+counterpart in the old release. The regression fixtures were regenerated
+for the tag and that warning (same numbers).
+
+**Checks:** `scripts/mosfire/verify_release.py` ALL CHECKS PASS (2012-2016
+x J filter against XTcalc 2012: -2.9 percent; `zp_mid` against airmass in
+J: 1.88 sigma); `scripts/mosfire/verify_harvest.py --reharvest` on LDS749B
+2022-04-09: PASS; `scripts/check_docs.py` ALL CHECKS PASS.
+
+**Reductions used** (image | digest | PypeIt pin; unchanged):
+
+- `keck-etcs:0.1.6` | sha256:0c5e88fd838e24f9e658be3a01ffee276d80546df772a9da19da9c0ce912a357 | 8017f47997d6417d797be6d0a0358d7acb8918b5
+- `keck-etcs:0.2.2` | sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138 | fb4790520e4ccd49d39d42ed8438a614f307030b
+- `keck-etcs:0.2.3` | sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf | fb6fb62c46383b09c5c13f1edcad97d3367fa0cd
+- `keck-etcs:0.2.4` | sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b | fb6fb62c46383b09c5c13f1edcad97d3367fa0cd
+- `keck-etcs:0.2.5` | sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4 | bc18a3ba46d1d331da0875424c63999e578a4937
+
+All images are under `gitlab-registry.nrp-nautilus.io/profx/`.
 
 ### mosfire-J-2026.10 (2026-10-08, plan S16; first release)
 
@@ -146,6 +262,7 @@ All images are under `gitlab-registry.nrp-nautilus.io/profx/`. Checks:
 
 ## Regression fixtures
 
+- 2026-10-27: regression fixtures regenerated (keck_etcs 0.2.5, throughput mosfire-2026.10): S23b release mosfire-2026.10 (J-only, D49): same numbers; calib_version tag and the throughput file name in one warning changed (mosfire_thru_2025-on.ecsv -> mosfire_thru_J_2025-on.ecsv); compare_release_outputs.py against mosfire-J-2026.10: largest relative difference 0
 - 2026-10-08: regression fixtures regenerated (keck_etcs 0.2.5, throughput mosfire-J-2026.10): S16 first calibration release mosfire-J-2026.10: era curves for 2012-04..2016-09, 2017-02..2025-02 and 2025-04.. from 14 standards (combine cuts S16-1(b): J rows T >= 0.9 peak, A0V rows >= 11900 A; 3-MAD on 11900-12450 A); the default (latest) era is now 2025-04.., completed over J from 2017-2025 (Instrument.throughput_for_window); D25 LSF quadrature refit sqrt((w/0.292)^2 + 1.08^2) pix (+3.9 percent at 0.7 arcsec)
 - 2026-10-04: regression fixtures regenerated (keck_etcs 0.1.6, throughput mosfire-J-2026.10-dev): S10: throughput mosfire_thru_2017-2025.ecsv (mosfire-J-2026.10-dev) replaces provisional-xtcalc-2012; LDS749B 2022-04-09 row from image keck-etcs:0.1.6 (sha256:0c5e88fd...2a357), PypeIt pin 8017f47; era names now 2017-02..2025-02 style
 - 2026-10-04: regression fixtures regenerated (keck_etcs 0.1.6, throughput provisional-xtcalc-2012): first freeze (S9): examples J_point, J2_point, J_line against the provisional XTcalc throughput

@@ -71,7 +71,10 @@ def test_shipped_era_file_provenance_matches_its_rows():
     assert t.meta['images'] == sorted({str(r['image']) for r in used})
     assert t.meta['pypeit_git_shas'] == sorted({str(r['pypeit_git_sha']) for r in used})
     assert t.colnames == ['wave', 'thru_median', 'thru_mad', 'n_std']
-    assert t.meta['calib_version'] == 'mosfire-J-2026.10' and t.meta['era'] == era.name
+    assert t.meta['calib_version'] == 'mosfire-2026.10' and t.meta['era'] == era.name
+    assert t.meta['band_group'] == 'J' and t.meta['bands'] == ['J', 'J2']            # per group since S23b (D49)
+    # the two nights an earlier combine flagged excluded_3mad are reported again on a rerun
+    assert [(e['standard'], e['date']) for e in t.meta['excluded']] == [('GD153', '2025-01-25')]
 
 
 def test_edge_trim_and_a0v_cut():
@@ -88,3 +91,35 @@ def test_edge_trim_and_a0v_cut():
     t, info = combine.combine_era(rows, curves, ERA, FILTERS)
     blue = t['wave'] < 11900
     assert np.all(t['n_std'][blue] == 2) and np.all(t['n_std'][~blue & (t['wave'] <= 12400)] == 3)
+
+
+def test_rules_per_band_from_the_instrument_module():
+    from keck_etcs.instruments.mosfire import MOSFIRE
+    # J as built: 0.9 trim, A0V cut; J2 as built: no trim, A0V cut; new bands: 0.9 trim, no A0V cut yet
+    assert combine.rules_for('J', MOSFIRE.bands) == ((11900.0, 12450.0), 0.9, 11900.0)
+    assert combine.rules_for('J2', MOSFIRE.bands) == ((11900.0, 12450.0), None, 11900.0)
+    assert combine.rules_for('H', MOSFIRE.bands) == ((14900.0, 17800.0), 0.9, None)
+    assert combine.rules_for('J2') == (combine.COMMON_WINDOW, None, combine.A0V_MIN_WAVE)   # legacy constants
+    rows, curves = make(3, 0.25, divided=True)
+    rows['std_class'] = ['WD', 'A0V', 'WD']
+    a, _ = combine.combine_era(rows, curves, ERA, FILTERS)
+    b, _ = combine.combine_era(rows, curves, ERA, FILTERS, bands=MOSFIRE.bands)
+    np.testing.assert_array_equal(a['thru_median'], b['thru_median'])        # the J2 rules are unchanged
+    assert combine.combine_era(rows, curves, ERA, FILTERS, bands=MOSFIRE.bands, group='H')[0] is None
+    assert combine.combine_era(rows, curves, ERA, FILTERS, bands=MOSFIRE.bands, group='J')[0] is not None
+
+
+def test_prior_excluded_3mad_rows_are_reported_not_used():
+    # a row an earlier combine flagged excluded_3mad (S23b): no part in the statistics, listed as excluded
+    rows, curves = make(4, 0.25, outlier=0.10)
+    rows['flag'] = rows['flag'].astype('U32')
+    rows['flag'][-1] = 'excluded_3mad'
+    t, info = combine.combine_era(rows, curves, ERA, FILTERS)
+    assert [p['row']['standard'] for p in info['used']] == ['S0', 'S1', 'S2']
+    assert [(p['row']['standard'], round(p['band_median'], 3)) for p in info['excluded']] == [('S3', 0.1)]
+    assert t.meta['excluded'] == [{'standard': 'S3', 'date': '2022-04-04', 'band_median': 0.1}]
+    assert np.all(t['n_std'] == 3)
+    # other 'excluded_*' flags (nonlinear) are skipped silently, as before
+    rows['flag'][-1] = 'excluded_nonlinear'
+    t2, info2 = combine.combine_era(rows, curves, ERA, FILTERS)
+    assert info2['excluded'] == [] and len(info2['used']) == 3 and t2.meta['excluded'] == []

@@ -9,16 +9,17 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J2}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2025-07-23', koa_id: MF.20250723.21178.82.fits+MF.20250723.21331.31.fits, name: GD153}
-# - row: {airmass: 1.24786791, date: '2025-07-23', exptime: 119.29278, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2',
+# - row: {airmass: 1.24786791, common_window_A: 11900-12450, date: '2025-07-23', exptime: 119.29278, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2',
 #     image_digest: 'sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138', job_name: keck-etcs-nights, keck_etcs_git_sha: 09e9eee,
 #     keck_etcs_version: 0.2.2, koa_id: MF.20250723.21178.82.fits+MF.20250723.21331.31.fits, mjd: 60879.2460078, numreads: 16, pwv_fit: 4.848243431228263,
 #     pypeit_git_sha: fb4790520e4ccd49d39d42ed8438a614f307030b, pypeit_version: 2.0.2.dev1219+gfb4790520, s3_prefix: mosfire/20250723,
 #     sampmode: 3, seeing_fwhm_pix: 2.185256377304379, slit_length: 46.0, slit_width: 5.0, standard: GD153, std_class: WD, std_model: fGD153.dat,
-#     thru_curve_file: standards/GD153_20250723.ecsv, thru_median_1117_1250: 0.18828972824886528, thru_median_1117_1260: 0.18082895162285814,
-#     zp_1200: 19.639179313086817, zp_1250: 18.503590140212435, zp_1300: null}
+#     thru_curve_file: standards/GD153_20250723.ecsv, thru_median_common: 0.26995750504398713, zp_hi: 18.503590140212435, zp_lo: 19.232320896434512,
+#     zp_mid: 19.639179313086817, zp_nodes_A: 11500/12000/12500}
 # - {pypeit_version: 2.0.2.dev1219+gfb4790520}
 # - {keck_etcs_version: 0.2.2}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -42,6 +43,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:44:32Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11171.0 18.380774879619164 0.06339993527487035 0.4547812938215017 0.13940752651043375

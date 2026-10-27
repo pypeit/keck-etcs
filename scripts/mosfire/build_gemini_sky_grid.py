@@ -65,7 +65,7 @@ from check_gemini_wavelength_convention import check as check_waveref  # noqa: E
 OUTFILE = REPO / 'keck_etcs' / 'data' / 'sky' / 'gemini_mk_sky_grid.fits'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
 SCRIPT = 'scripts/mosfire/build_gemini_sky_grid.py'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-2026.10-dev'
 SOURCE = ('Gemini Observatory IR sky background and ATRAN transmission, '
           'as redistributed in Keck XTcalc v2.3')
 XTCALC_URL = 'https://www2.keck.hawaii.edu/inst/mosfire/XTcalc.tar'

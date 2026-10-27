@@ -47,7 +47,7 @@ from keck_etcs.core import source
 REPO = Path(__file__).resolve().parents[2]
 OUTDIR = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'filters'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-2026.10-dev'
 PAGE = 'https://www2.keck.hawaii.edu/inst/mosfire/filters.html'
 BASE = 'https://www2.keck.hawaii.edu/inst/mosfire/data/filter/'
 # band: (file, published centre um, published FWHM um), from the filters page

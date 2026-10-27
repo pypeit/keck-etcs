@@ -9,16 +9,17 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J2}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2022-04-09', koa_id: MF.20220409.55932+MF.20220409.56084, name: LDS749B}
-# - row: {airmass: 1.57760672, date: '2022-04-09', exptime: 119.29278, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6',
+# - row: {airmass: 1.57760672, common_window_A: 11900-12450, date: '2022-04-09', exptime: 119.29278, filter: J2, flag: ok, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.6',
 #     image_digest: 'sha256:0c5e88fd838e24f9e658be3a01ffee276d80546df772a9da19da9c0ce912a357', job_name: keck-etcs-validate, keck_etcs_git_sha: b2883b6,
 #     keck_etcs_version: 0.1.6, koa_id: MF.20220409.55932+MF.20220409.56084, mjd: 59678.648240995, numreads: 16, pwv_fit: 1.616367412130969,
 #     pypeit_git_sha: 8017f47997d6417d797be6d0a0358d7acb8918b5, pypeit_version: 2.0.2.dev1218+g8017f4799, s3_prefix: mosfire/20220409,
 #     sampmode: 3, seeing_fwhm_pix: 6.263772868198451, slit_length: 46.0, slit_width: 5.0, standard: LDS749B, std_class: WD, std_model: lds749b_stisnic_008.fits.gz,
-#     thru_curve_file: standards/LDS749B_20220409.ecsv, thru_median_1117_1250: 0.18741564820337825, thru_median_1117_1260: 0.18001138435147812,
-#     zp_1200: 19.634585467953563, zp_1250: 18.597799197045834, zp_1300: null}
+#     thru_curve_file: standards/LDS749B_20220409.ecsv, thru_median_common: 0.2730756189364366, zp_hi: 18.597799197045834, zp_lo: 19.225694236591263,
+#     zp_mid: 19.634585467953563, zp_nodes_A: 11500/12000/12500}
 # - {pypeit_version: 2.0.2.dev1218+g8017f4799}
 # - {keck_etcs_version: 0.1.6}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -41,6 +42,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:44:01Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11172.0 18.32868641597107 0.06043552571179475 0.46144948429780847 0.13096888775108287

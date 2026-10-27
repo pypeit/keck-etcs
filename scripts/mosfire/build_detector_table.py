@@ -26,7 +26,7 @@ import keck_etcs
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'detector.ecsv'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10-dev'
+CALIB_VERSION = 'mosfire-2026.10-dev'
 DETECTOR_PAGE = 'https://www2.keck.hawaii.edu/inst/mosfire/detector.html'
 
 N_READS = [1, 4, 8, 16, 32, 64, 128]

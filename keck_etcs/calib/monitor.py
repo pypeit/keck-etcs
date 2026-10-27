@@ -194,7 +194,7 @@ def lsf_summary(wavecalib, slit, ref_wave=12500.0, list_name='OH_R24000_lines.da
 def line_widths(wavecalib_files, slit_of, config, band, night, arc_source='OH'):
     """Line-width rows per WaveCalib (D44). ``slit_of`` maps a WaveCalib path to its slit width."""
     rows = []
-    ref = config['lsf_ref_wave']
+    ref = config.get('lsf_ref_waves', {}).get(band, config['lsf_ref_wave'])     # per band since S23a (9.6)
     for wcf in wavecalib_files:
         slit = slit_of(wcf)
         if slit is None:

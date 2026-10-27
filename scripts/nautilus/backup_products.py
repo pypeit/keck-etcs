@@ -5,7 +5,7 @@ Usage:
     python scripts/nautilus/backup_products.py                         # dry run of the whole set (default)
     python scripts/nautilus/backup_products.py --run                   # copy, then rclone check --one-way
     python scripts/nautilus/backup_products.py --run --prefix mosfire/20220409 [mosfire/... ...]
-    python scripts/nautilus/backup_products.py --run --release mosfire-J-2026.10 [--nights 20220409 ...]
+    python scripts/nautilus/backup_products.py --run --release mosfire-2026.10 [--nights 20220409 ...]
     python scripts/nautilus/backup_products.py --check-only
 
 A thin wrapper around ``rclone copy nautilus_s3:keck-etcs/ AIOcean:keck-etcs/``

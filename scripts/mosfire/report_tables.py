@@ -9,7 +9,7 @@ Prints, from the committed products only (``keck_etcs/data/mosfire/``):
 1. the per-standard table: date, star, class, filter, mask
    (``long2pos_specphot`` 4" bar for one-bar rows, else ``LONGSLIT-46x<w>``),
    read mode, exposure, airmass, fitted PWV (``*`` = extrapolated beyond
-   the grid), ``zp_1250``,
+   the grid), ``zp_mid``,
    ``thru_common`` (median filter-free throughput over 11900-12450 A,
    ``keck_etcs.calib.trend``), era, and the row flags;
 2. per era: n, median and MAD of ``thru_common`` (rows in the era curves),
@@ -35,7 +35,7 @@ ERA_DATE = {'2012-04..2016-09': '2014-06-01', '2017-02..2025-02': '2020-01-01', 
 def main():
     rows = Table.read(THRU / 'standards.ecsv', format='ascii.ecsv')
     common = []
-    print('| Date | Star | Class | Filter | Mask | Read | t [s] | Airmass | PWV [mm] | zp_1250 | thru_common '
+    print('| Date | Star | Class | Filter | Mask | Read | t [s] | Airmass | PWV [mm] | zp_mid | thru_common '
           '| Era | Flag |')
     print('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     for r in rows:
@@ -48,7 +48,7 @@ def main():
         mask = (f"long2pos_specphot {float(r['slit_width']):g}\"" if float(r['slit_length']) <= 1
                 else f"LONGSLIT-{int(r['slit_length'])}x{float(r['slit_width']):g}")
         pwv = f"{float(r['pwv_fit']):.1f}" + ('*' if 'pwv_extrapolated' in str(r['flag']) else '')
-        zp = r['zp_1250']
+        zp = r['zp_mid']
         zp = f'{float(zp):.2f}' if not np.ma.is_masked(zp) and np.isfinite(float(zp)) else '-'
         print(f"| {r['date']} | {str(r['standard']).lstrip('*')} | {r['std_class']} | {r['filter']} | "
               f"{mask} | {read} | {float(r['exptime']):.1f} | "

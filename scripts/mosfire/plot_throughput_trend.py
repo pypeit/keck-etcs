@@ -12,13 +12,14 @@ and J2) is computed from its curve. Prints, per era of
 
 - the median, MAD and slope (percent per year, with its error) of
   ``thru_common`` over the rows that can enter an era curve (not
-  ``excluded``), and of ``zp_1250`` per filter (it includes the filter, and
+  ``excluded``), and of ``zp_mid`` per filter (the zero point at the band's
+  middle node, 12500 A for J and 12000 A for J2; it includes the filter, and
   J2's red cut-off falls at 1.25 um, so filters are not mixed);
 - the correlation of ``thru_common`` with airmass, PWV (``pwv_fit``) and
   slit width, on residuals after each era's median is removed (a residual
   airmass trend would mean an incomplete telluric division).
 
-Plots ``zp_1250`` (J and J2 separately) and ``thru_common`` against date,
+Plots ``zp_mid`` (J and J2 separately) and ``thru_common`` against date,
 with the era boundaries, the excluded rows marked as open symbols.
 """
 import argparse
@@ -67,8 +68,8 @@ def main(argv=None):
         print('  ' + fmt(s))
     for band in sorted({str(b) for b in rows['filter']}):
         sel = use & (np.asarray(rows['filter']) == band)
-        print(f'zp_1250, filter {band}, usable rows (median in mag; MAD and slope of the flux 10^(0.4 zp)):')
-        zp = np.asarray(rows['zp_1250'], float)[sel]
+        print(f'zp_mid, filter {band}, usable rows (median in mag; MAD and slope of the flux 10^(0.4 zp)):')
+        zp = np.asarray(rows['zp_mid'], float)[sel]
         for s in trend.era_stats(list(rows['date'][sel]), list(10 ** (0.4 * (zp - 19.0))), eras):
             if s['n']:
                 s['median'] = 19.0 + 2.5 * np.log10(s['median'])
@@ -82,12 +83,12 @@ def main(argv=None):
         c = trend.correlation(x[use], y[use], by_era=np.asarray(era_lab)[use])
         print(f"  {col:10s} n={c['n']:2d} r={c['r']:+.3f} p={c['p']:.3f} -> {c['sigma']:.2f} sigma"
               + ('  ** > 2 sigma' if c['sigma'] > 2 else ''))
-    # zp_1250 against airmass within one filter (the release check of plan S16)
+    # zp_mid against airmass within one filter (the release check of plan S16)
     for band in sorted({str(b) for b in rows['filter']}):
         sel = use & (np.asarray(rows['filter']) == band)
-        c = trend.correlation(np.asarray(rows['airmass'], float)[sel], np.asarray(rows['zp_1250'], float)[sel],
+        c = trend.correlation(np.asarray(rows['airmass'], float)[sel], np.asarray(rows['zp_mid'], float)[sel],
                               by_era=np.asarray(era_lab)[sel])
-        print(f"  zp_1250 vs airmass, {band}: n={c['n']} r={c['r']:+.3f} -> {c['sigma']:.2f} sigma")
+        print(f"  zp_mid vs airmass, {band}: n={c['n']} r={c['r']:+.3f} -> {c['sigma']:.2f} sigma")
 
     import matplotlib
     matplotlib.use('Agg')
@@ -100,7 +101,7 @@ def main(argv=None):
         for u, face in ((use, col), (~use, 'none')):
             s = sel & u
             if s.any():
-                axs[0].plot(yr[s], rows['zp_1250'][s], m, mfc=face, mec=col, ls='',
+                axs[0].plot(yr[s], rows['zp_mid'][s], m, mfc=face, mec=col, ls='',
                             label=f'{band}' + ('' if face != 'none' else ' (excluded)'))
                 axs[1].plot(yr[s], rows['thru_common'][s], m, mfc=face, mec=col, ls='')
     for era in eras:
@@ -112,7 +113,7 @@ def main(argv=None):
             x1 = trend.decimal_year(era.end) if era.end else yr.max() + 0.3
             axs[1].hlines(med, trend.decimal_year(era.start), x1, color='k', lw=1)
             axs[1].text(trend.decimal_year(era.start) + 0.05, med + 0.004, f'{era.name}: {med:.3f}', fontsize=7)
-    axs[0].set_ylabel('zp_1250 [mag] (filter included)')
+    axs[0].set_ylabel('zp_mid [mag] (band middle node; filter included)')
     axs[0].invert_yaxis()
     axs[0].legend(fontsize=8, ncol=2)
     axs[1].set_ylabel(f'filter-free throughput\n{trend.COMMON_WINDOW[0]:.0f}-{trend.COMMON_WINDOW[1]:.0f} A')

@@ -78,12 +78,21 @@ def test_eras():
 
 def test_throughput_era_file_and_fallback():
     t = MOSFIRE.throughput(MOSFIRE.eras[1])
-    assert t['file'] == 'mosfire/throughput/mosfire_thru_2017-2025.ecsv' and t['warnings'] == []
-    assert t['calib_version'] == 'mosfire-J-2026.10' and t['era'] is MOSFIRE.eras[1]
-    # since the first release (mosfire-J-2026.10) every era has its own curve
+    assert t['file'] == 'mosfire/throughput/mosfire_thru_J_2017-2025.ecsv' and t['warnings'] == []
+    assert t['calib_version'] == 'mosfire-2026.10' and t['era'] is MOSFIRE.eras[1]
+    # since the first release (mosfire-J-2026.10) every era has its own curve; per group since S23b (D49)
     for e in MOSFIRE.eras:
         f = MOSFIRE.throughput(e)
         assert f['era'] is e and f['warnings'] == [] and f['file'] == MOSFIRE.throughput_file(e)
+
+
+def test_throughput_file_needs_the_group_placeholder():
+    import dataclasses
+    import pytest
+    bad = dataclasses.replace(MOSFIRE, throughput_pattern='mosfire/throughput/mosfire_thru_{tag}.ecsv')
+    with pytest.raises(ValueError, match='group'):
+        bad.throughput_file(MOSFIRE.eras[0], 'J')
+    assert MOSFIRE.throughput_file(MOSFIRE.eras[0], 'H') == 'mosfire/throughput/mosfire_thru_H_2012-2016.ecsv'
 
 
 def test_throughput_falls_back_to_nearest_era(monkeypatch):
@@ -91,12 +100,12 @@ def test_throughput_falls_back_to_nearest_era(monkeypatch):
     real = base.Path.exists
     missing = base.DATA_DIR / MOSFIRE.throughput_file(MOSFIRE.eras[0])
     monkeypatch.setattr(base.Path, 'exists', lambda self: False if self == missing else real(self))
-    MOSFIRE._cache.pop(('throughput', MOSFIRE.eras[0].name), None)
+    MOSFIRE._cache.pop(('throughput', 'J', MOSFIRE.eras[0].name), None)
     try:
         f = MOSFIRE.throughput(MOSFIRE.eras[0])
         assert f['era'] is MOSFIRE.eras[1] and 'no throughput curve yet' in f['warnings'][0]
     finally:
-        MOSFIRE._cache.pop(('throughput', MOSFIRE.eras[0].name), None)
+        MOSFIRE._cache.pop(('throughput', 'J', MOSFIRE.eras[0].name), None)
 
 
 def test_sky_grid_loads():
@@ -158,3 +167,58 @@ def test_throughput_for_window_splices_uncovered_wavelengths():
     np.testing.assert_allclose(th['thru'][inside], np.interp(w[inside], own['wave_A'], own['thru']))
     lo2, hi2 = MOSFIRE.band_window('J2')
     assert MOSFIRE.throughput_for_window(era, lo2, hi2, margin=5.0)['spliced'] == []
+
+
+# ---- Y, H, K (S23a, design 9.5 D58, D59)
+
+def test_band_groups_and_windows():
+    assert sorted(MOSFIRE.bands) == ['H', 'J', 'J2', 'K', 'Y']
+    assert MOSFIRE.group_of('J2') == 'J' and MOSFIRE.group_bands('J') == ['J', 'J2']
+    for band in ('Y', 'H', 'K'):
+        assert MOSFIRE.group_of(band) == band and MOSFIRE.bands[band].order in (6, 4, 3)
+        lo, hi = MOSFIRE.band_window(band)
+        hp = MOSFIRE.filter_curve(band)['meta']['half_power_A']
+        fp = MOSFIRE.bands[band].footprint_A
+        assert lo == max(hp[0], fp[0]) and hi == min(hp[1], fp[1])
+        assert MOSFIRE.bands[band].zp_nodes_A[0] >= lo and MOSFIRE.bands[band].zp_nodes_A[-1] <= hi
+        c = MOSFIRE.bands[band].common_window_A
+        assert lo <= c[0] < c[1] <= hi
+    assert MOSFIRE.band_window('Y') == pytest.approx((9718.5, 11242.8))       # filter-limited (Y_long footprint)
+    assert MOSFIRE.band_window('H') == (14680.0, 18040.0) and MOSFIRE.bands['H'].footprint_provisional
+    assert MOSFIRE.band_window('K') == (19540.0, 23970.0) and MOSFIRE.bands['K'].footprint_provisional
+    assert not MOSFIRE.bands['Y'].footprint_provisional and not MOSFIRE.bands['J'].footprint_provisional
+    assert MOSFIRE.common_window('J') == MOSFIRE.SPLICE_WINDOW == (11900.0, 12450.0)
+    assert MOSFIRE.common_window('H') == (14900.0, 17800.0)
+    assert 0.6 <= MOSFIRE.vega_offset('Y') <= 0.7 and 1.3 <= MOSFIRE.vega_offset('H') <= 1.4
+    assert 1.8 <= MOSFIRE.vega_offset('K') <= 1.9
+
+
+def test_lsf_per_band():
+    # the measured 1" row is a J2 row: it serves the whole J group and no other
+    fw, src = MOSFIRE.lsf_fwhm_pix(1.0, 'J')
+    assert fw == pytest.approx(3.6064) and src.startswith('measured')
+    assert MOSFIRE.lsf_fwhm_pix(1.0, 'J2')[0] == pytest.approx(3.6064)
+    for band in ('Y', 'H', 'K'):
+        fw, src = MOSFIRE.lsf_fwhm_pix(1.0, band)
+        assert fw == pytest.approx(np.hypot(1.0 / 0.292, 1.08)) and '(provisional)' in src and 'D25' in src
+        assert MOSFIRE.lsf_rule(band)[3] is True
+    assert MOSFIRE.lsf_rule('J')[3] is False and '(provisional)' not in MOSFIRE.lsf_fwhm_pix(0.7, 'J')[1]
+    assert MOSFIRE.lsf_fwhm_pix(0.7)[1] == MOSFIRE.lsf_fwhm_pix(0.7, 'J')[1]
+
+
+def test_provisional_throughput_for_groups_without_standards():
+    for group in ('Y', 'H', 'K'):
+        t = MOSFIRE.throughput(MOSFIRE.eras[1], group)
+        assert t['provisional'] and t['era'] is None and t['calib_version'] == 'provisional-xtcalc-2012'
+        assert t['file'] == f'mosfire/throughput/mosfire_thru_{group}_provisional.ecsv'
+        assert any('PROVISIONAL' in w for w in t['warnings'])
+        lo, hi = MOSFIRE.band_window(group)
+        # XTcalc's H efficiency file ends at 17991 A, 49 A short of the nominal H window: the ETC holds
+        # the edge value there with a warning, so the placeholder need only cover 98 percent of the window
+        covered = min(t['valid_range_A'][1], hi) - max(t['valid_range_A'][0], lo)
+        assert covered >= 0.98 * (hi - lo), (group, t['valid_range_A'], (lo, hi))
+        assert 0.1 < np.median(t['thru']) < 0.6
+        th = MOSFIRE.throughput_for_window(MOSFIRE.eras[1], lo, hi, group=group)
+        assert th['spliced'] == [] and th['covered_A'] == t['valid_range_A']
+    j = MOSFIRE.throughput(MOSFIRE.eras[1], 'J')
+    assert not j['provisional'] and j['era'] is MOSFIRE.eras[1]

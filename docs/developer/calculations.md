@@ -148,9 +148,10 @@ would show up here. {func}`keck_etcs.calib.harvest.throughput_curve` then
   filter of the band it is asked about.
 
 The per-standard row (`harvest.ROW_COLUMNS`, one line of `standards.ecsv`) also
-records `zp_1200`, `zp_1250`, `zp_1300` (masked where the fit does not
-reach), the band medians `thru_median_1117_1260` and
-`thru_median_1117_1250`, the median PypeIt spatial FWHM, the airmass, the
+records `zp_lo`, `zp_mid`, `zp_hi` at the band's three nodes (`zp_nodes_A`;
+masked where the fit does not reach), the filter-free median
+`thru_median_common` over the band group's common window (`common_window_A`;
+both from the instrument module, design 9.3), the median PypeIt spatial FWHM, the airmass, the
 readout mode and the reduction provenance (image, digest, PypeIt commit).
 
 **Precipitable water vapour.** The PCA telluric model has no PWV
@@ -165,8 +166,8 @@ design 4.6), not a correction.
 ### 1.4 Combining standards into an era curve
 
 {func}`keck_etcs.calib.combine.combine_era` builds
-`keck_etcs/data/mosfire/throughput/mosfire_thru_<era>.ecsv` for each
-instrument era (D6; `instruments/mosfire.py` `ERAS`) from the committed
+`keck_etcs/data/mosfire/throughput/mosfire_thru_<group>_<era>.ecsv` for each
+band group (D49; J = J/J2) and instrument era (D6; `instruments/mosfire.py` `ERAS`) from the committed
 per-standard curves:
 
 1. each row's filter-free curve is kept inside its filter's half-power

@@ -41,3 +41,10 @@ def test_curve_common_median_and_monitor_flags():
     t['flag'] = new
     again, _ = trend.monitor_flags(t, ERAS)
     assert again == new                          # idempotent
+
+
+def test_common_window_per_band():
+    from keck_etcs.instruments.mosfire import MOSFIRE
+    assert trend.common_window('J', MOSFIRE.bands) == trend.COMMON_WINDOW
+    assert trend.common_window('K', MOSFIRE.bands) == (19800.0, 23700.0)
+    assert trend.common_window('K') == trend.COMMON_WINDOW

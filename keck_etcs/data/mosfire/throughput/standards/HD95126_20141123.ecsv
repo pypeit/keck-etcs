@@ -9,17 +9,18 @@
 # meta: !!omap
 # - {instrument: keck_mosfire}
 # - {band: J}
+# - {band_group: J}
 # - {era: null}
 # - standards:
 #   - {date: '2014-11-23', koa_id: MF.20141123.57043.fits+MF.20141123.57122.fits+MF.20141123.57139.fits+MF.20141123.57157.fits+MF.20141123.57180.fits+MF.20141123.57197.fits+MF.20141123.57214.fits,
 #     name: HD95126}
-# - row: {airmass: 1.16193107, date: '2014-11-23', exptime: 4.36437, filter: J, flag: pwv_extrapolated, image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.5',
-#     image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4', job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f,
-#     keck_etcs_version: 0.2.5, koa_id: MF.20141123.57043.fits+MF.20141123.57122.fits+MF.20141123.57139.fits+MF.20141123.57157.fits+MF.20141123.57180.fits+MF.20141123.57197.fits+MF.20141123.57214.fits,
+# - row: {airmass: 1.16193107, common_window_A: 11900-12450, date: '2014-11-23', exptime: 4.36437, filter: J, flag: pwv_extrapolated,
+#     image: 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.5', image_digest: 'sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4',
+#     job_name: keck-etcs-nights-sweep1, keck_etcs_git_sha: 10a469f, keck_etcs_version: 0.2.5, koa_id: MF.20141123.57043.fits+MF.20141123.57122.fits+MF.20141123.57139.fits+MF.20141123.57157.fits+MF.20141123.57180.fits+MF.20141123.57197.fits+MF.20141123.57214.fits,
 #     mjd: 56984.661471937136, numreads: 1, pwv_fit: 5.492802716530591, pypeit_git_sha: bc18a3ba46d1d331da0875424c63999e578a4937, pypeit_version: 2.0.2.dev1221+gbc18a3ba4,
 #     s3_prefix: mosfire/20141123, sampmode: 2, seeing_fwhm_pix: 3.689452927770522, slit_length: 1.0, slit_width: 4.0, standard: HD95126,
-#     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=8.874 (V_eq 8.87982), thru_curve_file: standards/HD95126_20141123.ecsv, thru_median_1117_1250: 0.2123613011587964,
-#     thru_median_1117_1260: 0.22351709443769224, zp_1200: 19.7245409156514, zp_1250: 19.787540006521883, zp_1300: 19.88155090630982}
+#     std_class: A0V, std_model: vega_tspectool_vacuum.dat J=8.874 (V_eq 8.87982), thru_curve_file: standards/HD95126_20141123.ecsv, thru_median_common: 0.2520798031359508,
+#     zp_hi: 19.88155090630982, zp_lo: 19.7245409156514, zp_mid: 19.787540006521883, zp_nodes_A: 12000/12500/13000}
 # - {pypeit_version: 2.0.2.dev1221+gbc18a3ba4}
 # - {keck_etcs_version: 0.2.5}
 # - {harvest_keck_etcs_version: 0.2.5}
@@ -43,6 +44,7 @@
 # - {filter_divided: true}
 # - {created: '2026-10-08T14:42:47Z'}
 # - {script: keck_etcs.calib.harvest}
+# - {row_columns_migrated: '2026-10-27T17:22:59Z (scripts/mosfire/migrate_standards_table.py, S23b)'}
 # schema: astropy-2.0
 wave zeropoint thru_raw filter_trans thru
 11042.0 0.05864683009350391 -1.0 "" ""

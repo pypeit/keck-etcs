@@ -415,18 +415,28 @@ python scripts/nautilus/backup_products.py --check-only
 ## 10. Cutting a calibration release
 
 A calibration release is one commit touching only `keck_etcs/data/` and
-`CHANGES.md`, tagged `mosfire-J-YYYY.MM` (design 5.5, D28).
+`CHANGES.md`, tagged `mosfire-YYYY.MM`: one tag for all band groups
+(design 5.5, D28, D49; `mosfire-J-YYYY.MM` before `mosfire-2026.10`).
+Throughput products are one file per band group and era,
+`mosfire_thru_<group>_<era>.ecsv`, each `index.yaml` entry listing the
+`bands` it covers.
 
 1. Reduce, sweep, sync back and verify the new nights (sections 6-8), then
    back up the batch (section 9).
 2. Merge the harvests:
    `python scripts/mosfire/harvest_sens.py --merge $KECK_ETCS_DATA/mosfire/<night>/harvest ...`.
 3. Set `CALIB_VERSION` in `scripts/mosfire/combine_throughput.py` and run
-   it. It rebuilds the era curves and updates their `index.yaml` entries.
+   it. It rebuilds the era curves of every band group that has rows and
+   updates their `index.yaml` entries. Then
+   `python scripts/mosfire/stamp_release.py <tag>` stamps the tag into
+   every other entry (the `provisional-*` placeholders excepted).
 4. Run the trend and monitor plots (`plot_throughput_trend.py`,
    `plot_monitor_trends.py`), then `verify_release.py`, which must print
    ALL CHECKS PASS.
-5. If `compute()` outputs change, run
+5. Run `python scripts/compare_release_outputs.py` (every example and
+   fixture, this tree against `git archive HEAD`, the previous release; a
+   table of the maximum relative difference per output field). If
+   `compute()` outputs change, run
    `scripts/regen_regression_fixtures.py --regen --note "..."`.
 6. Write the `CHANGES.md` section:
    - the standards added and excluded;

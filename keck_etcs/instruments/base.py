@@ -19,13 +19,40 @@ DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
 
 @dataclass(frozen=True)
 class Band:
-    """One spectroscopic band (filter plus grating setting)."""
+    """One spectroscopic band (filter plus grating setting).
+
+    The fields after ``notes`` were added for the Y/H/K extension (design
+    9.5, D58): a band belongs to a **group** (one grating order; the
+    filter-free throughput products are per group), and carries the
+    wavelengths that the calibration code used to hard-code for J:
+    the zero-point nodes of the harvest row (``zp_lo/mid/hi``), the group's
+    common window (band medians, the 3-MAD test, the era splice), the PWV
+    windows of the harvest's Gemini match, the combine rules (edge trim and
+    the A0V blue cut) and the LSF rule. ``lsf`` is a dict ``{'slope',
+    'floor_pix', 'form', 'provisional', 'provenance'}`` or None (then the
+    instrument's rule applies, with a warning). ``footprint_provisional``
+    marks a footprint taken from a nominal coverage rather than measured.
+    """
     name: str
     filter_file: str                    # relative to DATA_DIR
     dispersion_A_per_pix: float
     footprint_A: tuple                  # detector coverage at the long-slit position (N2)
     clean_window_A: tuple = None        # contamination-free part, where one is defined
     notes: str = ''
+    group: str = None                   # grating order group (Y, J, H, K); defaults to the name
+    order: int = None                   # grating order
+    zp_nodes_A: tuple = None            # harvest zero-point nodes (lo, mid, hi)
+    common_window_A: tuple = None       # the group's common window (combine, trend, splice)
+    pwv_window_A: tuple = None          # ((lo, hi), ...) windows of the PWV match; None = whole curve
+    pwv_weak: bool = False              # the PWV estimate is weak in this band (flag = pwv_weak)
+    edge_trim_frac: float = None        # combine: keep where the filter >= this fraction of its peak
+    a0v_min_wave_A: float = None        # combine: keep A0V rows redward of this
+    lsf: dict = None                    # LSF rule of the band (see above)
+    footprint_provisional: bool = False
+
+    @property
+    def group_name(self):
+        return self.group or self.name
 
 
 @dataclass(frozen=True)
@@ -33,7 +60,8 @@ class Era:
     """A period of fixed instrument optics (D6); ``end`` None means open.
 
     ``name`` is the label echoed in outputs (``2017-02..2025-02``); ``tag``
-    names its throughput file (``mosfire_thru_<tag>.ecsv``).
+    names its throughput files (``mosfire_thru_<group>_<tag>.ecsv``, one per
+    band group; D49).
     """
     name: str
     tag: str
@@ -55,7 +83,8 @@ class Instrument:
     detector_file: str
     sky_grid_file: str
     lsf_file: str = None
-    throughput_pattern: str = None      # per-era curve, e.g. 'mosfire/throughput/mosfire_thru_{tag}.ecsv' (S10)
+    throughput_pattern: str = None      # per-era, per-group curve: 'mosfire/throughput/mosfire_thru_{group}_{tag}.ecsv' (S10, S23)
+    throughput_provisional_pattern: str = None   # a group's placeholder curve when no era has one (S23a)
     moffat_beta: float = 3.5
     gaps: tuple = ()                    # (start, end, warning) periods inside or between eras
     lsf_form: str = 'max'               # D25 rule: 'max' or 'quadrature' (keck_etcs.core.lsf.fwhm_pix)
@@ -115,81 +144,130 @@ class Instrument:
             return yaml.safe_load((DATA_DIR / 'index.yaml').read_text()) or {}
         return self._load('index', load)
 
-    def throughput_file(self, era):
-        """Path (relative to ``DATA_DIR``) of an era's throughput curve."""
-        return self.throughput_pattern.format(tag=era.tag)
+    # ------------------------------------------------------------ band groups
+    def group_of(self, band):
+        """The group (grating order) of a band name."""
+        return self.bands[band].group_name
 
-    def throughput(self, era):
-        """Filter-free system throughput for an era (design 4.5).
+    def group_bands(self, group):
+        """Names of the bands in a group, in definition order."""
+        return [b for b, band in self.bands.items() if band.group_name == group]
+
+    def common_window(self, group):
+        """The group's common window (A), from its first band that defines one; else :data:`SPLICE_WINDOW`."""
+        for b in self.group_bands(group):
+            if self.bands[b].common_window_A is not None:
+                return tuple(float(x) for x in self.bands[b].common_window_A)
+        return self.SPLICE_WINDOW
+
+    def throughput_file(self, era, group='J'):
+        """Path (relative to ``DATA_DIR``) of a group's throughput curve for an era.
+
+        The pattern must name the group (``{group}``; D49): a throughput
+        product belongs to one grating order, and a pattern without the
+        placeholder would let every group read the same file.
+        """
+        if '{group}' not in self.throughput_pattern:
+            raise ValueError(f'{self.name}: throughput_pattern {self.throughput_pattern!r} has no {{group}} '
+                             'placeholder; throughput products are per band group (D49)')
+        return self.throughput_pattern.format(tag=era.tag, group=group)
+
+    def _throughput_exists(self, era, group):
+        rel = self.throughput_file(era, group)
+        return rel is not None and (DATA_DIR / rel).exists()
+
+    def throughput_provisional_file(self, group):
+        """Path of the group's placeholder curve (None when the instrument has no such pattern)."""
+        if self.throughput_provisional_pattern is None:
+            return None
+        return self.throughput_provisional_pattern.format(group=group)
+
+    def throughput(self, era, group='J'):
+        """Filter-free system throughput of a band group for an era (design 4.5).
 
         If the era has no curve yet, the nearest era that has one is used
-        (the earlier one on a tie), with a warning.
+        (the earlier one on a tie), with a warning. If no era of the group has
+        a curve, the group's provisional curve
+        (:attr:`throughput_provisional_pattern`; a placeholder such as the
+        XTcalc 2012 efficiency, S23a) is used with a ``PROVISIONAL`` warning.
 
         Returns:
-            dict: ``wave_A``, ``thru``, ``era`` (the era actually used),
-            ``file``, ``calib_version``, ``pypeit_version``, ``valid_range_A``
-            and ``warnings``.
+            dict: ``wave_A``, ``thru``, ``era`` (the era actually used; None
+            for a provisional curve), ``file``, ``calib_version``,
+            ``pypeit_version``, ``valid_range_A``, ``provisional`` and
+            ``warnings``.
 
         Raises:
-            FileNotFoundError: if no era has a throughput curve.
+            FileNotFoundError: if no era has a throughput curve and there is
+            no provisional curve either.
         """
         def load():
             from astropy.table import Table
             i = self.eras.index(era)
             order = sorted(range(len(self.eras)), key=lambda j: (abs(j - i), j > i))
-            have = [j for j in order if (DATA_DIR / self.throughput_file(self.eras[j])).exists()]
-            if not have:
-                raise FileNotFoundError(f'no throughput curve for any {self.name} era')
-            used = self.eras[have[0]]
-            rel = self.throughput_file(used)
+            have = [j for j in order if self._throughput_exists(self.eras[j], group)]
+            provisional = False
+            if have:
+                used = self.eras[have[0]]
+                rel = self.throughput_file(used, group)
+                warnings = [] if used == era else [f'no throughput curve yet for era {era.name}; using era {used.name}']
+            else:
+                rel = self.throughput_provisional_file(group)
+                if rel is None or not (DATA_DIR / rel).exists():
+                    raise FileNotFoundError(f'no throughput curve for any {self.name} era of group {group}')
+                used, provisional = None, True
+                warnings = [f'PROVISIONAL throughput for the {group} band group ({rel}): no standard has been '
+                            f'reduced in this group yet; the curve is a placeholder, not a measurement']
             t = Table.read(DATA_DIR / rel, format='ascii.ecsv')
             entry = self.index().get('files', {}).get(rel, {})
-            warnings = [] if used == era else [f'no throughput curve yet for era {era.name}; using era {used.name}']
             versions = t.meta.get('pypeit_versions') or [entry.get('pypeit_version', 'unknown')]
             return {'wave_A': np.asarray(t['wave'], float), 'thru': np.asarray(t['thru_median'], float),
-                    'era': used, 'file': rel, 'warnings': warnings,
+                    'era': used, 'file': rel, 'warnings': warnings, 'provisional': provisional,
                     'calib_version': str(entry.get('calib_version', t.meta.get('calib_version', 'unknown'))),
                     'pypeit_version': ','.join(str(v) for v in versions),
                     'valid_range_A': tuple(t.meta.get('valid_range_A', (float(t['wave'][0]), float(t['wave'][-1]))))}
-        return self._load(('throughput', era.name), load)
+        return self._load(('throughput', group, era.name), load)
 
     SPLICE_WINDOW = (11900.0, 12450.0)
-    """Where an era's curve and a donor era's curve are compared to scale the donor (as
-    ``keck_etcs.calib.trend.COMMON_WINDOW``)."""
+    """Default splice window (the J group's common window), used for a group whose bands define no
+    ``common_window_A``. :meth:`throughput_for_window` compares an era's curve and a donor era's curve
+    over the group's :meth:`common_window` to scale the donor."""
 
-    def throughput_for_window(self, era, lo, hi, margin=0.0):
+    def throughput_for_window(self, era, lo, hi, margin=0.0, group='J'):
         """The era's throughput (:meth:`throughput`), completed over ``lo``-``hi`` where it is not measured.
 
         An era's curve covers only its standards' filters (2025-04..: one J2
         night, 11171-12462 A; 2012-04..2016-09: J only, from 11633 A). Where
         the window extends more than ``margin`` beyond the curve's
         ``valid_range_A``, the uncovered wavelengths are taken from the
-        nearest other era whose curve covers them, scaled by the median ratio
-        of the two curves over :data:`SPLICE_WINDOW`, with a warning. Without
-        such an era the edge value is held (the caller warns).
+        nearest other era **of the same group** whose curve covers them,
+        scaled by the median ratio of the two curves over the group's
+        :meth:`common_window`, with a warning. Without such an era the edge
+        value is held (the caller warns). A provisional curve is never
+        spliced.
 
         Returns:
             dict: as :meth:`throughput`, plus ``spliced`` (list of
             ``(era name, lo, hi, scale)``) and ``covered_A`` (the range now
             covered).
         """
-        th = dict(self.throughput(era))
+        th = dict(self.throughput(era, group))
         th['warnings'] = list(th['warnings'])
         th['spliced'] = []
         t_lo, t_hi = th['valid_range_A']
-        if lo >= t_lo - margin and hi <= t_hi + margin:
+        if th['provisional'] or (lo >= t_lo - margin and hi <= t_hi + margin):
             th['covered_A'] = (t_lo, t_hi)
             return th
         wave, thru = th['wave_A'], th['thru']
         i = self.eras.index(th['era'])
         order = sorted((j for j in range(len(self.eras)) if j != i), key=lambda j: (abs(j - i), j > i))
-        s_lo, s_hi = self.SPLICE_WINDOW
+        s_lo, s_hi = self.common_window(group)
         mine = (wave >= s_lo) & (wave <= s_hi)
         for j in order:
             other = self.eras[j]
-            if not (DATA_DIR / self.throughput_file(other)).exists():
+            if not self._throughput_exists(other, group):
                 continue
-            d = self.throughput(other)
+            d = self.throughput(other, group)
             if d['era'] != other or not mine.any():
                 continue
             o_lo, o_hi = d['valid_range_A']
@@ -236,16 +314,43 @@ class Instrument:
         d = self.detector()
         return core_detector.read_noise(n, d['n_reads'], d['read_noise_e']), warnings
 
-    def lsf_fwhm_pix(self, slit_width, tol=0.01):
-        """``(FWHM_pix, source)``: the median measured FWHM for this slit width, else the D25 rule."""
+    def lsf_rule(self, band=None):
+        """``(slope, floor_pix, form, provisional, provenance)`` of the LSF rule for a band (D25, D59).
+
+        A band's own ``lsf`` dict wins; otherwise the instrument's rule, marked
+        provisional when a band was named (it was fitted on another band).
+        """
+        b = self.bands.get(band) if band is not None else None
+        if b is not None and b.lsf is not None:
+            d = b.lsf
+            return (float(d['slope']), float(d['floor_pix']), d.get('form', self.lsf_form),
+                    bool(d.get('provisional', False)), str(d.get('provenance', '')))
+        return self.lsf_slope, self.lsf_floor_pix, self.lsf_form, band is not None, 'instrument rule'
+
+    def lsf_fwhm_pix(self, slit_width, band=None, tol=0.01):
+        """``(FWHM_pix, source)``: the median measured FWHM for this slit width, else the D25 rule.
+
+        With ``band``, only measured rows of that band's group count (the
+        ``filter`` column of the LSF table; D59), and the band's own rule is
+        used when there is no measurement. ``source`` starts with
+        ``measured`` or names the rule, with ``(provisional)`` appended when
+        the rule was fitted on another band.
+        """
         rows = [r for r in self.lsf_measurements() if abs(float(r['slit_width']) - slit_width) <= tol]
+        if band is not None:
+            group = self.group_of(band)
+            rows = [r for r in rows if str(r.get('filter', '')) in self.group_bands(group)
+                    or self.bands.get(str(r.get('filter', ''))) is None and str(r.get('filter', '')) == group]
         if rows:
             fw = float(np.median([r['fwhm_pix'] for r in rows]))
             return fw, f'measured ({len(rows)} row(s) of {self.lsf_file})'
         from keck_etcs.core.lsf import fwhm_pix
-        rule = (f'sqrt((w / {self.lsf_slope})^2 + {self.lsf_floor_pix}^2) (D25)' if self.lsf_form == 'quadrature'
-                else f'max(w / {self.lsf_slope}, {self.lsf_floor_pix}) (D25)')
-        return fwhm_pix(slit_width, self.lsf_slope, self.lsf_floor_pix, form=self.lsf_form), rule
+        slope, floor, form, provisional, _ = self.lsf_rule(band)
+        rule = (f'sqrt((w / {slope})^2 + {floor}^2) (D25)' if form == 'quadrature'
+                else f'max(w / {slope}, {floor}) (D25)')
+        if provisional:
+            rule += ' (provisional)'
+        return fwhm_pix(slit_width, slope, floor, form=form), rule
 
     def era_for_date(self, date=None):
         """``(Era, warnings)`` for an ISO date; None gives the latest era.

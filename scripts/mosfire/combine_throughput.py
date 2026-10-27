@@ -5,14 +5,20 @@ Usage:
     conda run -n pypeit14b python scripts/mosfire/combine_throughput.py
 
 Reads ``keck_etcs/data/mosfire/throughput/standards.ecsv`` and its curves,
-combines each era of ``keck_etcs.instruments.mosfire`` that has standards
-with ``keck_etcs.calib.combine.combine_era``, and writes
-``keck_etcs/data/mosfire/throughput/mosfire_thru_<era tag>.ecsv`` (``wave,
-thru_median, thru_mad, n_std``), registered in ``keck_etcs/data/index.yaml``
-under ``calib_version = mosfire-J-2026.10-dev``. Nights excluded by the
+combines, for every band group that has rows (design D49: J = J/J2 today),
+each era of ``keck_etcs.instruments.mosfire`` that has standards with
+``keck_etcs.calib.combine.combine_era``, and writes
+``keck_etcs/data/mosfire/throughput/mosfire_thru_<group>_<era tag>.ecsv``
+(``wave, thru_median, thru_mad, n_std``; ``Instrument.throughput_file``),
+registered in ``keck_etcs/data/index.yaml`` under ``calib_version =
+CALIB_VERSION`` with the ``bands`` the file covers. Nights excluded by the
 3-MAD rule get ``excluded_3mad`` in their ``flag`` in ``standards.ecsv``.
-Eras without standards get no file; ``compute`` then uses the nearest era
-that has one, with a warning.
+Eras without standards get no file; ``compute`` then uses the nearest era of
+the group that has one, with a warning, or the group's provisional
+placeholder when no era has one (S23a).
+
+Set ``CALIB_VERSION`` to the release tag (``mosfire-YYYY.MM``) before a
+release (``nautilus/README.md`` section 10).
 """
 import datetime
 import hashlib
@@ -31,7 +37,7 @@ from keck_etcs.instruments.mosfire import MOSFIRE
 REPO = Path(__file__).resolve().parents[2]
 THRU = DATA_DIR / 'mosfire' / 'throughput'
 INDEX = DATA_DIR / 'index.yaml'
-CALIB_VERSION = 'mosfire-J-2026.10'
+CALIB_VERSION = 'mosfire-2026.10'
 SCRIPT = 'scripts/mosfire/combine_throughput.py'
 
 
@@ -54,36 +60,45 @@ def main():
         filters[band] = (f['wave_A'], f['transmission'], tuple(f['meta']['half_power_A']))
     now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     entries, excluded = {}, []
-    for era in MOSFIRE.eras:
-        t, info = combine_era(rows, curves, era, filters)
-        if t is None:
-            print(f'era {era.name}: no standards; no file')
-            continue
-        excluded += [(str(p['row']['standard']), str(p['row']['date'])) for p in info['excluded']]
-        t.meta = {
-            'description': f'MOSFIRE filter-free throughput (telescope + spectrograph + detector), era {era.name} '
-                           '(design 4.5): pixel-wise median of the standards',
-            'instrument': 'keck_mosfire', 'band': 'J grating, filter-free (J, J2)',
-            **t.meta,
-            'n_standards': len(info['used']), 'calib_version': CALIB_VERSION,
-            'keck_etcs_version': keck_etcs.__version__, 'created': now, 'script': SCRIPT,
-            'source_table': 'mosfire/throughput/standards.ecsv',
-        }
-        rel = MOSFIRE.throughput_file(era)
-        t.write(DATA_DIR / rel, format='ascii.ecsv', overwrite=True)
-        entries[rel] = {
-            'calib_version': CALIB_VERSION, 'created': now,
-            'sha256': hashlib.sha256((DATA_DIR / rel).read_bytes()).hexdigest(), 'script': SCRIPT,
-            'pypeit_version': ','.join(t.meta['pypeit_versions']),
-            'provenance': f"era {era.name}: median of {len(info['used'])} standard(s) "
-                          f"({', '.join(s['standard'] + ' ' + s['date'] for s in t.meta['standards'])}); "
-                          f"images {', '.join(t.meta['images'])}; PypeIt {', '.join(t.meta['pypeit_git_shas'])}"}
-        print(f"era {era.name}: {len(info['used'])} standard(s), {len(info['excluded'])} excluded; "
-              f"{t.meta['valid_range_A'][0]:.0f}-{t.meta['valid_range_A'][1]:.0f} A; band median "
-              f"{t.meta['band_median_era']}; {t.meta['filter_handling']}; images {t.meta['images']} -> {rel}")
-        for lam in (11200, 11500, 12000, 12400):
-            if t['wave'][0] <= lam <= t['wave'][-1]:
-                print(f'    {lam} A: thru {np.interp(lam, t["wave"], t["thru_median"]):.4f}')
+    groups = sorted({MOSFIRE.group_of(str(b)) for b in rows['filter']})
+    for group in groups:
+        group_bands = MOSFIRE.group_bands(group)
+        window = MOSFIRE.common_window(group)
+        nodes = next(MOSFIRE.bands[b].zp_nodes_A for b in group_bands if MOSFIRE.bands[b].zp_nodes_A)
+        for era in MOSFIRE.eras:
+            # per-band rules (common window, edge trim, A0V cut) from the instrument module (S23a)
+            t, info = combine_era(rows, curves, era, filters, bands=MOSFIRE.bands, group=group)
+            if t is None:
+                print(f'group {group}, era {era.name}: no standards; no file')
+                continue
+            excluded += [(str(p['row']['standard']), str(p['row']['date'])) for p in info['excluded']]
+            t.meta = {
+                'description': f'MOSFIRE filter-free throughput (telescope + spectrograph + detector), '
+                               f'{group} band group, era {era.name} (design 4.5): pixel-wise median of the standards',
+                'instrument': 'keck_mosfire', 'band_group': group, 'bands': list(group_bands),
+                'band': f'{group} grating order, filter-free ({", ".join(group_bands)})',
+                'common_window_A': [float(window[0]), float(window[1])],
+                **t.meta,
+                'n_standards': len(info['used']), 'calib_version': CALIB_VERSION,
+                'keck_etcs_version': keck_etcs.__version__, 'created': now, 'script': SCRIPT,
+                'source_table': 'mosfire/throughput/standards.ecsv',
+            }
+            rel = MOSFIRE.throughput_file(era, group)
+            t.write(DATA_DIR / rel, format='ascii.ecsv', overwrite=True)
+            entries[rel] = {
+                'calib_version': CALIB_VERSION, 'bands': list(group_bands), 'created': now,
+                'sha256': hashlib.sha256((DATA_DIR / rel).read_bytes()).hexdigest(), 'script': SCRIPT,
+                'pypeit_version': ','.join(t.meta['pypeit_versions']),
+                'provenance': f"{group} group, era {era.name}: median of {len(info['used'])} standard(s) "
+                              f"({', '.join(s['standard'] + ' ' + s['date'] for s in t.meta['standards'])}); "
+                              f"images {', '.join(t.meta['images'])}; PypeIt {', '.join(t.meta['pypeit_git_shas'])}"}
+            print(f"group {group}, era {era.name}: {len(info['used'])} standard(s), {len(info['excluded'])} excluded; "
+                  f"{t.meta['valid_range_A'][0]:.0f}-{t.meta['valid_range_A'][1]:.0f} A; band median "
+                  f"{t.meta['band_median_era']} ({window[0]:.0f}-{window[1]:.0f} A); {t.meta['filter_handling']}; "
+                  f"images {t.meta['images']} -> {rel}")
+            for lam in sorted(set(nodes) | {window[0], window[1]}):
+                if t['wave'][0] <= lam <= t['wave'][-1]:
+                    print(f'    {lam:.0f} A: thru {np.interp(lam, t["wave"], t["thru_median"]):.4f}')
     if excluded:
         for r in rows:
             if (str(r['standard']), str(r['date'])) in excluded and 'excluded_3mad' not in str(r['flag']):

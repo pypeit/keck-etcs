@@ -11,15 +11,24 @@ For one instrument era, on the common 1 A grid of the harvest
   division amplifies any mismatch between the filter curve and the
   instrument's real cut-on and cut-off. Since the first release (plan S16)
   a J row is further limited to where the J filter is at least 0.9 of its
-  peak, and an A0V row to wavelengths redward of 11900 A
-  (:data:`EDGE_TRIM_FRAC`, :data:`A0V_MIN_WAVE`);
+  peak, and an A0V row to wavelengths redward of 11900 A. Since S23a (part
+  H) these rules are read per band from the instrument module
+  (``Band.edge_trim_frac``, ``Band.a0v_min_wave_A``; design D49): J 0.9 and
+  11900 A, J2 no trim and 11900 A (as built), Y, H and K 0.9 and no A0V
+  cut yet. The module constants :data:`COMMON_WINDOW`,
+  :data:`EDGE_TRIM_FRAC` and :data:`A0V_MIN_WAVE` are the J values, used
+  when :func:`combine_era` is called without ``bands``;
 - each night's band median is compared with the era median of band
   medians; nights more than 3 MAD away are excluded whole (D22). This needs
-  at least 3 nights, since the MAD of fewer is not meaningful. The band
-  median is taken over :data:`COMMON_WINDOW` (inside both the J and the J2
-  half-power bands), so that nights through different filters are compared
-  over the same wavelengths (plan S16); a curve without samples there uses
-  its whole band;
+  at least 3 nights, since the MAD of fewer is not meaningful. A row that an
+  earlier combine already flagged ``excluded_3mad`` in the table takes no
+  part in the statistics and is reported as excluded again (so a rerun
+  gives the same product and the same ``meta``). The band
+  median is taken over the group's common window (``Band.common_window_A``;
+  for J, :data:`COMMON_WINDOW` = 11900-12450 A, inside both the J and the
+  J2 half-power bands), so that nights through different filters are
+  compared over the same wavelengths (plan S16); a curve without samples
+  there uses its whole band;
 - per pixel: the median of the remaining curves (``thru_median``), their
   median absolute deviation (``thru_mad``, NaN with one curve) and the count
   (``n_std``);
@@ -45,6 +54,19 @@ MIN_FOR_CLIP = 3
 # white dwarfs) while the classes agree at 12000 A: an A0V row is kept only redward of A0V_MIN_WAVE.
 EDGE_TRIM_FRAC = {'J': 0.9}
 A0V_MIN_WAVE = 11900.0
+
+
+def rules_for(filter_name, bands=None):
+    """``(common_window, edge_frac, a0v_min_wave)`` for a row's filter.
+
+    From ``bands`` (name -> ``Band``, the instrument module) when the filter
+    is defined there; else the J constants above.
+    """
+    b = bands.get(str(filter_name)) if bands else None
+    if b is None:
+        return COMMON_WINDOW, EDGE_TRIM_FRAC.get(str(filter_name)), A0V_MIN_WAVE
+    return (tuple(b.common_window_A) if b.common_window_A is not None else COMMON_WINDOW,
+            b.edge_trim_frac, b.a0v_min_wave_A)
 
 
 def in_era(date, era):
@@ -87,7 +109,7 @@ def filter_free(curve, filter_wave, filter_trans, half_power, edge_frac=None, mi
     return wave, np.where(inside, thru, np.nan), how
 
 
-def combine_era(rows, curves, era, filters):
+def combine_era(rows, curves, era, filters, bands=None, group=None):
     """Combine the standards of one era.
 
     Args:
@@ -95,26 +117,36 @@ def combine_era(rows, curves, era, filters):
         curves (dict): ``thru_curve_file`` -> curve table.
         era: an ``Era`` (``name``, ``start``, ``end``).
         filters (dict): band -> ``(wave_A, transmission, (half_lo, half_hi))``.
+        bands (dict, optional): band name -> ``Band`` (the instrument
+            module); gives the per-band rules (:func:`rules_for`). Without
+            it the J constants apply to every row.
+        group (str, optional): keep only rows whose band belongs to this
+            group (needs ``bands``); one product per group (D49).
 
     Returns:
         tuple: ``(table, info)``; ``table`` has ``wave, thru_median,
         thru_mad, n_std`` (None if the era has no usable standard) and
         ``info`` the per-row decisions.
     """
-    sel = [r for r in rows if in_era(r['date'], era) and 'excluded' not in str(r['flag'])]
+    in_group = (lambda r: True) if group is None else (
+        lambda r: bool(bands) and str(r['filter']) in bands and bands[str(r['filter'])].group_name == group)
+    sel = [r for r in rows if in_era(r['date'], era) and 'excluded' not in str(r['flag']) and in_group(r)]
+    prior = [r for r in rows if in_era(r['date'], era) and 'excluded_3mad' in str(r['flag']) and in_group(r)]
     per_row = []
-    for r in sel:
+    for r in sel + prior:
         fw, ft, hp = filters[str(r['filter'])]
+        window, edge_frac, a0v_min = rules_for(r['filter'], bands)
         w, t, how = filter_free(curves[str(r['thru_curve_file'])], fw, ft, hp,
-                                edge_frac=EDGE_TRIM_FRAC.get(str(r['filter'])),
-                                min_wave=A0V_MIN_WAVE if ('std_class' in r.colnames
-                                                          and str(r['std_class']) == 'A0V') else None)
-        common = (w >= COMMON_WINDOW[0]) & (w <= COMMON_WINDOW[1]) & np.isfinite(t)
+                                edge_frac=edge_frac,
+                                min_wave=a0v_min if ('std_class' in r.colnames
+                                                     and str(r['std_class']) == 'A0V') else None)
+        common = (w >= window[0]) & (w <= window[1]) & np.isfinite(t)
         use = common if common.any() else np.isfinite(t)
         per_row.append({'row': r, 'wave': w, 'thru': t, 'how': how,
                         'band_median': float(np.median(t[use])) if use.any() else np.nan})
     per_row = [p for p in per_row if np.isfinite(p['band_median'])]
-    info = {'excluded': [], 'used': []}
+    info = {'excluded': [p for p in per_row if any(p['row'] is r for r in prior)], 'used': []}
+    per_row = [p for p in per_row if not any(p['row'] is r for r in prior)]
     if not per_row:
         return None, info
     bm = np.array([p['band_median'] for p in per_row])

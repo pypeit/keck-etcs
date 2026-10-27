@@ -1551,7 +1551,12 @@ to 1e-6); the Y/H/K tag of S27 is a second release.
 
 **P3 = D50 (Q51, agreed), KOA census.** `scripts/koa/search_mosfire_standards.py` gains
 `--filters` (its `BASE_WHERE` is J-only today) and records the 2MASS H and
-Ks magnitudes beside J. The selection rules of 4.1 are unchanged: wide
+Ks magnitudes beside J. The candidate rows of every band go into the one
+table `keck_etcs/data/mosfire/koa_standards_candidates.ecsv` with a
+`filter` column (H-1 in the H prompt doc); the table is per instrument,
+so the other Keck instruments that join later each get their own under
+`keck_etcs/data/<instrument>/`, with instrument-neutral column names.
+The selection rules of 4.1 are unchanged: wide
 slits (>= 3", in practice `long2pos_specphot`) for throughput, a wavelength
 calibrator on the night (narrow-slit OH frames >= 55 s in the band, or
 Ne/Ar arcs on the long2pos mask), flats in the band. CALSPEC white dwarfs
@@ -1819,8 +1824,9 @@ The plan (`docs/keck_mosfire_implementation.md`, v0.5) adds **Phase 7** as
 steps S23-S27 in the agreed order: **S23** band-neutral refactor (P2, P7,
 P8, P11, the census re-run with `--filters Y,H,K`, the dev-suite reference
 reductions of P9, the J rename and regeneration, the J-only tag of Q68);
-**S24** H; **S25** K (plus the thermal term, `TUBETEMP` and the saturation
-fraction); **S26** Y (plus the Moon cut); **S27** release and docs. The
+**S24** H (plus the saturation fraction, which H needs most; H-4 in the H
+prompt doc); **S25** K (plus the thermal term and `TUBETEMP`); **S26** Y
+(plus the Moon cut); **S27** release and docs. The
 prompt docs are one per band, as the user asked:
 `keck_mosfire_prompt_H.md` (S23 and S24), `keck_mosfire_prompt_K.md` (S25)
 and `keck_mosfire_prompt_Y.md` (S26 and S27), to be run in that order.
