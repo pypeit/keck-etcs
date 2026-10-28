@@ -10,6 +10,50 @@ fed it.
 
 ## Code (unreleased, after 0.2.5)
 
+- **Reference reductions, footprints, multi-band layout and gates (S23d;
+  D52, D55, D56, D59, D60; "Other bands" part H prompt 4):**
+  - the dev-suite reference nights `longslit_3x0.7_H`, `longslit_3x0.7_K`,
+    `K_long` and `long2pos1_H` reduced with `reduce_standard.py` inside the
+    0.2.5 image (PypeIt at the pin; the `pypeit14b` checkout is on another
+    branch), with the current repository mounted. The **H and K
+    footprints** are measured and frozen (`H_FOOTPRINT_A` 14650.5-17970.7 A,
+    1.6284 A/pix; `K_FOOTPRINT_A` 19535.9-23991.1 A, 2.1850 A/pix; the
+    K_long night gives 19529.7-23957.1 A), the LSF rows for H and K at 0.7"
+    (2.560 and 2.613 pix, against the J rule's 2.627) and K at 1.5" (5.370
+    against 5.249) are in `lsf_measurements.ecsv` (columns `ref_wave_A`,
+    `fwhm_A_ref`, `R_ref` replace the J-specific `fwhm_A_1250`, `R_1250`),
+    and the first K thermal-continuum fits exist (`scripts/mosfire/fit_thermal_continuum.py`:
+    `eps_eff` 0.47 on 2012-11-28 at 1.6 C and 0.23 on 2019-10-13 at 4.8 C
+    against the provisional XTcalc throughput, with a spectral shape
+    flatter than a 275 K grey body; D60 to be revisited in part K).
+  - **PypeIt defect at the pin** (`nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch`):
+    `pypeit_sensfunc` crashes on a spec1d of a short long slit
+    (`LONGSLIT-3x0.7`) because `config_specific_par` splits a `slitrange`
+    that the spec1d header cannot yield; the patch reads the header's
+    `SLITRANGE` card. Applied inside the image for the reference sensfuncs;
+    the next pin carries it.
+  - **D52 check:** PypeIt's IR algorithm does not use `hydrogen_mask_wid`
+    (only UVIS does), and the Vega model leaves no Brackett residual on
+    HIP 17971 in H (`scripts/mosfire/brackett_mask_check.py`: data-minus-fit
+    rms 0.019 mag at Br10-18 against 0.018 in the continuum), so the H and
+    K `.sens` files (`keck_mosfire_{H,K}.sens`, provisional: polyorder 5,
+    `tell_npca` 3) carry no mask line.
+  - **Layout (D55):** `keck_etcs.paths.night_dir`/`s3_prefix` take `band`;
+    Y, H and K products live under `mosfire/<night>/<band>/`, the raw
+    frames are shared, J is unchanged. `reduce_standard.py` (also:
+    standards as their own OH arcs when no other on-sky frame exists;
+    lamp-calibrated `long2pos`; PypeIt's object-finding defaults on
+    `long2pos`; `pypeit_setup` run in `redux/`), `build_sensfunc.py`
+    (per-band `.sens`), `gates.py` (windows and throughput range from
+    `mosfire.gate_windows`), `harvest_sens.py`, `measure_lsf.py`,
+    `stage_reference.py`, `verify_nights.py`, `status_table.py` and the
+    status rows take `--band`/`$BAND`. Manifests gain a `band` column, one
+    row per (night, band) (`make_night_manifest.py`; `nights_dryrun_HK.csv`
+    for the 2012-11-28 H and K dry runs); `download_mosfire_night.py`
+    merges a night's bands into one `raw/manifest.ecsv` (`--bands`);
+    `validate_job.yaml` gates each row against its own reference
+    (`GATES_REFERENCE=auto`). New `scripts/mosfire/measure_footprint.py`.
+
 - **KOA census per band (S23c; D50; "Other bands" part H prompt 3):**
   `scripts/koa/search_mosfire_standards.py --filters` (band groups `Y`,
   `J` = J/J2/J3, `H`, `K`, or KOA filter names; default `J` reproduces the

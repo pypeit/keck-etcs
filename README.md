@@ -10,7 +10,7 @@ NIR sky from the Gemini Maunakea models, and the detector terms from Keck's
 measured values. The ETCs can be refreshed as new data come in.
 
 The first instrument is **Keck/MOSFIRE, J and J2 long-slit spectroscopy**.
-The current code is `keck_etcs` 0.2.5, with calibration `mosfire-2026.10`.
+The current code is `keck_etcs` 0.2.6, with calibration `mosfire-2026.10`.
 The documentation, with an in-browser calculator, is at
 <https://keck-etcs.readthedocs.io/en/keck-mosfire/> (the `latest` version follows `main`
 once `keck-mosfire` is merged). The results are in
@@ -65,7 +65,7 @@ python bin/keck_etc examples/J_point.json --summary   # from a checkout without 
 `--summary` prints:
 
 ```
-keck_etcs 0.2.5 | keck_mosfire J | calib mosfire-2026.10 | era 2025-04..
+keck_etcs 0.2.6 | keck_mosfire J | calib mosfire-2026.10 | era 2025-04..
 window 11534.7-13522.1 A, 1539 pix at 1.2922 A/pix; LSF 2.63 pix (R 3687)
 ...
 band-median S/N per pixel 4.473, per resolution element 7.253

@@ -54,8 +54,10 @@ Contents:
 
 ```
 s3://keck-etcs/
-  mosfire/<YYYYMMDD>/raw/*.fits, manifest.ecsv     # KOA frames + per-frame manifest (sha256, SAMPMODE, ...)
-  mosfire/<YYYYMMDD>/redux/<night>.pypeit           # the pypeit file actually run
+  mosfire/<YYYYMMDD>/raw/*.fits, manifest.ecsv     # KOA frames + per-frame manifest (sha256, SAMPMODE, ...); every band of the night
+  mosfire/<YYYYMMDD>/<band>/...                     # Y, H, K products (redux, sens, harvest, run_manifest.json, run.log, gates.json,
+                                                    #   pypeit_pin_check.json, pod.log, reference/), one set per band (design D55, S23d)
+  mosfire/<YYYYMMDD>/redux/<night>.pypeit           # J, J2, J3 products stay at the night level (below)
   mosfire/<YYYYMMDD>/redux/Calibrations/            # WaveCalib*, Flat*, Edges*, Tilts*
   mosfire/<YYYYMMDD>/redux/Science/spec1d_*.fits    # spec1d always; spec2d only when SPEC2D=1
   mosfire/<YYYYMMDD>/redux/QA/                      # PypeIt QA PNGs
@@ -69,7 +71,14 @@ s3://keck-etcs/
 
 `$KECK_ETCS_DATA` (default `~/Projects/PypeIt/keck-etcs-data`) is the
 local mirror, with the same layout. `keck_etcs.paths.night_dir()` and
-`s3_prefix()` build the local path and the bucket key from the same parts.
+`s3_prefix()` build the local path and the bucket key from the same parts;
+both take `band=` (`night_dir('mosfire', date, band='H')` is
+`mosfire/<date>/H`, `night_dir(..., 'raw', band='H')` the shared
+`mosfire/<date>/raw`). The scripts that work on one night
+(`reduce_standard.py`, `build_sensfunc.py`, `gates.py`, `harvest_sens.py`,
+`measure_lsf.py`, `stage_reference.py`, `verify_nights.py`) take `--band`,
+defaulting to `$BAND` (then `$FILTER`), which the Job exports from the
+manifest's `band` column.
 `$KECK_ETCS_DATA/external/` (the XTcalc tarball) is local only.
 
 `scripts/nautilus/s3_sync.py` (boto3) is the local access path. It is
@@ -165,7 +174,8 @@ Images are about 2.2 GB.
     branch is not `develop`.
   - `pypeit_pin_allowlist.txt` lists the paths that may differ locally
     without affecting a MOSFIRE J reduction.
-- **Today:** the pin is `bc18a3b` on PypeIt's `etc-fixes` branch.
+- **Today:** the pin is `b0447b7` on PypeIt's `etc-fixes` branch
+  (image 0.2.6; `bc18a3b` for images 0.2.5 and earlier).
   - That branch is `develop` (`f3a1f1d`) plus the MOSFIRE fixes found while
     reducing:
     - `pypeit_cache_github_data`;
@@ -174,7 +184,11 @@ Images are about 2.2 GB.
     - `alignment_box_rows`;
     - `transfer_wavecal`;
     - `long2pos_bar_widths`;
-    - `construct_basename`.
+    - `construct_basename`;
+    - the read noise from `SAMPMODE`/`NUMREADS` (S17, `38bb1b7`);
+    - `SLITRANGE` from product headers in `config_specific_par`, so that
+      `pypeit_sensfunc` works on a short long slit (S23d, `b0447b7`;
+      `nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch`).
   - This is a recorded exception to D31 until `etc-fixes` merges into
     `develop`.
 - **`scripts/check_pypeit_pin.py`** checks the local checkout against the
@@ -248,8 +262,12 @@ through the in-cluster endpoint.
 
 **1. Write the night manifest.** Create
 `nautilus/manifests/nights_<batch>.csv`, with columns `night, instrument,
-s3_prefix, standard, slit, spec2d, notes`, from the KOA search
-(`scripts/koa/`). Push it to `s3://keck-etcs/manifests/`.
+s3_prefix, standard, slit, spec2d, notes` and the optional `std_class,
+jmag_2mass, std_ra, std_dec, filter, band`, from the KOA search
+(`scripts/koa/make_night_manifest.py`). One row per (night, band): a night
+observed in several bands is several rows, and `s3_prefix` is the band's
+product prefix (`mosfire/<night>` for J, J2, J3; `mosfire/<night>/<band>`
+for Y, H, K; design D55). Push it to `s3://keck-etcs/manifests/`.
 
 **2. Download the raw frames** (`koa_download_job.yaml`, D37):
 
@@ -268,6 +286,9 @@ python scripts/koa/download_mosfire_night.py --collect keck-etcs-koa-download --
   row; download failures are retried.
 - The local fallback is the same script with `--to-s3` on the
   workstation.
+- Each (night, band) row fetches its band's standard, flats and arcs into
+  the night's shared `raw/` and merges them into `raw/manifest.ecsv` by
+  KOA id, so a two-band night is two rows and one raw directory.
 
 **3. Reduce** (`night_job.yaml`, D33):
 
@@ -334,17 +355,34 @@ parallelism 4. Measured so far:
 The header of `night_job.yaml` keeps the table. Each pod's `USAGE` line
 and `run_manifest.json` `pod_usage` record the actual values.
 
-**Dry run** (`validate_job.yaml`: 2022-04-09 against the local reference,
-`backoffLimit: 0`; needed after any change to the reduction):
+**Dry run** (`validate_job.yaml`: each row of a dry-run manifest against
+its own reference `s3://keck-etcs/<s3_prefix>/reference` (`GATES_REFERENCE=auto`),
+`backoffLimit: 0`; needed after any change to the reduction). The J dry
+run is 2022-04-09 (`nights_dryrun.csv`); since S23d the H and K dry runs
+are the 2012-11-28 reference night of design D56 (`nights_dryrun_HK.csv`,
+two rows; set `spec.completions` to 2). KOA holds no H or K flats for that
+night, so its raw directory is the dev suite's (the 2012-11-28 standard
+frames with the 2013-10-15 dome flats), pushed from the workstation, and
+the references are the local reductions in the pinned image:
 
 ```
-python scripts/nautilus/stage_reference.py 20220409 --push
+python scripts/nautilus/stage_reference.py 20220409 --push                     # J
+python scripts/nautilus/s3_sync.py push mosfire/20121128/raw                  # H and K: the dev-suite frames
+python scripts/nautilus/stage_reference.py 20121128 --band H --push
+python scripts/nautilus/stage_reference.py 20121128 --band K --push
 kubectl -n pypeit create configmap keck-etcs-nights-dryrun \
-  --from-file=nights.csv=nautilus/manifests/nights_dryrun.csv --dry-run=client -o yaml | kubectl apply -f -
+  --from-file=nights.csv=nautilus/manifests/nights_dryrun_HK.csv --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n pypeit delete job keck-etcs-validate --ignore-not-found
-kubectl apply -f nautilus/validate_job.yaml
-kubectl -n pypeit logs -f job/keck-etcs-validate                 # GATES: PASS ... NIGHT_DONE
+kubectl apply -f nautilus/validate_job.yaml                                    # completions: 2
+kubectl -n pypeit logs -f job/keck-etcs-validate                 # GATES: PASS ... NIGHT_DONE, per pod
 ```
+
+The gates read their windows from the instrument module
+(`keck_etcs.instruments.mosfire.gate_windows`): the band group's common
+window for the zero point, its middle third for the `OPT_COUNTS`
+fidelity, and the throughput range 0.5-1.6x XTcalc's 2012 median (Y
+0.12-0.38, H 0.17-0.54, K 0.16-0.51); J keeps its S4b windows and
+0.15-0.45.
 
 ## 7. Sweeping failures
 

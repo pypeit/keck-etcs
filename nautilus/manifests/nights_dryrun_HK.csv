@@ -1,0 +1,3 @@
+night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,std_ra,std_dec,filter,band
+20121128,mosfire,mosfire/20121128/H,HIP17971,LONGSLIT-3x0.7,0,"S23d dry run (D56): dev-suite longslit_3x0.7_H raw frames (standard 2012-11-28, dome flats 2013-10-15) pushed to mosfire/20121128/raw; reference at mosfire/20121128/H/reference",A0V,8.005,57.633500,29.744600,H,H
+20121128,mosfire,mosfire/20121128/K,HIP17971,LONGSLIT-3x0.7,0,"S23d dry run (D56): dev-suite longslit_3x0.7_K raw frames (standard 2012-11-28, dome flats 2013-10-15) pushed to mosfire/20121128/raw; reference at mosfire/20121128/K/reference",A0V,8.005,57.633500,29.744600,K,K

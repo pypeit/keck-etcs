@@ -734,3 +734,206 @@ What I learned about the repository:
 - A `(align)` mask name (`LONGSLIT-46x1 (align)`) is grouped separately
   from the science mask in the validation table, so some nights appear
   twice for one target.
+
+### 2026-10-27 (Prompt #4 / S23d: reference reductions at the pin in the image, H and K footprints and LSFs frozen, Brackett and thermal checks, the multi-band layout and gates, the dry runs prepared)
+
+The prompt asked for Opus 5.5; this session ran on Claude Fable 5.1. No
+git command other than `git status`, `git log`, `git tag`, `git rev-parse
+HEAD` and `git diff --stat` was run. No new Q&A answers. The S23c commit
+(`654092c`) is in. Everything below is uncommitted.
+
+**Where "at the pin" was.** `scripts/check_pypeit_pin.py` FAILS in
+`pypeit14b`: its PypeIt is `/mnt/tank/Astronomy/PypeIt/PypeIt` at
+`53f64bb85` on the branch `speed_up_arcfit`, which does not contain the pin
+(`bc18a3b`), with `keck_mosfire.py`, `wavecalib.py` and 70 other files
+differing. I did not touch that checkout (git is yours). The 0.2.5 image
+(PypeIt at the pin, digest `69591fcb...`) is in the workstation's Docker,
+so every reference reduction ran inside it with this repository mounted
+read-only at `/opt/src/keck-etcs` and first on `PYTHONPATH`, the data root
+mounted at its host path, `KECK_ETCS_GIT_SHAS` set to the pin and this
+HEAD, `KECK_ETCS_IMAGE=local` (the products are not pod products) and a
+final `chown` to my user (the image runs as root; its PypeIt cache is not
+readable otherwise). The pin check inside runs in image mode and PASSES.
+The helper is in my scratch directory
+(`/tmp/claude-1000/-mnt-tank-Astronomy-PypeIt-keck-etcs/40acd4df-f2ae-49c4-84d6-43f9c4578882/scratchpad/run_in_image.sh`);
+it is not repository material.
+
+**Reference reductions (D56),** raw frames copied from the dev suite into
+`mosfire/20121128/raw/` (H and K share it), `20191013/raw/`, `20180718/raw/`;
+products under `mosfire/<night>/<band>/` (D55):
+
+| Setup | Night, band | Driver changes it needed | Result |
+|---|---|---|---|
+| `longslit_3x0.7_H` | 2012-11-28 H | the 2.9 s HIP 17971 frames typed `arc,standard,tilt` (their own OH lines; no other on-sky frame) as the dev-suite file does; `pypeit_setup` run in `redux/` (it logs into the cwd, read-only in the mount) | success, 150 s; wave RMS 0.066 pix; S/N 151-160 per frame |
+| `longslit_3x0.7_K` | 2012-11-28 K | the same | success, 184 s; RMS 0.037 pix; S/N 133-139 |
+| `K_long` | 2019-10-13 K | none | success, 483 s; RMS 0.091 pix; HIP 17971 S/N 140-144, Per-emb 25 S/N 7-12 |
+| `long2pos1_H` | 2018-07-18 H | lamp-calibrated long2pos path (Ne/Ar arcs typed `arc,tilt`, `[[wavelengths]]` from `keck_mosfire_arcs_H.fits`); PypeIt's object-finding defaults instead of the J2 template's `find_trim_edge = 10,10` (the star sat 10 pixels from the edge of a 41-pixel slit and was discarded, "no trace") | success, 142 s; arcs RMS 0.21 and 0.17 pix; **HIP 61138 extracted at S/N 2-9 only** |
+
+The long2pos star: the dev-suite `keck_mosfire_long2pos1_h.pypeit`, run
+as-is in the same image, extracts the same faint objects (S/N 2-6 at the
+same positions), so the driver reproduces PypeIt's reduction of that
+night and the weak extraction is PypeIt's long2pos handling (or the data),
+not the driver. The lamp-calibrated path itself works. Left for S24a; the
+H A0V sample is `long2pos_specphot`, the bar-split path of S15.
+
+**A PypeIt defect at the pin.** `pypeit_sensfunc` on the HIP 17971 spec1d
+crashed in `keck_mosfire.config_specific_par`: it splits
+`get_meta_value(header, 'slitrange')`, which is None for a product header
+of a short long slit (`LONGSLIT-3x0.7`: `find_longslit_pos` needs the CSU
+bar cards; the spec1d header carries `SLITRANGE` = `971:1099` instead).
+`LONGSLIT-46x` and long2pos masks return without those cards, which is
+why every J night passed. Fix: `nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch`
+(the `slitrange` branch of `compound_meta` returns the header's
+`SLITRANGE` when present); a unified diff against the pin's file, applied
+with `patch -p1` inside the image for the sensfunc runs below (not to your
+checkout). **Please** commit it on `etc-fixes` and move the pin, as the
+earlier patches went.
+
+**Measured (all from the image reductions):**
+
+- Footprints (`scripts/mosfire/measure_footprint.py`, new; frozen in
+  `mosfire.py` with file and sha256):
+  - H: `mosfire/20121128/H/redux/Calibrations/WaveCalib_A_1_DET01.fits`
+    (sha256 `6243190f...8bf26`): pixels 0-2039, **14650.5-17970.7 A**,
+    1.6284 A/pix. The nominal 14680-18040 was 30 A too narrow at the blue
+    end and 70 A too wide at the red. ETC window 14660.9-17970.7 A: the
+    filter sets the blue end, the detector the red (105 A of the filter
+    band fall off).
+  - K: `mosfire/20121128/K/redux/Calibrations/WaveCalib_A_1_DET01.fits`
+    (sha256 `6e9bbfd2...c54c5f`): **19535.9-23991.1 A**, 2.1850 A/pix
+    (nominal 19540-23970). `K_long` (46x1.5, 2019-10-13, sha256
+    `16070c6b...feb35b`): 19529.7-23957.1 A, 2.1713 A/pix: the K tilt
+    reproduces to about 35 A (16 pixels) at the red end between nights,
+    recorded as `K_FOOTPRINT_2019_A`. ETC window = the footprint (375 A of
+    the filter band fall off).
+  - `footprint_provisional` is off for H and K; `MONITOR['band_windows']`
+    updated; the ETC no longer warns about the H and K footprints.
+- LSF (`measure_lsf.py --band --record`; the script's `--record` had lost
+  its `sha256sum` import in the S6b refactor and never worked since, fixed):
+  H 0.7" **2.560 pix** (4.15 A, R 3976; 8 clean of 28 OH lines, the H
+  lines blend), K 0.7" **2.613 pix** (5.65 A, R 3803; 5 clean lines), K
+  1.5" (`K_long`) **5.370 pix** (11.6 A, R 1850; 17 lines). The J
+  quadrature rule gives 2.627 and 5.249 pix: -2.6, -0.5 and +2.3 percent,
+  so the rule holds in H and K to a few percent and the predicted 5
+  percent narrowing is not seen. `lsf_measurements.ecsv` now has one row
+  per (filter, date, slit): `ref_wave_A` (the band's middle node),
+  `fwhm_A_ref`, `R_ref` replace `fwhm_A_1250`, `R_1250` (J row values
+  unchanged). `lsf_fwhm_pix(0.7, 'H'|'K')` and `(1.5, 'K')` now return the
+  measured rows; the LSF warning for H and K stays only at other widths.
+- Sensfuncs of HIP 17971 (J-scaled A0V model, `--jmag 8.005`, 2MASS H
+  7.981 and Ks 7.887 recorded in the census; the band-scaled model is
+  prompt 5), provisional `keck_mosfire_{H,K}.sens` (polyorder 5, tell_npca
+  3): H zero point finite over 14651-17972 A, median end-to-end throughput
+  over 14900-17800 A **0.241** (0.7" slit, slit loss included; gate 0.17-0.54),
+  telluric PWV 1.0 mm; K finite over 19537-24007 A, **0.247** over
+  19800-23700 A (gate 0.16-0.51), PWV 0.6 mm. `gates.py --band H|K` on the
+  references: all four local gates PASS.
+- **Brackett mask (D52)** (`scripts/mosfire/brackett_mask_check.py`, new;
+  two `pypeit_sensfunc` runs on the H coadd with `hydrogen_mask_wid` 10
+  and 30): the two sensfuncs are identical to 1e-4 mag, because PypeIt's
+  **IR algorithm never uses `hydrogen_mask_wid`** (only
+  `flux_calib.standard_zeropoint`, the UVIS path, does); and the Vega
+  model leaves no Brackett residual: the per-pixel zero point minus the
+  fit has rms 0.019 mag within +-40 A of Br10-18 against 0.018 mag in the
+  continuum (ratio 1.08; per line 0.010-0.027). The H and K `.sens` files
+  carry no mask line (the header says why); design 9.3 records it.
+- **K thermal continuum (D60)** (`scripts/mosfire/fit_thermal_continuum.py`,
+  new; sky from the raw frames divided by the flat and the exposure time,
+  the Gemini model at the frame's airmass and 1.6 mm, both as 10th
+  percentile floors per 100 A over 2.15-2.40 um; T_sys the provisional
+  XTcalc curve; T = the night's median `TUBETEMP`):
+
+  | Night | Frames | TUBETEMP | floor measured 2.155 / 2.395 um | x model | eps_eff at T (275 K) | eps per bin 2.155 -> 2.395 |
+  |---|---|---|---|---|---|---|
+  | 2012-11-28 | 4 x 2.9 s HIP 17971, 0.7" | 1.59 C | 20.4 / 40.6 ph/s/arcsec^2/nm/m^2 | 35-40 | 0.468 (0.457) | 1.09 -> 0.27 |
+  | 2019-10-13 | 2 x 119 s Per-emb 25 + 2 x 2.9 s HIP 17971, 1.5" | 4.79 C | 8.8 / 38.6 | 13-18 | 0.226 (0.287) | 0.34 -> 0.19 |
+
+  The 2019 floor rises 4.4x across the band (XTcalc's 2012 spectrum: 2.7
+  to 21, 7.8x; a 275 K grey body: 7.8x); the 2012 short frames carry a
+  flat ~20 component at 2.15-2.25 um (a pedestal or read floor of a 2.9 s
+  frame: 35 e-) on top of the thermal rise. In both nights the excess is
+  flatter than a 275 K Planck, so one `eps_eff` at the tube temperature
+  does not describe the blue end of K: the D61 continuum excess and the
+  D60 thermal term overlap there and part K must fit them together, with
+  the measured T_sys. The red-end values (0.19-0.20 in 2019, 0.27-0.33 in
+  2012) sit 1.3-2x above the design's 0.12-0.15. Outputs:
+  `mosfire/<night>/K/thermal/thermal_<night>.{ecsv,json}`.
+
+**Nautilus side (D55).** `keck_etcs.paths.night_dir`/`s3_prefix` take
+`band` (`LEGACY_BANDS`: J, J2, J3 stay at the night level; `raw` shared);
+`reduce_standard.py` resolves the band from `--filter`/`$BAND`/`$FILTER`
+or the raw headers and writes under `mosfire/<night>/<band>/` with `band`
+and `raw_s3_prefix` in the manifest; `build_sensfunc.py --band` picks the
+band's `.sens` (`mosfire.sens_par_file`); `gates.py --band` reads the
+windows from `mosfire.gate_windows` (J keeps its S4b windows exactly;
+`LEGACY_GATE_WINDOWS`), the throughput range from `THRU_GATE_RANGE`
+(0.5-1.6x XTcalc per group) and passes the band to `inspect_sensfunc`
+(whose `inspect`, `compare` and `estimate_pwv` take a window and the
+band's PWV windows); `harvest_sens.py`, `measure_lsf.py`,
+`stage_reference.py`, `verify_nights.py`, `status_table.py`,
+`status_row.py`, `night_failures.py` know the band. `make_night_manifest.py`
+writes a `band` column and one row per (night, band) with the band's
+`s3_prefix`; `download_mosfire_night.py` takes `--bands`, fetches each
+row's band into the shared `raw/` and merges the manifests by KOA id. The
+Job scripts export `$BAND` with the other columns, log it, and
+`GATES_REFERENCE=auto` means the row's own `s3://keck-etcs/<s3_prefix>/reference`
+(`validate_job.yaml` now says `auto`; `night_job.yaml` unchanged in
+effect; the two blocks stay identical, `validate_manifests.py` OK).
+`nights_dryrun_HK.csv` (new; `make_night_manifest.py dryrun_HK`) holds
+the 2012-11-28 H and K rows; `nights_dryrun.csv` was rewritten with the
+`band` column (same row). References staged locally:
+`mosfire/20121128/{H,K}/reference/` (MANIFEST.txt, 10 files each).
+
+**Not done here, for you (outward-facing, as the prompt says):**
+1. the PypeIt fix on `etc-fixes` and the new pin (`nautilus/pypeit_pin.txt`,
+   `build_image.sh` already allows that branch);
+2. bump `keck_etcs/__init__.py` to 0.2.6 and `CITATION.cff`, `bash
+   nautilus/build_image.sh --push`, then point the three Job manifests at
+   0.2.6 (image line, digest comment, `KECK_ETCS_IMAGE`) and run
+   `validate_manifests.py`; record the tag in the README table;
+3. once the image exists I should re-run the four reference reductions
+   and the two sensfuncs in it (10 minutes; the references must carry the
+   new pin for the `ref_pin` gate, since the current ones record `bc18a3b`
+   plus the patch) and re-stage; then you push:
+   `s3_sync.py push mosfire/20121128/raw`, `stage_reference.py 20121128
+   --band H --push`, `--band K --push`;
+4. the dry runs: the ConfigMap from `nights_dryrun_HK.csv`,
+   `validate_job.yaml` with `completions: 2`, and `GATES: PASS` twice. KOA
+   has no H or K flats on 2012-11-28, so the raw directory is the dev
+   suite's, as the manifest notes say.
+
+**Verification:** `pytest keck_etcs/tests`: 128 passed (new:
+`test_paths.py`, `test_gate_windows_and_sens_files`, the measured LSF
+rows and footprints; `test_other_bands_run_on_provisional_data` now
+expects the LSF warning for Y only); `regen_regression_fixtures.py`
+report: J, J2, line unchanged; `check_docs.py` ALL CHECKS PASS;
+`validate_manifests.py` MANIFESTS OK; `gates.py` PASS on both references.
+Nothing J-related changed: the J gate windows are the S4b ones, the J
+layout is the night level, `lsf_fwhm_pix(w, 'J')` is unchanged, the J
+rows of the LSF table carry the same numbers under the new column names.
+
+**Docs:** `nautilus/README.md` (layout with band directories, the `band`
+column, the per-band dry run with the 2012-11-28 steps, the gate
+windows); `CHANGES.md` code entry; design 9.2 (footprints measured), 9.3
+(the D52 result), 9.4 (reference results, the PypeIt defect), 9.5 (the
+LSF measurements, the first `eps_eff` values and their caveat).
+
+What I learned about the repository:
+- The `pypeit14b` checkout is the user's working PypeIt and moves; the
+  pinned image is the reproducible place, and mounting the repository into
+  it with `PYTHONPATH` gives "PypeIt at the pin, keck_etcs current"
+  without a rebuild. Its cache is root-owned, so the container runs as
+  root and the products are chowned back.
+- `pypeit_setup` and `pypeit_sensfunc` write logs into the working
+  directory; the driver now runs the former in `redux/` (the latter was
+  already in `sens/`).
+- `Spec2DObj.skymodel` of an A-B reduction is the residual sky, so sky
+  levels must come from the raw frames (`monitor.process_raw`), as the
+  monitor already does.
+- PypeIt's `hydrogen_mask_wid` is a UVIS-only parameter; the IR telluric
+  fit has no hydrogen mask.
+- A `Table(rows=...)` of the night manifests is written by `csv`; the
+  `band` and `filter` columns carry the same value on purpose (the pod
+  exports both; older manifests have only `filter`).
+- `measure_lsf.py --record` was broken since S6b (a missing import); the
+  2022-04-09 row predates the refactor.

@@ -138,11 +138,15 @@ spec:
             [ -n "${NIGHT:-}" ] || fail "setup failed" "no row $JOB_COMPLETION_INDEX in $MANIFEST" 11
             [ "$SPEC2D_ENV" = 1 ] && export SPEC2D=1
             NIGHT_DIR="$KECK_ETCS_DATA/$S3_PREFIX"
+            # multi-band nights (D55): the manifest's band column is exported as $BAND, which reduce_standard.py,
+            # build_sensfunc.py, gates.py and harvest_sens.py read; S3_PREFIX is the band's product prefix
+            # (mosfire/<night>/<band> for Y, H, K). GATES_REFERENCE=auto means this row's own reference.
+            [ "$GATES_REFERENCE" = auto ] && GATES_REFERENCE="s3://$KECK_ETCS_BUCKET/$S3_PREFIX/reference"
             # products are always pushed with --force (S15a, 2026-10-07): a same-size object left by an
             # earlier failed run of the night is otherwise skipped by s3_sync, and the bucket keeps stale
             # sens/WaveCalib files under a run_manifest.json that describes the new ones
             FORCE="--force"
-            echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
+            echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX band=${BAND:-} standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
             log SKIP_CHECK
             # done = run_manifest.json on the bucket with status success and passed gates;
             # a night that failed (its manifest records the failure) is retried

@@ -1,0 +1,20 @@
+# pypeit_sensfunc parameters for Keck/MOSFIRE H-band standards (design 4.3, D52, D53).
+# PROVISIONAL (plan S23d, 2026-10-27): polyorder 5 and tell_npca 3 are the J
+# choices carried over (design 9.3: start at 5 for the wider H and K windows;
+# the S24a polyorder test on longslit_3x0.7_H and the first wide-slit KOA
+# night decides, scripts/mosfire/sensfunc_perturbation_test.py --polyorders),
+# No hydrogen-line mask: PypeIt's IR algorithm (telluric.sensfunc_telluric) does
+# not use hydrogen_mask_wid (only the UVIS algorithm does), and the S23d check on
+# HIP 17971 in H (scripts/mosfire/brackett_mask_check.py) found the Vega model's
+# Brackett lines leave no residual at R ~ 3000 (data-minus-fit rms at Br10-18
+# 0.019 mag against 0.018 mag in the continuum), so D52's 30 A mask is moot here.
+# Ships inside the Nautilus image; used by scripts/mosfire/build_sensfunc.py --band H.
+[sensfunc]
+  algorithm = IR
+  polyorder = 5
+  extrap_blu = 0.0
+  extrap_red = 0.0
+  [[IR]]
+    telgridfile = TellPCA_3000_26000_R10000.fits
+    maxiter = 2
+    tell_npca = 3

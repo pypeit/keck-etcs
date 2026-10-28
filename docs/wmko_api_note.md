@@ -1,6 +1,6 @@
 # keck_etcs: API note for WMKO
 
-*For WMKO staff hosting a web front end. keck_etcs 0.2.5, calibration
+*For WMKO staff hosting a web front end. keck_etcs 0.2.6, calibration
 `mosfire-2026.10`, 2026-10-27. The schemas
 `keck_etcs/schema/etc_input.json` and `etc_output.json` are the contract. This
 page summarises them; `scripts/check_docs.py` checks that it lists every

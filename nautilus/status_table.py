@@ -4,8 +4,9 @@
 Usage:
     python nautilus/status_table.py [--instrument mosfire] [--out FILE.ecsv]
 
-Lists ``s3://$KECK_ETCS_BUCKET/<instrument>/<YYYYMMDD>/run_manifest.json`` (one
-per reduced night; ``reference/`` copies and other depths are ignored), reads
+Lists ``s3://$KECK_ETCS_BUCKET/<instrument>/<YYYYMMDD>[/<band>]/run_manifest.json``
+(one per reduced night and band, design D55; ``reference/`` copies and other
+depths are ignored), reads
 each object, and writes one row per night:
 ``night, status, image, image_digest, pypeit_version, pypeit_git_sha,
 pypeit_pin, pin_check_pass, keck_etcs_git_sha, job_name, finished, n_objects,
@@ -33,7 +34,7 @@ import s3_sync  # noqa: E402
 def main(instrument='mosfire', out=None):
     client = s3_sync.make_client()
     keys = sorted(k for k in s3_sync.remote_sizes(client, paths.BUCKET, instrument)
-                  if re.fullmatch(rf'{instrument}/\d{{8}}/run_manifest\.json', k))
+                  if re.fullmatch(rf'{instrument}/\d{{8}}(/[A-Za-z0-9]+)?/run_manifest\.json', k))   # <band>/ for Y, H, K (D55)
     rows = []
     for key in keys:
         m = json.loads(client.get_object(Bucket=paths.BUCKET, Key=key)['Body'].read())

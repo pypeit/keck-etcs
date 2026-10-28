@@ -6,8 +6,9 @@
 # - {name: slit_width, unit: arcsec, datatype: float64}
 # - {name: fwhm_pix, unit: pix, datatype: float64}
 # - {name: fwhm_pix_scatter, unit: pix, datatype: float64}
-# - {name: fwhm_A_1250, unit: Angstrom, datatype: float64}
-# - {name: R_1250, datatype: float64}
+# - {name: ref_wave_A, unit: Angstrom, datatype: float64}
+# - {name: fwhm_A_ref, unit: Angstrom, datatype: float64}
+# - {name: R_ref, datatype: float64}
 # - {name: dfwhm_dlam_pix_per_1000A, datatype: float64}
 # - {name: n_lines, datatype: int64}
 # - {name: pypeit_arc_fwhm_pix, unit: pix, datatype: float64}
@@ -20,12 +21,17 @@
 # - {name: job_name, datatype: string}
 # - {name: method, datatype: string}
 # meta: !!omap
-# - {description: MOSFIRE LSF measured from OH lines (S13); read by the instrument module (S8)}
-# - {model: 'design D25/5.3.6: FWHM_pix = max(slit / 0.24, 2.2); R = 3310 x 0.7 / slit'}
-# - {ref_wave_A: 12500.0}
-# - {calib_version: mosfire-J-2026.10-dev}
-# - {created: '2026-10-04T15:08:00Z'}
+# - {description: 'MOSFIRE LSF measured from OH lines per band and slit (S13, S23d); read by the instrument module (S8): one row per (filter,
+#     date, slit_width)'}
+# - {model: 'design D25/5.3.6: FWHM_pix = max(slit / 0.24, 2.2); R = 3310 x 0.7 / slit; since S16 the quadrature rule sqrt((w / 0.292)^2
+#     + 1.08^2) pix'}
+# - {ref_wave_A: 'per row (ref_wave_A: the band middle zero-point node)'}
+# - {calib_version: mosfire-2026.10-dev}
+# - {created: '2026-10-27T20:48:22Z'}
 # - {script: scripts/mosfire/measure_lsf.py --record}
 # schema: astropy-2.0
-date filter slit_width fwhm_pix fwhm_pix_scatter fwhm_A_1250 R_1250 dfwhm_dlam_pix_per_1000A n_lines pypeit_arc_fwhm_pix source source_sha256 image image_digest pypeit_git_sha keck_etcs_git_sha job_name method
-2022-04-09 J2 1.0 3.6064 0.0688 4.67 2676.7 -0.0503 19 3.9469 mosfire/20220409/redux/Calibrations/WaveCalib_A_1_DET01.fits f7d5735d585a5ceb80d07f7dd2049682dba2e25f4bc058a191b43df86267e9ca gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4 sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced 8017f47997d6417d797be6d0a0358d7acb8918b5 83ba931 keck-etcs-validate "Gaussian+linear fits to identified OH lines of the arc (sky) spectrum; blends flagged with OH_R24000; linear FWHM(lambda), 3-sigma clipped"
+date filter slit_width fwhm_pix fwhm_pix_scatter ref_wave_A fwhm_A_ref R_ref dfwhm_dlam_pix_per_1000A n_lines pypeit_arc_fwhm_pix source source_sha256 image image_digest pypeit_git_sha keck_etcs_git_sha job_name method
+2012-11-28 H 0.7 2.5597 0.2223 16500.0 4.15 3975.7 -0.0169 8 2.6168 mosfire/20121128/H/redux/Calibrations/WaveCalib_A_1_DET01.fits 6243190f9afedd7dc27067ddb7f6bbdec4c5f87904db88c95bdeee6608a8bf26 local sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4 bc18a3ba46d1d331da0875424c63999e578a4937 654092c98285598e7593b5b02852f71af0bb60c3+S23d-uncommitted 0.0 "Gaussian+linear fits to identified OH lines of the arc (sky) spectrum; blends flagged with OH_R24000; linear FWHM(lambda), 3-sigma clipped"
+2022-04-09 J2 1.0 3.6064 0.0688 12500.0 4.67 2676.7 -0.0503 19 3.9469 mosfire/20220409/redux/Calibrations/WaveCalib_A_1_DET01.fits f7d5735d585a5ceb80d07f7dd2049682dba2e25f4bc058a191b43df86267e9ca gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.1.4 sha256:1a1d45f06bffb31dbfb965cbfaa927d011d9cb04f273775e3a48808a9f24cced 8017f47997d6417d797be6d0a0358d7acb8918b5 83ba931 keck-etcs-validate "Gaussian+linear fits to identified OH lines of the arc (sky) spectrum; blends flagged with OH_R24000; linear FWHM(lambda), 3-sigma clipped"
+2012-11-28 K 0.7 2.6135 0.1476 21500.0 5.653 3803.5 0.0615 5 2.6067 mosfire/20121128/K/redux/Calibrations/WaveCalib_A_1_DET01.fits 6e9bbfd2d05ce1d8955c5a53afca86d5944362a0e353d3a511a353e99cc54c5f local sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4 bc18a3ba46d1d331da0875424c63999e578a4937 654092c98285598e7593b5b02852f71af0bb60c3+S23d-uncommitted 0.0 "Gaussian+linear fits to identified OH lines of the arc (sky) spectrum; blends flagged with OH_R24000; linear FWHM(lambda), 3-sigma clipped"
+2019-10-13 K 1.5 5.3704 0.3136 21500.0 11.622 1849.9 0.2422 17 5.9839 mosfire/20191013/K/redux/Calibrations/WaveCalib_A_1_DET01.fits 16070c6bf54e09eb620bce4906c06749c6c90937fb868b2b300095107afeb35b local sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4 bc18a3ba46d1d331da0875424c63999e578a4937 654092c98285598e7593b5b02852f71af0bb60c3+S23d-uncommitted "" "Gaussian+linear fits to identified OH lines of the arc (sky) spectrum; blends flagged with OH_R24000; linear FWHM(lambda), 3-sigma clipped"

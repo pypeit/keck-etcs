@@ -175,8 +175,11 @@ def test_other_bands_run_on_provisional_data():
         assert out['meta']['calib_version'] == 'provisional-xtcalc-2012' and out['meta']['inputs']['band'] == band
         prov = [w for w in out['warnings'] if w.startswith('PROVISIONAL')]
         kinds = {w.split()[1] for w in prov}
-        assert 'throughput' in kinds and 'LSF' in kinds
-        assert (band in ('H', 'K')) == any('footprint' in w for w in prov)
+        assert 'throughput' in kinds
+        # S23d: the 0.7" OH widths of H and K were measured on 2012-11-28, so at the default slit only Y's LSF
+        # is still the provisional rule; the H and K footprints were measured too
+        assert ('LSF' in kinds) == (band == 'Y')
+        assert not any('footprint' in w for w in prov)
         assert np.isfinite(out['summary']['snr_pixel_median']) and out['summary']['snr_pixel_median'] > 0
         assert 0.1 < np.median(out['throughput']) < 0.6 and 0 < np.median(out['atm_transmission']) <= 1
     j = etc.compute({'band': 'J'})

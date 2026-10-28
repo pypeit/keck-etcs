@@ -36,7 +36,10 @@ PYPEIT_REPO=${PYPEIT_REPO:-https://github.com/pypeit/PypeIt.git}
 # (Spectrograph.get_arc_extract_center); pin fb6fb62 (2026-10-07) calibrates
 # the 4-arcsec long2pos_specphot bars from their 0.7-arcsec neighbors
 # (Spectrograph.transfer_wavecal); pin bc18a3b (2026-10-08) replaces path
-# separators in target names of output files (outputfiles.construct_basename).
+# separators in target names of output files (outputfiles.construct_basename);
+# pin b0447b7 (2026-10-28, S23d) adds the read noise from SAMPMODE/NUMREADS
+# (38bb1b7, S17) and reads SLITRANGE from product headers in
+# config_specific_par, so pypeit_sensfunc works on a short long slit.
 # Then the pin moves to the merge
 # commit and this goes back to develop.
 PIN_BRANCHES=${PIN_BRANCHES:-"develop etc-fixes"}

@@ -1487,8 +1487,8 @@ grating if standards ever appear. Multi-slit masks stay out of scope, but
 | Dispersion [A/pix] (PypeIt OH template) | 1.082 | 1.303 (J2 long slit: 1.292) | 1.627 | 2.169 |
 | Filter half-power band [A] (shipped curve) | 9719-11243 | 11535-13523 | 14661-18076 | 19215-24046 |
 | Filter width [A] / [pix] | 1524 / 1410 | 1988 / 1526 | 3415 / 2099 | 4830 / 2227 |
-| Centred long-slit footprint [A] | **9255-11471** (measured: dev-suite `Y_long` `WaveCalib_A_1`, 2040 pix, 1.087 A/pix) | 11110-13755 (J2, 2022-04-09) | ~14680-18040 (nominal, Keck page; **to measure**) | ~19540-23970 (nominal, Keck page; **to measure**) |
-| ETC window (filter x footprint, N2) | 9719-11243 (filter-limited) | 11535-13523 | ~14680-18040 (**detector-limited**: ~100 A of the filter band fall off) | ~19540-23970 (**detector-limited**: ~420 A fall off) |
+| Centred long-slit footprint [A] | **9255-11471** (measured: dev-suite `Y_long` `WaveCalib_A_1`, 2040 pix, 1.087 A/pix) | 11110-13755 (J2, 2022-04-09) | **14650.5-17970.7** (measured, S23d: `longslit_3x0.7_H` 2012-11-28, 1.6284 A/pix; nominal was 14680-18040) | **19535.9-23991.1** (measured, S23d: `longslit_3x0.7_K` 2012-11-28, 2.1850 A/pix; `K_long` 2019-10-13 gives 19529.7-23957.1, a 35 A night-to-night spread at the red end) |
+| ETC window (filter x footprint, N2) | 9719-11243 (filter-limited) | 11535-13523 | 14660.9-17970.7 (filter at the blue end, **detector** at the red: 105 A of the filter band fall off) | 19535.9-23991.1 (**detector-limited**: 375 A fall off) |
 | AB - Vega (filter file, PypeIt Vega) | 0.655 | 0.930 (J2 0.833) | 1.365 | 1.845 |
 | Long-slit wavelength calibrator (PypeIt) | `OH_MOSFIRE_Y`, 82 lines in band | `OH_MOSFIRE_J`, 66 | `OH_MOSFIRE_H`, 110 | `OH_MOSFIRE_K`, 86 (sparse beyond 2.3 um) |
 | `long2pos_specphot` calibrator (Ne + Ar lines in band) | 9 + 9 | 64 + 30 | 67 + 24 | 59 + 20 |
@@ -1585,6 +1585,18 @@ same era, or the narrow-slit pairs (6 nights in H, 9 in K hold both
 classes on some slit). Y has 9 white-dwarf rows (GD153, LDS749B) but no
 2012-2016 wide-slit night; its 2025 era has 4.
 
+*S23d result (D52, 2026-10-27; `scripts/mosfire/brackett_mask_check.py`
+on HIP 17971, `longslit_3x0.7_H`, 2012-11-28, PypeIt at the pin with the
+`slitrange` patch):* PypeIt's IR sensfunc algorithm does not use
+`hydrogen_mask_wid` at all (only the UVIS algorithm's `standard_zeropoint`
+does), so the 10 A and 30 A runs are identical to 1e-4 mag; and the Vega
+model leaves no Brackett residual at R ~ 3000: the per-pixel zero point
+minus PypeIt's fit has an rms of 0.019 mag within +-40 A of Br10-18 against
+0.018 mag in the line-free continuum (ratio 1.08). D52's mask is therefore
+moot for the IR algorithm; the H and K `.sens` files carry no mask line,
+and the A0V series in H needs no special treatment at the Brackett lines
+beyond the model.
+
 **P4 = D51 (Q51, agreed), A0V model per band.** N3 scales PypeIt's Vega spectrum to the
 star's 2MASS J. For the other bands the scaling uses the **band's own 2MASS
 magnitude**: J for Y and J, H for H, Ks for K, with PypeIt's `TMASS-J/H/K`
@@ -1680,6 +1692,33 @@ gates of P8 and the reference comparison of 4.8.7. Their slits are narrow,
 so they are LSF, footprint, sky and pipeline references, not throughput
 points (D4).
 
+*S23d results (2026-10-27).* The four setups were reduced with
+`reduce_standard.py` inside the 0.2.5 image (PypeIt at the pin bc18a3b;
+the local `pypeit14b` checkout had moved to another branch, so the image
+is where "at the pin" holds), the current repository mounted, with the raw
+frames staged under `mosfire/20121128/raw` (both H and K), `20191013/raw`
+and `20180718/raw` and the products under `mosfire/<night>/<band>/`
+(P8). `longslit_3x0.7_H` and `_K`: the HIP 17971 frames (2.9 s) serve as
+their own OH arcs as in the dev-suite files (wavelength RMS 0.066 and
+0.037 pix), S/N 130-160 per frame, median end-to-end throughput through
+the 0.7" slit 0.24 (H) and 0.25 (K) over the common windows, both gates
+PASS with the P8 windows. `K_long`: RMS 0.091 pix, HIP 17971 S/N 140,
+Per-emb 25 found. `long2pos1_H`: the lamp-calibrated path works (Ne/Ar
+arcs, `keck_mosfire_arcs_H.fits`, RMS 0.21 and 0.17 pix on the two
+slits), but HIP 61138 is extracted with S/N 2-9 only, in the driver and in
+the dev-suite PypeIt file alike, so this is PypeIt's long2pos reduction of
+that night, not the driver (the H A0V sample is `long2pos_specphot`, the
+bar-split path of S15); to be looked at in S24a. KOA holds no H or K flats
+for 2012-11-28 (the dev suite pairs its standard with 2013-10-15 flats), so
+the in-pod dry runs take the dev-suite raw frames pushed to
+`mosfire/20121128/raw/` and the staged local references
+(`nights_dryrun_HK.csv`). A PypeIt defect surfaced: `pypeit_sensfunc` on a
+spec1d of a short long slit (`LONGSLIT-3x0.7`) crashes in
+`config_specific_par` (`slitrange` is None for a product header);
+`nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch` reads the
+header's `SLITRANGE` card instead and was applied inside the image for
+the reference sensfuncs; it goes into the next pin.
+
 **P10 = D57 (Q57, agreed), order of work.** H first (the largest wide-slit sample, no
 new physics; it exercises every band generalisation), then K (the thermal
 term), then Y (the smallest sample; shares the J grating tilt). Batches are
@@ -1705,6 +1744,17 @@ has a `filter` column and `Instrument.lsf_fwhm_pix(slit, band)` prefers a
 measured row of the band. XTcalc's resolving powers (R x 0.7" = 3380, 3310,
 3660, 3620 for Y, J, H, K) imply a 0.7" image of 2.9 pix in Y and J and
 2.7 pix in H and K, a 5 percent difference the measurement should show.
+
+*S23d measurements (2026-10-27; `measure_lsf.py --band --record`, OH lines
+of the reference reductions):* H at 0.7" (2012-11-28, 8 clean lines of 28,
+the H OH lines are dense and blend) 2.560 pix = 4.15 A at 1.65 um, R =
+3976; K at 0.7" (2012-11-28, 5 clean lines) 2.613 pix = 5.65 A at 2.15 um,
+R = 3803; K at 1.5" (`K_long`, 2019-10-13, 17 lines) 5.370 pix = 11.6 A, R
+= 1850. Against the J quadrature rule in pixels (2.627 at 0.7", 5.249 at
+1.5") that is -2.6, -0.5 and +2.3 percent: the rule holds in H and K to a
+few percent, the expected 5 percent narrowing is not seen at 0.7", and the
+rows now take precedence at those slit widths. The table's columns are
+band-neutral (`ref_wave_A`, `fwhm_A_ref`, `R_ref`).
 
 **P13 = D60 (Q60, agreed), thermal background in K.** The Gemini model is the sky alone;
 MOSFIRE sees the telescope and dome too. The measured 2012 K sky exceeds
@@ -1747,6 +1797,31 @@ and the dome, the 275 K grey body that `eps_eff ~ 0.15` describes; if the
 fitted per-night `eps_eff` correlates with `TUBETEMP`, the model is wrong
 and T belongs to something else (the instrument's warm window, which is
 not in the header), to be reported in S25.
+
+*S23d first values (2026-10-27; `scripts/mosfire/fit_thermal_continuum.py`
+on the K reference nights, sky from the raw frames divided by the pixel
+flat and the exposure time, the Gemini model at the frame's airmass and
+1.6 mm, both as 10th-percentile floors in 100 A bins over 2.15-2.40 um,
+T_sys the **provisional** XTcalc 2012 curve):* 2012-11-28 (four 2.9 s
+HIP 17971 frames, `TUBETEMP` 1.59 C): measured floor 20 (2.15 um) to 41
+(2.40 um) ph/s/arcsec^2/nm/m^2, 35-40x the model, `eps_eff` = 0.47 at
+274.7 K (0.46 at 275 K), declining from 1.09 at 2.155 um to 0.27 at 2.395
+um; 2019-10-13 (two 119 s Per-emb 25 and two 2.9 s HIP 17971 frames,
+`TUBETEMP` 4.79 C): floor 8.8 to 38.6, 13-18x the model, `eps_eff` = 0.23
+at 278 K (0.29 at 275 K), from 0.34 to 0.19 across the band. The 2019
+floor rises 4.4x across the band, close to XTcalc's 2012 spectrum (2.7 to
+21), while the 2012 night's short frames hold a flat ~20 component at
+2.15-2.25 um on top of the thermal rise, which a 2.9 s frame's pedestal or
+read floor can produce; in both nights the excess is **flatter than a
+275 K grey body** (whose rise over 2.15-2.40 um is 7.8x), so a single
+`eps_eff` at the tube temperature does not describe the between-line
+floor at the blue end of K: the D61 continuum excess and the D60 thermal
+term overlap there, and part K must fit them together (the excess curve
+from the long dark frames, the thermal term from the red end) and replace
+the provisional T_sys. The red-end values (2.35-2.40 um: 0.19-0.20 on the
+2019 night, 0.27-0.33 in 2012) sit 1.3-2x above the design's 0.12-0.15
+from XTcalc's 2012 sky, within what the provisional throughput and the
+2012 night's pedestal can account for.
 
 **P14 = D61 (Q61, agreed), sky continuum excess.** Between the OH lines the measured sky
 exceeds the Gemini model by 1.05-1.5x in J (1.14-1.34x on 2022-04-09) and

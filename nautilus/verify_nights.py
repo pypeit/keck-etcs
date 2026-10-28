@@ -87,10 +87,11 @@ def main(argv=None):
     ap.add_argument('--instrument', default='mosfire')
     ap.add_argument('--digest', action='append', default=[], help='accepted image digest(s)')
     ap.add_argument('--pin', help='expected pypeit_git_sha')
+    ap.add_argument('--band', help='band of the products (Y, H, K under <night>/<band>/, design D55)')
     a = ap.parse_args(argv)
     bad = 0
     for n in a.nights:
-        nd = paths.night_dir(a.instrument, n)
+        nd = paths.night_dir(a.instrument, n, band=a.band)
         problems, notes, m = check(nd, set(a.digest), a.pin)
         u = (m or {}).get('pod_usage') or {}
         img = (m or {}).get('image')

@@ -4,12 +4,13 @@
 Usage:
     python scripts/koa/download_mosfire_night.py --manifest nautilus/manifests/nights_pilot.csv [--index N]
         [--lamp-arcs] [--to-s3]
-    python scripts/koa/download_mosfire_night.py 20241230 [20250723 ...] [--lamp-arcs] [--to-s3]
+    python scripts/koa/download_mosfire_night.py 20241230 [20250723 ...] [--bands H K] [--lamp-arcs] [--to-s3]
     python scripts/koa/download_mosfire_night.py --collect JOB_NAME [--to-s3]
 
-For each night (a night-manifest row: ``standard``, ``slit`` = mask, ``filter``,
-``std_ra``, ``std_dec``; positional nights take their row from
-``keck_etcs/data/mosfire/koa_standards_candidates.ecsv``) the script asks KOA's
+For each manifest row, one (night, band) (``standard``, ``slit`` = mask,
+``band`` or ``filter``, ``std_ra``, ``std_dec``; positional nights take their
+rows from ``keck_etcs/data/mosfire/koa_standards_candidates.ecsv``, one per
+band present or per ``--bands``), the script asks KOA's
 TAP service for every MOSFIRE frame of the night (UT date of UT + 6 h, as in
 ``search_mosfire_standards.py``; spectroscopy only: KOA labels some on-slit
 acquisition exposures ``gratmode = imaging``, e.g. MF.20241229.41741.74) and
@@ -47,7 +48,10 @@ Frames are fetched over plain HTTP (KOA's ``nph-getKOA`` with the frame's
 (the original file name, as the dev-suite frames), checked to be FITS, and
 listed in ``raw/manifest.ecsv`` (``koaid, file, frame_type, target, slit,
 filter, sampmode, numreads, exptime, airmass, ut, mjd, size, sha256, progid,
-priority``). Idempotent: a frame already in the manifest with the same size
+priority``). The raw directory is shared by every band of the night (design
+D55): a second band's row adds its frames and its flats and arcs to the same
+``raw/`` and merges them into the manifest by ``koaid``, so the manifest
+lists every band's frames. Idempotent: a frame already in the manifest with the same size
 on disk (or, with ``--to-s3``, in the bucket) is not fetched again. With
 ``--to-s3`` the raw directory is pushed to ``s3://keck-etcs/mosfire/<night>/raw/``
 (``scripts/nautilus/s3_sync.py``, skipping same-size objects) and the bucket
@@ -122,7 +126,7 @@ def night_frames(night):
 
 def select_frames(fr, row, lamp_arcs=False):
     """``[(frame row, frame_type, priority)]`` and a status for one manifest row (see the docstring)."""
-    filt, mask = str(row['filter']), str(row['slit'])
+    filt, mask = str(row.get('band') or row['filter']), str(row['slit'])
     on, dome, arc = census.frame_classes(fr)
     l2p = 'long2pos' in mask
     specphot = 'long2pos_specphot' in mask
@@ -270,10 +274,18 @@ def download_night(row, index=0, lamp_arcs=False, to_s3=False, job=None):
                      'exptime': float(fr_row['truitime']), 'airmass': float(fr_row['airmass']),
                      'ut': str(fr_row['ut']), 'mjd': float(fr_row['mjd_obs']), 'size': size, 'sha256': sha,
                      'progid': str(fr_row['progid']), 'priority': bool(prio)})
+    # merge with the frames of the night's other bands (D55): rows of other koaids are kept
+    mine = {r['koaid'] for r in rows}
+    rows = [{c: (v.item() if hasattr(v, 'item') else v) for c, v in zip(old.colnames, old)}
+            for k, old in have.items() if k not in mine] + rows
+    rows.sort(key=lambda r: str(r['koaid']))
     man = Table(rows=rows)
-    man.meta = {'description': 'KOA raw frames of one MOSFIRE night for the keck-etcs reductions (plan S14b)',
-                'night': night, 'standard': str(row['standard']), 'std_class': str(row.get('std_class', '')),
-                'mask': str(row['slit']), 'filter': str(row['filter']), 'lamp_arcs_option': bool(lamp_arcs),
+    old_meta = Table.read(man_path, format='ascii.ecsv').meta if man_path.exists() else {}
+    bands_done = sorted(set(str(b) for b in old_meta.get('bands', [])) | {str(row.get('band') or row['filter'])})
+    man.meta = {'description': 'KOA raw frames of one MOSFIRE night for the keck-etcs reductions (plan S14b; every '
+                               'band of the night, D55)',
+                'night': night, 'bands': bands_done, 'standard': str(row['standard']), 'std_class': str(row.get('std_class', '')),
+                'mask': str(row['slit']), 'filter': str(row.get('band') or row['filter']), 'lamp_arcs_option': bool(lamp_arcs),
                 'source': f'{KOA_TAP} + {KOA_GET} (public frames only)', 'keck_etcs_version': keck_etcs.__version__,
                 'created': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                 'script': 'scripts/koa/download_mosfire_night.py'}
@@ -296,16 +308,22 @@ def manifest_rows(path, index=None):
     return [(i, r) for i, r in enumerate(rows) if index is None or i == int(index)]
 
 
-def rows_for_nights(nights):
+def rows_for_nights(nights, bands=None):
+    """Manifest rows for positional nights: one per (night, band) of the candidate table (or of ``bands``)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import make_night_manifest as mm
     t = Table.read(mm.CAND, format='ascii.ecsv')
     out = []
-    for k, n in enumerate(nights):
+    for n in nights:
         sub = [r for r in t if str(r['night']) == str(n)]
         if not sub:
             raise SystemExit(f'{n}: not in the candidate table')
-        out.append((k, mm.manifest_row(mm.best(sub))))
+        present = sorted({str(r['filter']) for r in sub})
+        for b in (bands or present):
+            rows_b = [r for r in sub if str(r['filter']) == b]
+            if not rows_b:
+                raise SystemExit(f'{n}: no candidate row in band {b} (bands present: {present})')
+            out.append((len(out), mm.manifest_row(mm.best(rows_b))))
     return out
 
 
@@ -331,7 +349,7 @@ def collect(job, to_s3=False):
 def main(a):
     if a.collect:
         return collect(a.collect, a.to_s3)
-    todo = manifest_rows(a.manifest, a.index) if a.manifest else rows_for_nights(a.nights)
+    todo = manifest_rows(a.manifest, a.index) if a.manifest else rows_for_nights(a.nights, a.bands)
     worst = 0
     for i, row in todo:
         rc = download_night(row, i, a.lamp_arcs, a.to_s3)
@@ -341,7 +359,8 @@ def main(a):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    p.add_argument('nights', nargs='*', help='nights YYYYMMDD (row from the candidate table)')
+    p.add_argument('nights', nargs='*', help='nights YYYYMMDD (rows from the candidate table, one per band)')
+    p.add_argument('--bands', nargs='+', metavar='BAND', help='bands of the positional nights (default: every band present)')
     p.add_argument('--manifest', help='night manifest CSV')
     p.add_argument('--index', help='only this row of the manifest (JOB_COMPLETION_INDEX)')
     p.add_argument('--lamp-arcs', action='store_true', help="also the Ne/Ar arcs on the standard's mask (D44)")

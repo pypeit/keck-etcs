@@ -5,7 +5,7 @@ Usage:
     # what the night pod runs (or anyone, on a synced night):
     python scripts/mosfire/harvest_sens.py harvest SENS.fits [...] --manifest run_manifest.json --out DIR
         [--standard NAME] [--filter FILE] [--raw DIR]
-    python scripts/mosfire/harvest_sens.py harvest DATE --standard NAME     # night under $KECK_ETCS_DATA
+    python scripts/mosfire/harvest_sens.py harvest DATE --standard NAME [--band H]   # night under $KECK_ETCS_DATA
 
     # calibration monitor (design 4.9), after the harvest:
     python scripts/mosfire/harvest_sens.py monitor REDUX --raw RAW --manifest run_manifest.json --out DIR
@@ -19,7 +19,10 @@ row, design 4.4 columns) and ``<standard>_<date>.ecsv`` (the throughput
 curve on the common 1 A grid with design 5.4 ``meta``) into DIR. With
 ``DATE``, the inputs are ``<night>/sens/sens_<NAME>_<DATE>.fits`` and
 ``<night>/run_manifest.json``, and DIR is ``<night>/harvest``, which the
-night job pushes.
+night job pushes; ``<night>`` is ``mosfire/<DATE>/<band>/`` for Y, H and K
+(``--band``, default ``$BAND`` then ``$FILTER``; design D55) and
+``mosfire/<DATE>/`` for the J group, with the raw frames shared at
+``mosfire/<DATE>/raw/``.
 
 ``--filter FILE`` divides out a filter curve (ECSV with ``wave_A`` and
 ``transmission``, part 3, S8). In the ``DATE`` form without ``--filter``, the
@@ -50,6 +53,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -92,10 +96,12 @@ def cmd_harvest(args):
         if not args.standard:
             print('harvest DATE needs --standard')
             return 2
-        night = paths.night_dir('mosfire', date)
+        night = paths.night_dir('mosfire', date, band=args.band)
         sens = [night / 'sens' / f'sens_{args.standard}_{date}.fits']
         manifest = night / 'run_manifest.json'
         outdir = Path(args.out) if args.out else night / 'harvest'
+        if args.raw is None:
+            args.raw = str(paths.night_dir('mosfire', date, 'raw', band=args.band))
         if not args.filter and manifest.exists():
             args.filter = default_filter(manifest)
             print(f'filter curve: {args.filter or "none for this band (nofilter)"}')
@@ -129,8 +135,9 @@ def is_pod(row):
 
 def cmd_monitor(args):
     if len(args.inputs) == 1 and args.inputs[0].isdigit() and len(args.inputs[0]) == 8:
-        night = paths.night_dir('mosfire', args.inputs[0])
-        manifest, raw, outdir = night / 'run_manifest.json', night / 'raw', Path(args.out or night / 'harvest')
+        night = paths.night_dir('mosfire', args.inputs[0], band=args.band)
+        raw = paths.night_dir('mosfire', args.inputs[0], 'raw', band=args.band)
+        manifest, outdir = night / 'run_manifest.json', Path(args.out or night / 'harvest')
     else:
         if not (args.raw and args.manifest and args.out):
             print('monitor REDUX needs --raw, --manifest and --out')
@@ -262,6 +269,8 @@ def main(argv=None):
     p.add_argument('--filter', help='filter curve ECSV (wave_A, transmission) to divide out')
     p.add_argument('--raw', help='raw directory with manifest.ecsv (default: <manifest dir>/raw)')
     p.add_argument('--merge', nargs='+', metavar='DIR', help='merge harvest directories into standards.ecsv')
+    p.add_argument('--band', default=os.environ.get('BAND') or os.environ.get('FILTER') or None,
+                   help='band of the DATE forms (default: $BAND, $FILTER); Y/H/K products under mosfire/<DATE>/<band>/')
     args = p.parse_args(argv)
     if args.merge:
         return cmd_merge(args.merge)

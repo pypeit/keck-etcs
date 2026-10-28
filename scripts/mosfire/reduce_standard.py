@@ -84,9 +84,28 @@ The standard (``--std-class``, ``--std-name``, ``--std-ra``, ``--std-dec``,
 ``--jmag``; defaults from the night-manifest columns the night job exports,
 ``STD_CLASS``, ``STANDARD``, ``STD_RA``, ``STD_DEC``, ``JMAG_2MASS``) is
 recorded in ``run_manifest.json`` under ``standard``; the A0V sensfunc
-itself is built by ``build_sensfunc.py``. The manifest's optional ``filter``
-column (``$FILTER``) is the default ``--filter``, for nights with the standard
-in more than one band (plan S14).
+itself is built by ``build_sensfunc.py``. The manifest's ``band`` column
+(``$BAND``; the older ``filter`` column, ``$FILTER``, means the same) is
+the default ``--filter``, for nights with the standard in more than one
+band (plan S14, S23d); without either, the raw frames' ``FILTER`` cards
+decide when they agree.
+
+Multi-band layout (design D55, plan S23d): the raw frames of a night are
+shared under ``mosfire/<night>/raw/``; the products of a Y, H or K
+reduction go under ``mosfire/<night>/<band>/{redux,sens}`` with their own
+``run_manifest.json`` and ``run.log`` (``keck_etcs.paths.night_dir(...,
+band=...)``), while J, J2 and J3 products stay at the night level as
+before. ``run_manifest.json`` records ``band`` and the band's
+``s3_prefix``.
+
+Wavelength calibration per mask (S23d): a long slit uses the OH lines of
+the night's on-sky frames; when the standard's frames are the only on-sky
+frames (the dev-suite ``longslit_3x0.7_H/_K`` nights: 2.9 s A0V frames, no
+science), they serve as their own arcs (``arc,standard,tilt``, as the
+dev-suite PypeIt files do). A ``long2pos`` (not ``specphot``) night whose
+Ne/Ar lamp frames are present uses them (``arc,tilt``, PypeIt's
+``keck_mosfire_arcs_<band>.fits`` template; the standard's 44 s frames
+show too little OH), as the dev-suite ``long2pos1_H`` file does.
 
 Paths come from arguments or ``KECK_ETCS_DATA``; nothing is interactive.
 ``--scratch DIR`` uses DIR as the data root for the whole run (raw frames
@@ -137,6 +156,17 @@ DEFAULT_PAR = """[calibrations]
     snr_thresh = 80.
 """
 
+# long2pos (not specphot) masks (S23d, 2018-07-18 reference): the two slits are 41 pixels long and the
+# star sits 10 pixels from an edge in half of the frames, so the J2 template's find_trim_edge = 10,10
+# discards it ("land within trim_edg"); such nights use PypeIt's defaults for object finding (trim 5,5,
+# snr_thresh 10), as the dev-suite long2pos1_H file does
+LONG2POS_PAR = """[calibrations]
+  [[flatfield]]
+    tweak_slits = False
+  [[slitedges]]
+    fit_min_spec_length = 0.3
+"""
+
 # OH arcs (S15a pilot, 2026-10-06): 2025-07-23 has 36 on-sky science frames; typed as arcs, PypeIt
 # combined all 36 into the arc image and the pod was OOM-killed at 16 GiB (2022-04-09: 16 frames,
 # 6 GiB peak). At most MAX_OH_ARCS frames serve as arc/tilt (the longest, then the nearest in time
@@ -155,17 +185,40 @@ SPECPHOT_SLITEDGES = ['use_maskdesign = False']
 SPECPHOT_RMS_PIX = 0.5
 
 
-def with_slitedges(par_text, lines):
-    """Add ``lines`` to the ``[[slitedges]]`` block of a parameter block (created if absent)."""
+def with_block(par_text, block, lines, section='[calibrations]'):
+    """Add ``lines`` to the ``[[block]]`` of ``section`` in a parameter block (both created if absent)."""
     out = par_text.rstrip('\n').splitlines()
     add = [f'    {ln}' for ln in lines]
     for i, ln in enumerate(out):
-        if ln.strip() == '[[slitedges]]':
+        if ln.strip() == block:
             return '\n'.join(out[:i + 1] + add + out[i + 1:]) + '\n'
     for i, ln in enumerate(out):
-        if ln.strip() == '[calibrations]':
-            return '\n'.join(out[:i + 1] + ['  [[slitedges]]'] + add + out[i + 1:]) + '\n'
-    return '\n'.join(['[calibrations]', '  [[slitedges]]'] + add + out) + '\n'
+        if ln.strip() == section:
+            return '\n'.join(out[:i + 1] + [f'  {block}'] + add + out[i + 1:]) + '\n'
+    return '\n'.join([section, f'  {block}'] + add + out) + '\n'
+
+
+def with_slitedges(par_text, lines):
+    """Add ``lines`` to the ``[[slitedges]]`` block of a parameter block (created if absent)."""
+    return with_block(par_text, '[[slitedges]]', lines)
+
+
+def lamp_wavelength_lines(filt):
+    """The ``[[wavelengths]]`` lines of a lamp-calibrated long2pos night (the dev-suite long2pos1_H file)."""
+    return ['method = full_template', 'sigdetect = 5', f'reid_arxiv = keck_mosfire_arcs_{filt}.fits',
+            'lamps = Ar_IR_MOSFIRE,Ne_IR_MOSFIRE']
+
+
+def filter_from_headers(raw_dir):
+    """The one ``FILTER`` of the raw frames (None when there are none or several)."""
+    vals = set()
+    for f in sorted(Path(raw_dir).glob('*.fits')):
+        try:
+            vals.add(str(fits.getheader(f).get('FILTER', '')).strip())
+        except OSError:
+            continue
+    vals.discard('')
+    return vals.pop() if len(vals) == 1 else None
 
 
 def split_merged_bars(pfile, redux, raw_file, log, env):
@@ -481,20 +534,34 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     specphot = any('long2pos_specphot' in str(d) for d in tbl['decker'])
     long2pos = any('long2pos' in str(d) for d in tbl['decker'])
     lamp = np.array([t == LAMP_ARC for t in tbl['frametype']])
+    lamp_wavecal = specphot or (long2pos and lamp.any())
     if lamp.any():
-        if specphot:
+        if lamp_wavecal:
             tbl['frametype'][lamp] = 'arc,tilt'
-            notes.append(f'{int(lamp.sum())} Ne/Ar lamp frame(s) typed arc,tilt (long2pos_specphot)')
+            notes.append(f'{int(lamp.sum())} Ne/Ar lamp frame(s) typed arc,tilt '
+                         f'({"long2pos_specphot" if specphot else "long2pos: lamp-calibrated path, S23d"})')
         else:
             notes.append(f'{int(lamp.sum())} Ne/Ar lamp frame(s) left out of the PypeIt file '
                          f'(long slit: OH arcs; kept in raw/ for the monitor): {list(tbl["filename"][lamp])}')
             old = [o for o, k in zip(old, lamp) if not k]
             tbl = tbl[~lamp]
+    if long2pos and not specphot and lamp_wavecal:
+        par_text = with_block(par_text, '[[wavelengths]]', lamp_wavelength_lines(filt))
+        notes.append(f'long2pos with lamp arcs: wavelengths from keck_mosfire_arcs_{filt}.fits (Ar, Ne), as the '
+                     'dev-suite long2pos1_H file; the standard frames are not OH arcs')
     if not specphot:
         notes += cap_oh_arcs(tbl)
         keep_rows = np.array([t != 'DROP' for t in tbl['frametype']])
         old = [o for o, k in zip(old, keep_rows) if k]
         tbl = tbl[keep_rows]
+    types = list(tbl['frametype'])
+    if not lamp_wavecal and not any('arc' in t for t in types) and any(t == 'standard' for t in types):
+        # the standard's frames are the only on-sky frames (dev-suite longslit_3x0.7_H/_K): their own OH
+        # lines calibrate the wavelengths, as in the dev-suite PypeIt files (arc,standard,tilt)
+        for i, t in enumerate(tbl['frametype']):
+            if t == 'standard':
+                tbl['frametype'][i] = 'arc,standard,tilt'
+        notes.append('no other on-sky frames: the standard frames serve as their own OH arcs (arc,standard,tilt)')
     for fn, o, n in zip(tbl['filename'], old, tbl['frametype']):
         if o != n:
             notes.append(f'{fn}: frametype {o} -> {n}')
@@ -530,7 +597,7 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     pf = PypeItFile(config=cfg, file_paths=[str(raw_dir)], data_table=tbl[keep],
                     setup=setup_block, vet=False)
     pf.write(str(out_file))
-    return Path(out_file), tbl[keep], notes, filt
+    return Path(out_file), tbl[keep], notes, filt, par_text
 
 
 # ---------------------------------------------------------------- QA
@@ -608,8 +675,14 @@ def main(args):
     root = Path(args.scratch).resolve() if args.scratch else paths.data_root()
     env = dict(os.environ, KECK_ETCS_DATA=str(root), MPLBACKEND='Agg')
     date = str(args.date)
-    night = root / INSTRUMENT / date
-    raw = night / 'raw'
+    # the band decides the product layout (D55): --filter, $BAND/$FILTER from the night manifest, else the
+    # raw frames' FILTER cards (local runs with the frames already in place)
+    band = args.filter or os.environ.get('BAND') or os.environ.get('FILTER') or None
+    raw = root.joinpath(*paths._night_parts(INSTRUMENT, date, 'raw'))
+    if band is None and not args.s3_pull:
+        band = filter_from_headers(args.link_raw_from) if args.link_raw_from else filter_from_headers(raw)
+    args.filter = band
+    night = root.joinpath(*paths._night_parts(INSTRUMENT, date, None, band))
     redux = night / 'redux'
     sens_dir = night / 'sens'
     redux.mkdir(parents=True, exist_ok=True)
@@ -631,8 +704,9 @@ def main(args):
         'node': os.environ.get('NODE_NAME'),
         'host': socket.gethostname(), 'python': platform.python_version(),
         'started': started, 'finished': None,
-        'instrument': SPECTROGRAPH, 'night': date,
-        's3_prefix': paths.s3_prefix(INSTRUMENT, date),
+        'instrument': SPECTROGRAPH, 'night': date, 'band': band,
+        's3_prefix': paths.s3_prefix(INSTRUMENT, date, band=band),
+        'raw_s3_prefix': paths.s3_prefix(INSTRUMENT, date, 'raw', band=band),
         'data_root': str(root), 'command': sys.argv,
         'filter': None, 'par_block': None, 'patch_notes': [],
         'raw_sha256': {}, 'product_sha256': {}, 'pypeit_file': None, 'pypeit_file_text': None,
@@ -689,25 +763,31 @@ def main(args):
         setup_dir = redux / 'setup_files'
         if setup_dir.exists():
             shutil.rmtree(setup_dir)
+        # cwd: pypeit_setup writes its own log into the working directory (read-only when the source is
+        # mounted into the image, S23d); redux/ is the night's writable place for it
         rc = run(['pypeit_setup', '-s', SPECTROGRAPH, '-r', raw, '-d', setup_dir, '-c', 'all'],
-                 log, env=env)
+                 log, env=env, cwd=redux)
         if rc != 0:
             raise StageError('setup failed', f'pypeit_setup exit {rc}')
 
         # 3. patch
         stage('patch')
-        par_text = Path(args.par).read_text() if args.par else DEFAULT_PAR
         koa_types = raw_manifest_types(raw)
-        specphot = any('long2pos_specphot' in str(fits.getheader(f).get('MASKNAME', '')) for f in frames
-                       if koa_types.get(f.name, 'standard') == 'standard')
+        masks = {str(fits.getheader(f).get('MASKNAME', '')) for f in frames
+                 if koa_types.get(f.name, 'standard') == 'standard'}
+        specphot = any('long2pos_specphot' in m for m in masks)
+        long2pos_only = any('long2pos' in m for m in masks) and not specphot
+        par_text = Path(args.par).read_text() if args.par else (LONG2POS_PAR if long2pos_only else DEFAULT_PAR)
         if specphot and 'use_maskdesign' not in par_text:
             par_text = with_slitedges(par_text, SPECPHOT_SLITEDGES)
         manifest['par_block'] = par_text
         pfile = redux / f'{SPECTROGRAPH}_{date}.pypeit'
         std = standard_record(args)
         manifest['standard'] = std
-        pfile, tbl, notes, filt = build_pypeit_file(setup_dir, pfile, args.filter, par_text, raw, std)
+        pfile, tbl, notes, filt, par_text = build_pypeit_file(setup_dir, pfile, args.filter, par_text, raw, std)
         manifest['filter'] = filt
+        manifest['band'] = filt
+        manifest['par_block'] = par_text
         manifest['patch_notes'] = notes
         manifest['pypeit_file'] = pfile.name
         manifest['pypeit_file_text'] = pfile.read_text()
@@ -874,8 +954,9 @@ if __name__ == '__main__':
                'AWS_PROFILE or AWS_*) and are no-ops when not given. Exit codes: '
                + ', '.join(f'{v} {k}' for k, v in EXIT.items()) + '.')
     parser.add_argument('date', help='Night, YYYYMMDD')
-    parser.add_argument('--filter', default=os.environ.get('FILTER') or None,
-                        help='Filter to reduce (default: $FILTER from the night manifest, else the only one present)')
+    parser.add_argument('--filter', '--band', dest='filter', default=None,
+                        help='Band to reduce (default: $BAND or $FILTER from the night manifest, else the only one '
+                             'in the raw headers); Y, H and K products go under mosfire/<night>/<band>/ (D55)')
     parser.add_argument('--par', help='File with the PypeIt parameter block (default: built-in, '
                                       'from the dev-suite J2 template)')
     parser.add_argument('--sens', help='.sens file; run pypeit_sensfunc on each standard')

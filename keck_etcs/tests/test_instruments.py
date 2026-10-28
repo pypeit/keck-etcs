@@ -59,10 +59,27 @@ def test_band_windows_follow_n2():
 def test_lsf_measured_row_takes_precedence():
     fw, src = MOSFIRE.lsf_fwhm_pix(1.0)
     assert fw == pytest.approx(3.6064) and src.startswith('measured')
-    fw, src = MOSFIRE.lsf_fwhm_pix(0.7)
+    fw, src = MOSFIRE.lsf_fwhm_pix(0.7, 'J')             # no measured J row at 0.7": the rule
     assert fw == pytest.approx(np.hypot(0.7 / 0.292, 1.08)) and 'D25' in src and 'sqrt' in src
     assert fw == pytest.approx(2.627, abs=0.01)          # the 0.7" OH-line width it was fitted to (S16)
     assert MOSFIRE.lsf_fwhm_pix(0.4)[0] == pytest.approx(np.hypot(0.4 / 0.292, 1.08))
+    # S23d: measured 0.7" rows of H and K (2012-11-28) and the 1.5" K row (2019-10-13) take precedence
+    assert MOSFIRE.lsf_fwhm_pix(0.7, 'H')[0] == pytest.approx(2.5597) and MOSFIRE.lsf_fwhm_pix(0.7, 'K')[0] == pytest.approx(2.6135)
+    assert MOSFIRE.lsf_fwhm_pix(1.5, 'K')[0] == pytest.approx(5.370, abs=0.001)
+    assert MOSFIRE.lsf_fwhm_pix(1.5, 'H')[0] == pytest.approx(np.hypot(1.5 / 0.292, 1.08))   # no H row at 1.5"
+
+
+def test_gate_windows_and_sens_files():
+    from keck_etcs.instruments import mosfire as m
+    g = m.gate_windows('J2')
+    assert g['zp_window_A'] == (11170.0, 12600.0) and g['counts_window_A'] == (11700.0, 12400.0)   # S4b, unchanged
+    assert g['thru_range'] == (0.15, 0.45)
+    h = m.gate_windows('H')
+    assert h['zp_window_A'] == (14900.0, 17800.0) and h['thru_range'] == (0.17, 0.54)
+    assert h['counts_window_A'][0] == pytest.approx(14900 + 2900 / 3) and h['counts_window_A'][1] == pytest.approx(17800 - 2900 / 3)
+    assert m.gate_windows('K')['thru_range'] == (0.16, 0.51) and m.gate_windows('Y')['thru_range'] == (0.12, 0.38)
+    assert m.sens_par_file('H') == 'pypeit_par/keck_mosfire_H.sens' and m.sens_par_file('J2') == 'pypeit_par/keck_mosfire_J.sens'
+    assert m.sens_par_file('Y') == 'pypeit_par/keck_mosfire_J.sens'
 
 
 def test_eras():
@@ -184,8 +201,9 @@ def test_band_groups_and_windows():
         c = MOSFIRE.bands[band].common_window_A
         assert lo <= c[0] < c[1] <= hi
     assert MOSFIRE.band_window('Y') == pytest.approx((9718.5, 11242.8))       # filter-limited (Y_long footprint)
-    assert MOSFIRE.band_window('H') == (14680.0, 18040.0) and MOSFIRE.bands['H'].footprint_provisional
-    assert MOSFIRE.band_window('K') == (19540.0, 23970.0) and MOSFIRE.bands['K'].footprint_provisional
+    # H and K footprints measured in S23d on the 2012-11-28 reference night (window = filter x footprint)
+    assert MOSFIRE.band_window('H') == (14660.9, 17970.7) and not MOSFIRE.bands['H'].footprint_provisional   # filter at the blue end
+    assert MOSFIRE.band_window('K') == (19535.9, 23991.1) and not MOSFIRE.bands['K'].footprint_provisional
     assert not MOSFIRE.bands['Y'].footprint_provisional and not MOSFIRE.bands['J'].footprint_provisional
     assert MOSFIRE.common_window('J') == MOSFIRE.SPLICE_WINDOW == (11900.0, 12450.0)
     assert MOSFIRE.common_window('H') == (14900.0, 17800.0)
@@ -203,7 +221,8 @@ def test_lsf_per_band():
         assert fw == pytest.approx(np.hypot(1.0 / 0.292, 1.08)) and '(provisional)' in src and 'D25' in src
         assert MOSFIRE.lsf_rule(band)[3] is True
     assert MOSFIRE.lsf_rule('J')[3] is False and '(provisional)' not in MOSFIRE.lsf_fwhm_pix(0.7, 'J')[1]
-    assert MOSFIRE.lsf_fwhm_pix(0.7)[1] == MOSFIRE.lsf_fwhm_pix(0.7, 'J')[1]
+    # without a band every band's measured rows apply (S23d: the H and K 0.7" rows), with a band only its group's
+    assert MOSFIRE.lsf_fwhm_pix(0.7)[1].startswith('measured') and 'D25' in MOSFIRE.lsf_fwhm_pix(0.7, 'J')[1]
 
 
 def test_provisional_throughput_for_groups_without_standards():

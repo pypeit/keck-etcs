@@ -19,11 +19,11 @@ files:
       in mosfire/throughput/standards/; metric columns migrated to zp_lo/mid/hi and thru_median_common
       (S23b)
   mosfire/lsf_measurements.ecsv:
-    calib_version: mosfire-2026.10
-    created: '2026-10-04T15:08:00Z'
-    sha256: bfe55129454da09f0ea810308efe5810b180581ecc3bd028923665283b23daec
+    calib_version: mosfire-2026.10-dev
+    created: '2026-10-27T20:48:22Z'
+    sha256: 2b4555991046e317f584985f08681ee45439e2c302aa4a372b080efefd759573
     script: scripts/mosfire/measure_lsf.py --record
-    provenance: 1 LSF measurement(s) from OH lines in PypeIt WaveCalib arc spectra
+    provenance: 4 LSF measurement(s) from OH lines in PypeIt WaveCalib arc spectra
   mosfire/monitor/monitor_lines_J2.ecsv:
     calib_version: mosfire-2026.10
     created: '2026-10-07T15:27:00Z'

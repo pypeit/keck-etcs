@@ -28,16 +28,31 @@ J_DISPERSION = 1.2922
 # prompt #1). Y shares the J grating tilt: the dev suite's Y_long WaveCalib_A_1_DET01 (GD71,
 # 2019-11-18) gives 9255-11471 A over 2040 pixels, which is the J2 footprint x 5/6 to 0.1 percent;
 # the Y window is therefore the filter's. H and K have different tilts and are wider than the
-# detector (filters 2099 and 2227 pixels wide): their footprints below are the nominal coverages of
-# Keck's MOSFIRE page and are **provisional** until the dev-suite longslit_3x0.7_H/_K reductions
-# measure them (part H, prompt 4). Dispersions: Y from the Y_long WaveCalib; H and K from PypeIt's
-# OH templates (keck_mosfire_OH_H/K.fits; the J template gives 1.303 against 1.292 measured).
+# detector (filters 2099 and 2227 pixels wide), so the detector sets their windows. Their
+# footprints were MEASURED in plan S23d (2026-10-27; scripts/mosfire/measure_footprint.py on the
+# reference reductions of design D56, PypeIt at the pin bc18a3b in the 0.2.5 image):
+# - H: dev-suite longslit_3x0.7_H, HIP 17971 on 2012-11-28 (LONGSLIT-3x0.7, the centred 3-bar slit,
+#   spat_id 1034), mosfire/20121128/H/redux/Calibrations/WaveCalib_A_1_DET01.fits
+#   (sha256 6243190f9afedd7dc27067ddb7f6bbdec4c5f87904db88c95bdeee6608a8bf26): pixels 0-2039 at
+#   14650.5-17970.7 A, 1.6284 A/pix, fit RMS 0.066 pix. The Keck page's nominal 14680-18040 A was
+#   30 A too narrow at the blue end and 70 A too wide at the red end.
+# - K: dev-suite longslit_3x0.7_K, the same star and night, mosfire/20121128/K/redux/Calibrations/
+#   WaveCalib_A_1_DET01.fits (sha256 6e9bbfd2d05ce1d8955c5a53afca86d5944362a0e353d3a511a353e99cc54c5f):
+#   19535.9-23991.1 A, 2.1850 A/pix, RMS 0.037 pix (nominal 19540-23970 A). The dev suite's K_long
+#   (LONGSLIT-46x1.5, spat_id 1020, 2019-10-13; mosfire/20191013/K/redux/Calibrations/
+#   WaveCalib_A_1_DET01.fits, sha256 16070c6bf54e09eb620bce4906c06749c6c90937fb868b2b300095107afeb35b)
+#   gives 19529.7-23957.1 A, 2.1713 A/pix: the K tilt reproduces to about 35 A (16 pixels) at the
+#   red end between nights, the scale of a one-pixel-per-edge uncertainty on the window.
+# Dispersions: the measured mean over the footprint (PypeIt's OH templates gave 1.627 and 2.169).
 Y_FOOTPRINT_A = (9255.0, 11471.0)
 Y_DISPERSION = 1.087
-H_FOOTPRINT_NOMINAL_A = (14680.0, 18040.0)
-H_DISPERSION = 1.627
-K_FOOTPRINT_NOMINAL_A = (19540.0, 23970.0)
-K_DISPERSION = 2.169
+H_FOOTPRINT_A = (14650.5, 17970.7)
+H_DISPERSION = 1.6284
+H_FOOTPRINT_NOMINAL_A = (14680.0, 18040.0)      # Keck page, used until S23d
+K_FOOTPRINT_A = (19535.9, 23991.1)
+K_DISPERSION = 2.1850
+K_FOOTPRINT_NOMINAL_A = (19540.0, 23970.0)      # Keck page, used until S23d
+K_FOOTPRINT_2019_A = (19529.7, 23957.1)         # K_long, LONGSLIT-46x1.5, 2019-10-13 (the between-night spread)
 
 ERAS = (
     # D6 and the MOSFIRE news page; name echoed in outputs, tag in the throughput file name
@@ -78,7 +93,11 @@ LSF_PROVISIONAL = {**LSF_J, 'provisional': True,
                    'provenance': 'the J rule assumed in pixels (D59); per-band slope and floor come from the '
                                  'monitor OH widths (parts H, K, Y)'}
 """Y, H and K until measured: the same rule in pixels, flagged provisional (D59). XTcalc's resolving
-powers imply a 0.7" image about 5 percent narrower in H and K than in Y and J."""
+powers imply a 0.7" image about 5 percent narrower in H and K than in Y and J. S23d measured the
+0.7" OH widths on the 2012-11-28 reference night (lsf_measurements.ecsv): H 2.560 pix (8 clean lines),
+K 2.613 pix (5 lines), against the J rule's 2.627 pix at 0.7", i.e. -2.6 and -0.5 percent; and K at
+1.5" (K_long, 2019-10-13): 5.370 pix against the rule's 5.249 (+2.3 percent). Those rows take
+precedence at their slit widths; the rule's slope and floor per band wait for the monitor sample."""
 
 # Band groups (D49): one grating order per group; throughput products are per group. The common
 # window, zero-point nodes and PWV windows are design 9.3 (P7 = D54); the combine rules are the
@@ -102,19 +121,19 @@ BANDS = {
                     'PWV has no window inside the band (pwv_weak)',
               group='Y', order=6, zp_nodes_A=(10000.0, 10500.0, 11000.0), common_window_A=(9800.0, 11100.0),
               pwv_window_A=((9719.0, 11243.0),), pwv_weak=True, edge_trim_frac=0.9, lsf=LSF_PROVISIONAL),
-    'H': Band('H', 'mosfire/filters/mosfire_H.ecsv', H_DISPERSION, H_FOOTPRINT_NOMINAL_A,
-              notes='footprint NOMINAL (Keck page) until measured on longslit_3x0.7_H; detector-limited: the '
-                    'filter is wider than the detector; PWV only at the band edges (pwv_weak)',
+    'H': Band('H', 'mosfire/filters/mosfire_H.ecsv', H_DISPERSION, H_FOOTPRINT_A,
+              notes='footprint measured on the dev-suite longslit_3x0.7_H (HIP 17971, 2012-11-28; S23d); '
+                    'detector-limited: the filter is wider than the detector; PWV only at the band edges (pwv_weak)',
               group='H', order=4, zp_nodes_A=(15500.0, 16500.0, 17500.0), common_window_A=(14900.0, 17800.0),
               pwv_window_A=((14661.0, 14800.0), (17900.0, 18076.0)), pwv_weak=True, edge_trim_frac=0.9,
-              lsf=LSF_PROVISIONAL, footprint_provisional=True),
-    'K': Band('K', 'mosfire/filters/mosfire_K.ecsv', K_DISPERSION, K_FOOTPRINT_NOMINAL_A,
-              notes='footprint NOMINAL (Keck page) until measured on longslit_3x0.7_K / K_long; detector-limited; '
-                    'PWV from the water at both edges (the CO2 bands at 2.01 and 2.06 um are not water); '
-                    'thermal background term to come (D60, part K)',
+              lsf=LSF_PROVISIONAL),
+    'K': Band('K', 'mosfire/filters/mosfire_K.ecsv', K_DISPERSION, K_FOOTPRINT_A,
+              notes='footprint measured on the dev-suite longslit_3x0.7_K (HIP 17971, 2012-11-28; S23d; K_long '
+                    '2019-10-13 agrees to 35 A); detector-limited; PWV from the water at both edges (the CO2 '
+                    'bands at 2.01 and 2.06 um are not water); thermal background term to come (D60, part K)',
               group='K', order=3, zp_nodes_A=(20500.0, 21500.0, 23000.0), common_window_A=(19800.0, 23700.0),
               pwv_window_A=((19500.0, 20000.0), (23800.0, 24000.0)), edge_trim_frac=0.9,
-              lsf=LSF_PROVISIONAL, footprint_provisional=True),
+              lsf=LSF_PROVISIONAL),
 }
 
 # S11 validation (design 6.1, D14, D16, D18): J0841+3814_OFF on 2022-04-09, four
@@ -132,6 +151,25 @@ VALIDATION_J0841 = {
     'n5_oh_centroid_offset_A': -0.070,                                  # measured - Gemini, MAD 0.098, 26 lines
     'aperture_length_fwhm': {'best': 2.22, 'within_1pct': (1.48, 2.44), 'within_2pct': (1.32, 2.64)},   # D16
 }
+
+# PypeIt sensfunc parameter files per band group (design 4.3, D52, D53; plan S23d): J's is the released
+# S4b file; H and K are PROVISIONAL (polyorder 5, tell_npca 3, hydrogen_mask_wid 30 A) until the S24a
+# polyorder test; Y uses the J file (hydrogen mask 10 A as in J, D52) until the Y work (part Y).
+SENS_FILES = {'J': 'pypeit_par/keck_mosfire_J.sens', 'Y': 'pypeit_par/keck_mosfire_J.sens',
+              'H': 'pypeit_par/keck_mosfire_H.sens', 'K': 'pypeit_par/keck_mosfire_K.sens'}
+
+XTCALC_2012_MEDIAN = {'Y': 0.237, 'J': 0.276, 'H': 0.338, 'K': 0.317}
+"""XTcalc 2012 end-to-end throughput, median over the band (design 9.2); the anchor of the throughput gate."""
+
+THRU_GATE_RANGE = {'J': (0.15, 0.45),
+                   **{b: (round(0.5 * m, 2), round(1.6 * m, 2)) for b, m in XTCALC_2012_MEDIAN.items() if b != 'J'}}
+"""Per band group, the allowed median end-to-end throughput of one night's sensfunc (nautilus/gates.py):
+0.5-1.6x the XTcalc 2012 median (D55; Y 0.12-0.38, H 0.17-0.54, K 0.16-0.51); J keeps the S4b range
+0.15-0.45 (0.54-1.63x of 0.276)."""
+
+LEGACY_GATE_WINDOWS = {'J': {'zp_window_A': (11170.0, 12600.0), 'counts_window_A': (11700.0, 12400.0)}}
+"""The J group's gate windows as built in S4b (the J2 analysis window 1.117-1.260 um and 1.17-1.24 um),
+kept so that no J gate outcome changes (S23d); the other groups use their common window."""
 
 SKY_SCALE_DEFAULT = 1.0
 """D14 default ``sky_scale``: kept at 1.0. One night gives OH lines x0.86 and the
@@ -179,7 +217,7 @@ MONITOR = {
     # monitor.line_widths prefers this over lsf_ref_wave
     'lsf_ref_waves': {'J2': 12500.0, 'J': 12500.0, 'Y': 10500.0, 'H': 16500.0, 'K': 21500.0},
     'band_windows': {'J2': (11170.0, 12600.0), 'J': (11530.0, 13520.0),
-                     'Y': (9719.0, 11243.0), 'H': (14680.0, 18040.0), 'K': (19540.0, 23970.0)},
+                     'Y': (9719.0, 11243.0), 'H': (14650.0, 17971.0), 'K': (19536.0, 23991.0)},   # H, K measured (S23d)
     # monitor lines (D45, 4.9.4): frozen in S15a (2026-10-07).
     # J2 from scripts/mosfire/select_monitor_lines.py 20220409 20241230 20250723
     # --band J2 --nlines 5 (rule 2 at 1", S6b): 15 lines pass rules 1-4, every one
@@ -196,6 +234,31 @@ MONITOR = {
                              'Y': (), 'H': (), 'K': ()}},
     'monitor_lines_status': 'frozen',
 }
+
+def sens_par_file(band):
+    """Path under ``keck_etcs/data`` of the PypeIt ``.sens`` file of a band (by its group; :data:`SENS_FILES`)."""
+    group = BANDS[str(band)].group_name
+    return SENS_FILES[group]
+
+
+def gate_windows(band):
+    """The per-band windows and limits of ``nautilus/gates.py`` (design 4.8.7, D55).
+
+    Returns:
+        dict: ``zp_window_A`` (the group's common window: the zero point must
+        be finite there), ``counts_window_A`` (its middle third: the
+        ``OPT_COUNTS`` fidelity window), ``thru_range`` (the allowed median
+        end-to-end throughput over ``zp_window_A``) and ``group``.
+    """
+    b = BANDS[str(band)]
+    if b.group_name in LEGACY_GATE_WINDOWS:
+        return {'group': b.group_name, **LEGACY_GATE_WINDOWS[b.group_name], 'thru_range': tuple(THRU_GATE_RANGE[b.group_name])}
+    lo, hi = b.common_window_A
+    third = (hi - lo) / 3.0
+    return {'group': b.group_name, 'zp_window_A': (float(lo), float(hi)),
+            'counts_window_A': (float(lo + third), float(hi - third)),
+            'thru_range': tuple(THRU_GATE_RANGE[b.group_name])}
+
 
 MOSFIRE = Instrument(
     name='keck_mosfire',

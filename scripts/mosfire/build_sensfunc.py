@@ -1,9 +1,15 @@
 #!/usr/bin/env python
-"""Build the J-band sensitivity function(s) for one MOSFIRE night's standard.
+"""Build the sensitivity function(s) for one MOSFIRE night's standard, in one band.
 
 Usage:
     conda run -n pypeit14b python scripts/mosfire/build_sensfunc.py DATE
-        [--standard NAME] [--sens FILE] [--frames-only]
+        [--band H] [--standard NAME] [--sens FILE] [--frames-only]
+
+``--band`` (default ``$BAND``, then ``$FILTER``, from the night manifest)
+selects the night's product directory (``mosfire/<night>/<band>/`` for Y,
+H and K; the night level for J, J2 and J3; design D55) and the default
+``.sens`` file of the band's group (``keck_etcs.instruments.mosfire.sens_par_file``:
+``keck_mosfire_{J,H,K}.sens``; H and K provisional until S24a).
 
 e.g. ``build_sensfunc.py 20220409 --standard LDS749B``.
 
@@ -24,8 +30,8 @@ the right normalization for a mean of equal-length frames, and the script
 refuses to coadd frames whose exposure times differ. ``AIRMASS`` is the
 first frame's too (the log reports the spread).
 
-``--sens`` defaults to ``keck_etcs/data/pypeit_par/keck_mosfire_J.sens``.
-Each PypeIt call is logged to ``sens/<output stem>.log``.
+``--sens`` defaults to the band's file (above). Each PypeIt call is logged
+to ``sens/<output stem>.log``.
 
 A0V standards (design D2, N3; plan S15a): with ``--std-class A0V`` and
 ``--jmag`` (defaults: the night-manifest columns ``std_class`` and
@@ -52,6 +58,16 @@ REPO = Path(__file__).resolve().parents[2]
 DEFAULT_SENS = REPO / 'keck_etcs' / 'data' / 'pypeit_par' / 'keck_mosfire_J.sens'
 
 
+def default_sens(band):
+    """The ``.sens`` file of a band's group (the J file for None or an unknown band)."""
+    from keck_etcs.instruments.base import DATA_DIR
+    from keck_etcs.instruments import mosfire
+    try:
+        return DATA_DIR / mosfire.sens_par_file(band)
+    except KeyError:
+        return DEFAULT_SENS
+
+
 def run(cmd, log, cwd):
     print(f'$ {" ".join(str(c) for c in cmd)}  (log {log.name})', flush=True)
     with open(log, 'w') as f:
@@ -61,10 +77,13 @@ def run(cmd, log, cwd):
         raise RuntimeError(f'{cmd[0]} failed (exit {rc}); see {log}')
 
 
-def main(date, standard=None, sens=None, frames_only=False, std_class=None, jmag=None):
-    night = paths.night_dir('mosfire', date)
+def main(date, standard=None, sens=None, frames_only=False, std_class=None, jmag=None, band=None):
+    band = band or os.environ.get('BAND') or os.environ.get('FILTER') or None
+    night = paths.night_dir('mosfire', date, band=band)
     manifest = json.loads((night / 'run_manifest.json').read_text())
-    sens = Path(sens) if sens else DEFAULT_SENS
+    band = band or manifest.get('band') or manifest.get('filter')
+    sens = Path(sens) if sens else default_sens(band)
+    print(f'band {band}: products in {night}; sens parameters {sens}')
     outdir = night / 'sens'
     outdir.mkdir(parents=True, exist_ok=True)
     std_class = std_class if std_class is not None else os.environ.get('STD_CLASS') or None
@@ -159,4 +178,5 @@ if __name__ == '__main__':
     parser.add_argument('--frames-only', action='store_true', help='Skip the coadd')
     parser.add_argument('--std-class', help='archive (WD) or A0V (default: $STD_CLASS; archive if unset)')
     parser.add_argument('--jmag', type=float, help='2MASS J of an A0V standard (default: $JMAG_2MASS)')
+    parser.add_argument('--band', help='band of the products (default: $BAND, $FILTER; D55 layout)')
     sys.exit(main(**vars(parser.parse_args())))

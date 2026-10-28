@@ -11,7 +11,7 @@ authors:
   - family-names: Prochaska
     given-names: J. Xavier
     affiliation: University of California, Santa Cruz
-version: 0.2.5
+version: 0.2.6
 license: BSD-3-Clause
 repository-code: "https://github.com/pypeit/keck-etcs"
 url: "https://keck-etcs.readthedocs.io"

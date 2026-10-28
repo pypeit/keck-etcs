@@ -2,13 +2,22 @@
 """Hard gates on one reduced night (design 4.8.7); exits non-zero on any failure.
 
 Usage:
-    python nautilus/gates.py DATE [--standard NAME] [--reference REF]
+    python nautilus/gates.py DATE [--band H] [--standard NAME] [--reference REF]
         [--json OUT] [--update-manifest]
 
 Reads the night under ``$KECK_ETCS_DATA/mosfire/DATE`` (in a pod, the
-scratch directory): ``run_manifest.json`` written by
+scratch directory; for Y, H and K under ``mosfire/DATE/<band>/``, design
+D55; ``--band`` defaults to ``$BAND``, then ``$FILTER``, then the
+manifest's ``band``): ``run_manifest.json`` written by
 ``scripts/mosfire/reduce_standard.py`` and ``sens/sens_<NAME>_<DATE>.fits``
 written by ``scripts/mosfire/build_sensfunc.py``.
+
+The windows and limits come from the instrument module
+(``keck_etcs.instruments.mosfire.gate_windows(band)``, S23d, D55): the
+zero-point window is the band group's common window (J keeps its S4b
+window 1.117-1.260 um), the ``OPT_COUNTS`` fidelity window its middle
+third (J: 1.17-1.24 um) and the throughput range 0.5-1.6x XTcalc's 2012
+median for the band (Y 0.12-0.38, H 0.17-0.54, K 0.16-0.51; J 0.15-0.45).
 
 Gates, every night:
 
@@ -17,8 +26,9 @@ Gates, every night:
    i.e. both traces;
 2. ``wave_rms``: every slit's wavelength RMS is below PypeIt's threshold
    (``rms_thresh_frac_fwhm`` x the arc FWHM, from the manifest's ``wave_qa``);
-3. ``zp_finite``: the zero point is finite over 1.117-1.260 um;
-4. ``thru_median``: the median throughput over 1.117-1.260 um is 0.15-0.45.
+3. ``zp_finite``: the zero point is finite over the zero-point window;
+4. ``thru_median``: the median throughput over that window is in the
+   band's range.
 
 With ``--reference REF`` (a local night-like directory, or
 ``s3://<bucket>/<prefix>``, which is pulled into ``$KECK_ETCS_DATA/<prefix>``):
@@ -28,9 +38,9 @@ With ``--reference REF`` (a local night-like directory, or
    comparisons below are not made (FAIL). The reference's own
    ``pypeit_git_sha`` is expected to differ and is only reported (D35);
 6. ``spec1d_agree``: reduction fidelity. For every frame, the median ratio
-   of ``OPT_COUNTS`` (this run / reference) over 1.17-1.24 um is within
-   0.1 percent;
-7. ``zp_agree``: band-level zero-point agreement over 1.117-1.260 um. The
+   of ``OPT_COUNTS`` (this run / reference) over the fidelity window is
+   within 0.1 percent;
+7. ``zp_agree``: band-level zero-point agreement over the zero-point window. The
    throughput ratio 10**(0.4 dZP) must have its median within 2 percent of
    1 and its per-pixel 5-95 percentile range within 1 +- 0.05;
 8. ``s2n_agree``: every object's ``S2N`` agrees with the reference's (matched
@@ -65,13 +75,14 @@ sys.path.insert(0, str(REPO / 'scripts' / 'mosfire'))
 import inspect_sensfunc  # noqa: E402
 
 from keck_etcs import paths, provenance  # noqa: E402
+from keck_etcs.instruments import mosfire as mosfire_module  # noqa: E402
 
 INSTRUMENT = 'mosfire'
-THRU_RANGE = inspect_sensfunc.THRU_RANGE
+THRU_RANGE = inspect_sensfunc.THRU_RANGE          # the J range (S4b); per band from gate_windows() since S23d
 ZP_MEDIAN_TOL = 0.02          # median pod/reference throughput ratio
 ZP_PIXEL_TOL = 0.05           # its 5-95 percentile range
 COUNTS_TOL = 0.001            # median OPT_COUNTS ratio per frame
-COUNTS_WINDOW = (11700.0, 12400.0)
+COUNTS_WINDOW = (11700.0, 12400.0)                # the J fidelity window (S4b); per band since S23d
 S2N_TOL = 0.05
 
 
@@ -107,8 +118,8 @@ def resolve_reference(ref):
 SPECPHOT_RMS_PIX = 0.5
 
 
-def spec1d_agree(night, rdir, m):
-    """Median OPT_COUNTS ratio per frame, this run / reference."""
+def spec1d_agree(night, rdir, m, window=COUNTS_WINDOW):
+    """Median OPT_COUNTS ratio per frame, this run / reference, over ``window`` (A)."""
     from pypeit.specobjs import SpecObjs
     rows, bad = [], []
     for o in m['objects']:
@@ -119,32 +130,38 @@ def spec1d_agree(night, rdir, m):
             continue
         a = SpecObjs.from_fitsfile(str(mine), chk_version=False)[0]
         b = SpecObjs.from_fitsfile(str(ref), chk_version=False)[0]
-        sel = (a['OPT_WAVE'] > COUNTS_WINDOW[0]) & (a['OPT_WAVE'] < COUNTS_WINDOW[1])
+        sel = (a['OPT_WAVE'] > window[0]) & (a['OPT_WAVE'] < window[1])
         r = float(np.median(a['OPT_COUNTS'][sel]) /
                   np.median(np.interp(a['OPT_WAVE'][sel], b['OPT_WAVE'], b['OPT_COUNTS'])))
         rows.append(f"{o['frame']} {r:.6f}")
         if abs(r - 1) >= COUNTS_TOL:
             bad.append(o['frame'])
     return gate('spec1d_agree', not bad and bool(rows),
-                'median OPT_COUNTS ratio ' + '; '.join(rows) + f' (tolerance {COUNTS_TOL})'
-                + (f'; FAIL {bad}' if bad else ''))
+                f'median OPT_COUNTS ratio over {window[0]:.0f}-{window[1]:.0f} A: ' + '; '.join(rows)
+                + f' (tolerance {COUNTS_TOL})' + (f'; FAIL {bad}' if bad else ''))
 
 
 def sens_file(night_dir, standard, date):
     return Path(night_dir) / 'sens' / f'sens_{standard}_{date}.fits'
 
 
-def main(date, standard=None, reference=None, json_out=None, update_manifest=False):
-    night = paths.night_dir(INSTRUMENT, date)
+def main(date, standard=None, reference=None, json_out=None, update_manifest=False, band=None):
+    band = band or os.environ.get('BAND') or os.environ.get('FILTER') or None
+    night = paths.night_dir(INSTRUMENT, date, band=band)
     mpath = night / 'run_manifest.json'
     if not mpath.exists():
         print(f'missing {mpath}')
         return 2
     m = json.loads(mpath.read_text())
+    band = band or m.get('band') or m.get('filter')
+    gw = mosfire_module.gate_windows(band)
+    zp_window, counts_window, thru_range = gw['zp_window_A'], gw['counts_window_A'], gw['thru_range']
     standard = standard or next((f['target'] for f in m['frames'] if 'standard' in f['frametype']),
                                 None)
     sens = sens_file(night, standard, date)
-    print(f'Gates for {night} (standard {standard}; sens {sens.name})', flush=True)
+    print(f'Gates for {night} (band {band}, group {gw["group"]}; standard {standard}; sens {sens.name}; '
+          f'zero-point window {zp_window[0]:.0f}-{zp_window[1]:.0f} A, fidelity window '
+          f'{counts_window[0]:.0f}-{counts_window[1]:.0f} A, throughput range {thru_range})', flush=True)
     results = []
 
     # 1. spec1d
@@ -197,12 +214,13 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
         results.append(gate('thru_median', False, f'missing {sens}'))
         pod = None
     else:
-        pod, _ = inspect_sensfunc.inspect(sens)
+        pod, _ = inspect_sensfunc.inspect(sens, window=zp_window, band=band)
         results.append(gate('zp_finite', pod['zp_finite_in_window'],
-                            f"zero point finite over {pod['zp_range_A']} A"))
+                            f"zero point finite over {pod['zp_range_A']} A (window {zp_window[0]:.0f}-{zp_window[1]:.0f} A)"))
         t = pod['thru_median_window']
-        results.append(gate('thru_median', t is not None and THRU_RANGE[0] <= t <= THRU_RANGE[1],
-                            f'median throughput 1.117-1.260 um = {t:.4f} (allowed {THRU_RANGE})'))
+        results.append(gate('thru_median', t is not None and thru_range[0] <= t <= thru_range[1],
+                            f'median throughput over {zp_window[0]:.0f}-{zp_window[1]:.0f} A = '
+                            f'{t if t is None else round(t, 4)} (allowed {thru_range})'))
 
     # 5-7. reference
     ref_info = None
@@ -221,14 +239,14 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
             for name in ('spec1d_agree', 'zp_agree', 's2n_agree'):
                 results.append(gate(name, False, 'not compared: reference pin mismatch'))
         else:
-            results.append(spec1d_agree(night, rdir, m))
+            results.append(spec1d_agree(night, rdir, m, counts_window))
             rsens = sens_file(rdir, standard, date)
             if pod is None or not rsens.exists():
                 results.append(gate('zp_agree', False, f'missing {sens if pod is None else rsens}'))
             else:
                 a = inspect_sensfunc.load(sens)
                 b = inspect_sensfunc.load(rsens)
-                c = inspect_sensfunc.compare(a, b)
+                c = inspect_sensfunc.compare(a, b, window=zp_window)
                 ok = (abs(c['median_ratio'] - 1) < ZP_MEDIAN_TOL and abs(c['p05'] - 1) < ZP_PIXEL_TOL
                       and abs(c['p95'] - 1) < ZP_PIXEL_TOL)
                 results.append(gate('zp_agree', ok,
@@ -251,7 +269,9 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
                                 '; '.join(rows) + (f'; FAIL {bad}' if bad else '')))
 
     passed = all(r['pass'] for r in results)
-    summary = {'pass': passed, 'gates': results, 'reference': ref_info,
+    summary = {'pass': passed, 'gates': results, 'reference': ref_info, 'band': band,
+               'windows': {'zp_window_A': list(zp_window), 'counts_window_A': list(counts_window),
+                           'thru_range': list(thru_range)},
                'failed': [r['name'] for r in results if not r['pass']]}
     print(f"GATES: {'PASS' if passed else 'FAIL ' + ', '.join(summary['failed'])}", flush=True)
     if json_out:
@@ -272,4 +292,5 @@ if __name__ == '__main__':
     p.add_argument('--json', dest='json_out', help='Write the gate results as JSON')
     p.add_argument('--update-manifest', action='store_true',
                    help='Record the results (and sens sha256) in run_manifest.json')
+    p.add_argument('--band', help='Band of the products (default: $BAND, $FILTER, the manifest); D55 layout')
     sys.exit(main(**vars(p.parse_args())))

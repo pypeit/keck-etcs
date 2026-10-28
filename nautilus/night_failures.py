@@ -33,7 +33,7 @@ from keck_etcs import paths
 REPO = Path(__file__).resolve().parents[1]
 DATA_REASONS = {'no calibs', 'no trace'}
 COLS = ('night', 'instrument', 's3_prefix', 'standard', 'slit', 'spec2d', 'notes')
-OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter')   # nautilus/status_row.py
+OPTIONAL_COLS = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter', 'band')   # nautilus/status_row.py
 
 
 def cell(r, c):

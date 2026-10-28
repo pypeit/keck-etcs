@@ -14,9 +14,14 @@ Reads ``keck_etcs/data/mosfire/koa_standards_candidates.ecsv``
 night) with the columns ``night_job.yaml`` expects (design 4.8.4: ``night,
 instrument, s3_prefix, standard, slit, spec2d, notes``) plus the optional
 columns the driver reads (plan S15a): ``std_class`` (WD, archive or A0V),
-``jmag_2mass``, ``std_ra``, ``std_dec`` (degrees) and ``filter`` (the band to
-reduce; the driver's default ``--filter``). ``standard`` has its spaces
-removed (it names files); ``slit`` is the mask name.
+``jmag_2mass``, ``std_ra``, ``std_dec`` (degrees), ``filter`` and ``band``
+(the band to reduce, the same value twice: ``band`` is the D55 name, exported
+to the pod as ``$BAND``; ``filter`` the S14 one). A night observed in several
+bands is several rows, one per (night, band), and ``s3_prefix`` is the
+band's product prefix (``mosfire/<night>`` for the J group,
+``mosfire/<night>/<band>`` for Y, H and K; design D55, plan S23d).
+``standard`` has its spaces removed (it names files); ``slit`` is the mask
+name.
 
 A night with several candidate rows keeps one: usable classes first (WD,
 archive, A0V), then wide slits, then the most frames.
@@ -42,7 +47,9 @@ then the latest night. ``batch1`` (KOA prompt 2): every reducible public wide-sl
 reducible Hennawi/Yang/Wang nights, up to 20 nights, 2022-04-09 excluded.
 
 ``dryrun`` rewrites ``nights_dryrun.csv`` (2022-04-09,
-``spec2d = 1``, the S4b note) with the optional columns.
+``spec2d = 1``, the S4b note) with the optional columns; ``dryrun_HK``
+writes ``nights_dryrun_HK.csv``, the two rows (H and K) of the 2012-11-28
+reference night for the S23d dry runs (:data:`DRYRUN_HK`).
 """
 import argparse
 import csv
@@ -52,14 +59,23 @@ from pathlib import Path
 import numpy as np
 from astropy.table import Table
 
+from keck_etcs import paths
+
 REPO = Path(__file__).resolve().parents[2]
 CAND = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'koa_standards_candidates.ecsv'
 OUTDIR = REPO / 'nautilus' / 'manifests'
 COLS = ('night', 'instrument', 's3_prefix', 'standard', 'slit', 'spec2d', 'notes')
-OPTIONAL = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter')
+OPTIONAL = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter', 'band')
 USABLE = ('WD', 'archive', 'A0V')
 CLASS_RANK = {'WD': 0, 'archive': 1, 'A0V': 2, 'other': 3}
 DRYRUN_NOTE = 'S4b dry run; reference at mosfire/20220409/reference'
+DRYRUN_HK = {'night': '20121128', 'standard': 'HIP17971', 'slit': 'LONGSLIT-3x0.7', 'std_ra': 57.6335, 'std_dec': 29.7446,
+             'jmag_2mass': 8.005, 'bands': ('H', 'K')}
+"""The S23d dry runs (D56): the dev-suite longslit_3x0.7_H/_K night, HIP 17971 (= HD 24000, A0V; the SIMBAD
+name in the candidate table) on the centred 3-bar 0.7" slit, with the 2013-10-15 dome flats the dev suite
+pairs it with. KOA holds no H or K flats for 2012-11-28, so the raw frames are the dev-suite ones pushed to
+mosfire/20121128/raw/ (shared by both bands), and the references are the local image reductions staged at
+mosfire/20121128/{H,K}/reference/ (scripts/nautilus/stage_reference.py --band)."""
 BATCH1_SIZE = 20
 
 
@@ -74,14 +90,20 @@ def rank(rows):
 
 
 def manifest_row(r, spec2d=0, notes=None):
+    """One manifest row for a candidate row: a (night, band); the products' s3_prefix follows design D55
+    (``mosfire/<night>`` for J, J2 and J3, ``mosfire/<night>/<band>`` for Y, H and K; the raw frames are
+    shared under ``mosfire/<night>/raw``)."""
     j = float(r['jmag_2mass'])
-    return {'night': str(r['night']), 'instrument': 'mosfire', 's3_prefix': f"mosfire/{r['night']}",
+    band = str(r['filter'])
+    return {'night': str(r['night']), 'instrument': 'mosfire',
+            's3_prefix': paths.s3_prefix('mosfire', str(r['night']), band=band),
             'standard': str(r['standard']).replace(' ', ''), 'slit': str(r['maskname']), 'spec2d': str(spec2d),
             'notes': notes if notes is not None else
             (f"{r['std_class']} {r['std_archive']} {r['std_sptype']}; {r['filter']}; {r['n_frames']} frames; "
              f"flats {r['n_flats']}; lamp arcs {r['n_lamp_arcs']}; prog {r['progid']} {r['progpi']}; era {r['era']}"),
             'std_class': str(r['std_class']), 'jmag_2mass': '' if not np.isfinite(j) else f'{j:.3f}',
-            'std_ra': f"{float(r['std_ra']):.6f}", 'std_dec': f"{float(r['std_dec']):.6f}", 'filter': str(r['filter'])}
+            'std_ra': f"{float(r['std_ra']):.6f}", 'std_dec': f"{float(r['std_dec']):.6f}", 'filter': band,
+            'band': band}
 
 
 def single_filter_nights(t):
@@ -155,14 +177,16 @@ def check(path):
     for i, r in enumerate(rows):
         if not (r['night'].isdigit() and len(r['night']) == 8):
             probs.append(f'row {i}: night {r["night"]!r}')
-        if r['s3_prefix'] != f"mosfire/{r['night']}":
-            probs.append(f'row {i}: s3_prefix {r["s3_prefix"]!r}')
+        band = r.get('band') or r.get('filter') or None
+        want = paths.s3_prefix('mosfire', r['night'], band=band) if (r['night'].isdigit() and len(r['night']) == 8) else None
+        if r['s3_prefix'] != want:
+            probs.append(f'row {i}: s3_prefix {r["s3_prefix"]!r} (expected {want!r} for band {band})')
         if r.get('std_class') == 'A0V' and not (r.get('jmag_2mass') and r.get('std_ra') and r.get('std_dec')):
             probs.append(f'row {i}: A0V without J or coordinates')
         if ' ' in r['standard']:
             probs.append(f'row {i}: space in standard')
-    if len({r['night'] for r in rows}) != len(rows):
-        probs.append('duplicate nights')
+    if len({(r['night'], r.get('band') or r.get('filter') or '') for r in rows}) != len(rows):
+        probs.append('duplicate (night, band) rows')
     return probs, len(rows)
 
 
@@ -172,6 +196,18 @@ def main(batch, nights=None, era=None, usable_wide=False):
     if batch == 'dryrun':
         sel = [r for r in t if str(r['night']) == '20220409' and str(r['standard']) == 'LDS749B']
         rows = [manifest_row(sel[0], spec2d=1, notes=DRYRUN_NOTE)]
+    elif batch == 'dryrun_HK':
+        d = DRYRUN_HK
+        rows = []
+        for band in d['bands']:
+            rows.append({'night': d['night'], 'instrument': 'mosfire',
+                         's3_prefix': paths.s3_prefix('mosfire', d['night'], band=band), 'standard': d['standard'],
+                         'slit': d['slit'], 'spec2d': '0',
+                         'notes': f'S23d dry run (D56): dev-suite longslit_3x0.7_{band} raw frames (standard 2012-11-28, '
+                                  f'dome flats 2013-10-15) pushed to mosfire/{d["night"]}/raw; reference at '
+                                  f'mosfire/{d["night"]}/{band}/reference',
+                         'std_class': 'A0V', 'jmag_2mass': f"{d['jmag_2mass']:.3f}", 'std_ra': f"{d['std_ra']:.6f}",
+                         'std_dec': f"{d['std_dec']:.6f}", 'filter': band, 'band': band})
     elif batch == 'pilot':
         picked, why = select_pilot(t)
         rows = [manifest_row(r) for r in picked]
@@ -186,9 +222,10 @@ def main(batch, nights=None, era=None, usable_wide=False):
             sub = sub[sub['era'] == era]
         if usable_wide:
             sub = sub[np.isin(sub['std_class'], USABLE) & sub['wide_slit'] & sub['reducible']]
+        # one row per (night, band) (D55): a night observed in several bands becomes several rows
         by_night = {}
         for r in sub:
-            by_night.setdefault(str(r['night']), []).append(r)
+            by_night.setdefault((str(r['night']), str(r['filter'])), []).append(r)
         rows = [manifest_row(best(v)) for _, v in sorted(by_night.items())]
     path = write(rows, OUTDIR / f'nights_{batch}.csv')
     probs, n = check(path)
@@ -202,7 +239,7 @@ def main(batch, nights=None, era=None, usable_wide=False):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    p.add_argument('batch', help='pilot, batch1, dryrun, or a batch name')
+    p.add_argument('batch', help='pilot, batch1, dryrun, dryrun_HK, or a batch name')
     p.add_argument('--nights', nargs='+')
     p.add_argument('--era')
     p.add_argument('--usable-wide', action='store_true',

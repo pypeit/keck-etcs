@@ -7,12 +7,17 @@ Since S6b this is a thin wrapper: the fit lives in
 keeps the report, the plot and ``--record`` (``lsf_measurements.ecsv``).
 
 Usage:
-    conda run -n pypeit14b python scripts/mosfire/measure_lsf.py DATE [--wavecalib FILE]
+    conda run -n pypeit14b python scripts/mosfire/measure_lsf.py DATE [--band H] [--wavecalib FILE]
         [--slit 1.0] [--record] [--plot]
 
 Reads the night's ``WaveCalib`` (default
 ``$KECK_ETCS_DATA/mosfire/DATE/redux/Calibrations/WaveCalib_*.fits``, the
-synced in-pod copy after ``s3_sync.py pull``). Its arc spectrum is the OH sky
+synced in-pod copy after ``s3_sync.py pull``; for Y, H and K under
+``mosfire/DATE/<band>/``, design D55, ``--band`` defaulting to ``$BAND``).
+The reference wavelength of the row is the band's middle zero-point node
+(``MONITOR['lsf_ref_waves']``: J 12500, Y 10500, H 16500, K 21500 A; S23d),
+recorded as ``ref_wave_A`` beside ``fwhm_A_ref`` and ``R_ref`` (the S13
+columns ``fwhm_A_1250`` and ``R_1250`` renamed). Its arc spectrum is the OH sky
 of the science frames, which fill the slit, so this is the LSF of a
 uniformly illuminated slit of width ``--slit`` (the slit of the frames that
 made the arc). For every line PypeIt identified (``pixel_fit``,
@@ -41,6 +46,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -50,12 +56,13 @@ from astropy.table import Table
 
 from keck_etcs import paths
 from keck_etcs.calib import monitor as mo
+from keck_etcs.calib.harvest import sha256sum   # (the S6b refactor dropped the local definition; --record needs it)
 
 REPO = Path(__file__).resolve().parents[2]
 TABLE = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'lsf_measurements.ecsv'
 INDEX = REPO / 'keck_etcs' / 'data' / 'index.yaml'
 CALIB_VERSION = 'mosfire-2026.10-dev'
-REF_WAVE = 12500.0       # A
+REF_WAVE = 12500.0       # A, the J reference (the S13 default); per band from MONITOR['lsf_ref_waves']
 SLOPE_ARCSEC_PER_PIX = 0.24   # design D25 (anamorphic dispersion-direction pixel)
 FLOOR_PIX = 2.2
 R0_SLIT = 3310.0 * 0.7        # design: R = 3310 x 0.7 / slit
@@ -69,13 +76,18 @@ def measure(wavecalib, slit):
     return wc, wf, lines, max(slit / SLOPE_ARCSEC_PER_PIX, FLOOR_PIX)
 
 
-def trend(lines):
+def trend(lines, ref_wave=REF_WAVE):
     """Linear FWHM(lambda) fit, now ``keck_etcs.calib.monitor.width_trend``."""
-    return mo.width_trend(lines, REF_WAVE)
+    return mo.width_trend(lines, ref_wave)
 
 
-def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
-    night = paths.night_dir('mosfire', date)
+def main(date, wavecalib=None, slit=1.0, record=False, plot=False, band=None):
+    from keck_etcs.instruments.mosfire import MONITOR
+    band = band or os.environ.get('BAND') or os.environ.get('FILTER') or None
+    night = paths.night_dir('mosfire', date, band=band)
+    man = json.loads((night / 'run_manifest.json').read_text()) if (night / 'run_manifest.json').exists() else {}
+    band = band or man.get('band') or man.get('filter') or 'J2'
+    ref_wave = float(MONITOR['lsf_ref_waves'].get(band, REF_WAVE))
     if wavecalib is None:
         hits = sorted((night / 'redux' / 'Calibrations').glob('WaveCalib_*.fits'))
         if not hits:
@@ -84,12 +96,13 @@ def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
         wavecalib = hits[0]
     wavecalib = Path(wavecalib)
     wc, wf, lines, expected = measure(wavecalib, slit)
-    coef, keep, clean, scatter = trend(lines)
+    coef, keep, clean, scatter = trend(lines, ref_wave)
     fwhm_ref = float(np.polyval(coef, 0.0))
-    disp_ref = float(np.interp(REF_WAVE, np.asarray(wf.wave_soln), np.abs(np.gradient(np.asarray(wf.wave_soln)))))
+    disp_ref = float(np.interp(ref_wave, np.asarray(wf.wave_soln), np.abs(np.gradient(np.asarray(wf.wave_soln)))))
     fwhm_a_ref = fwhm_ref * disp_ref
-    r_ref = REF_WAVE / fwhm_a_ref
+    r_ref = ref_wave / fwhm_a_ref
     r_model = R0_SLIT / slit
+    print(f'band {band}, reference wavelength {ref_wave:.0f} A, slit {slit}"')
 
     print(f'{wavecalib}  (PypeIt arc FWHM estimate {wf.fwhm:.3f} px, RMS {wf.rms:.3f} px)')
     print(f'{len(lines)} identified lines fitted; {int(lines["blended"].sum())} flagged as blends; '
@@ -98,8 +111,8 @@ def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
     for r in lines:
         print(f'{r["wave"]:10.2f} {r["fwhm_pix"]:8.3f} {r["fwhm_pix_err"]:6.3f} {r["fwhm_A"]:7.2f} '
               f'{r["R"]:6.0f}  {"B" if r["blended"] else ""}')
-    print(f'\nFWHM_pix(lambda) = {coef[1]:.3f} + {coef[0] * 1e3:+.4f} x (lambda - 1.25 um)/1000 A')
-    print(f'At 1.25 um: FWHM {fwhm_ref:.3f} px = {fwhm_a_ref:.2f} A (dispersion {disp_ref:.3f} A/px), '
+    print(f'\nFWHM_pix(lambda) = {coef[1]:.3f} + {coef[0] * 1e3:+.4f} x (lambda - {ref_wave / 1e4:.3f} um)/1000 A')
+    print(f'At {ref_wave / 1e4:.3f} um: FWHM {fwhm_ref:.3f} px = {fwhm_a_ref:.2f} A (dispersion {disp_ref:.3f} A/px), '
           f'R = {r_ref:.0f}')
     ok_f = abs(fwhm_ref / expected - 1) < 0.20
     ok_r = abs(r_ref / r_model - 1) < 0.15
@@ -130,11 +143,11 @@ def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
         ax.plot(lines['wave'][~b] / 1e4, lines['fwhm_pix'][~b], 'o', color='#2a78d6', ms=5, label='clean lines')
         ax.plot(lines['wave'][b] / 1e4, lines['fwhm_pix'][b], 'x', color='#6b6a64', ms=6, label='blends (not used)')
         ww = np.linspace(lines['wave'].min(), lines['wave'].max(), 50)
-        ax.plot(ww / 1e4, np.polyval(coef, ww - REF_WAVE), color='#1f1f1e', lw=2, label='linear fit')
+        ax.plot(ww / 1e4, np.polyval(coef, ww - ref_wave), color='#1f1f1e', lw=2, label='linear fit')
         ax.axhline(expected, color='#eb6834', lw=2, ls='--', label=f'design max({slit}/0.24, 2.2)')
         ax.set_xlabel(r'Vacuum wavelength ($\mu$m)')
         ax.set_ylabel('OH line FWHM (pixels)')
-        ax.set_title(f'MOSFIRE J2 LSF from OH lines, {date}, {slit}" slit', fontsize=10)
+        ax.set_title(f'MOSFIRE {band} LSF from OH lines, {date}, {slit}" slit', fontsize=10)
         ax.legend(frameon=False, fontsize=8)
         for s in ('top', 'right'):
             ax.spines[s].set_visible(False)
@@ -144,13 +157,12 @@ def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
         print(f'plot: {outdir / f"lsf_{date}.png"}')
 
     if record:
-        man = json.loads((night / 'run_manifest.json').read_text()) if (night / 'run_manifest.json').exists() else {}
-        row = {'date': f'{date[:4]}-{date[4:6]}-{date[6:]}', 'filter': man.get('filter', ''),
+        row = {'date': f'{date[:4]}-{date[4:6]}-{date[6:]}', 'filter': band,
                'slit_width': slit, 'fwhm_pix': round(fwhm_ref, 4), 'fwhm_pix_scatter': round(scatter, 4),
-               'fwhm_A_1250': round(fwhm_a_ref, 3), 'R_1250': round(r_ref, 1),
+               'ref_wave_A': ref_wave, 'fwhm_A_ref': round(fwhm_a_ref, 3), 'R_ref': round(r_ref, 1),
                'dfwhm_dlam_pix_per_1000A': round(float(coef[0]) * 1e3, 4),
                'n_lines': int(keep.sum()), 'pypeit_arc_fwhm_pix': round(float(wf.fwhm), 4),
-               'source': f'{man.get("s3_prefix", "mosfire/" + date)}/redux/Calibrations/{wavecalib.name}',
+               'source': f'{man.get("s3_prefix", paths.s3_prefix("mosfire", date, band=band))}/redux/Calibrations/{wavecalib.name}',
                'source_sha256': sha256sum(wavecalib),
                'image': man.get('image', 'local'), 'image_digest': man.get('image_digest') or '',
                'pypeit_git_sha': man.get('pypeit_git_sha') or '', 'keck_etcs_git_sha': man.get('keck_etcs_git_sha') or '',
@@ -160,17 +172,27 @@ def main(date, wavecalib=None, slit=1.0, record=False, plot=False):
         rows = []
         if TABLE.exists():
             old = Table.read(TABLE, format='ascii.ecsv')
-            rows = [dict(zip(old.colnames, r)) for r in old
-                    if not (str(r['date']) == row['date'] and float(r['slit_width']) == slit)]
+            for r in old:
+                d = {c: (r[c].item() if hasattr(r[c], 'item') else r[c]) for c in old.colnames}
+                # the S13 columns of the J row, renamed in S23d (same values)
+                if 'fwhm_A_1250' in d:
+                    d['ref_wave_A'] = 12500.0
+                    d['fwhm_A_ref'] = d.pop('fwhm_A_1250')
+                    d['R_ref'] = d.pop('R_1250')
+                if str(d['date']) == row['date'] and float(d['slit_width']) == slit and str(d['filter']) == band:
+                    continue
+                rows.append({k: d.get(k, '') for k in row})
         rows.append(row)
         t = Table(rows=rows, names=list(row))
-        t.sort(['date', 'slit_width'])
-        for c, u in {'slit_width': 'arcsec', 'fwhm_pix': 'pix', 'fwhm_pix_scatter': 'pix', 'fwhm_A_1250': 'Angstrom',
-                     'pypeit_arc_fwhm_pix': 'pix'}.items():
+        t.sort(['filter', 'date', 'slit_width'])
+        for c, u in {'slit_width': 'arcsec', 'fwhm_pix': 'pix', 'fwhm_pix_scatter': 'pix', 'ref_wave_A': 'Angstrom',
+                     'fwhm_A_ref': 'Angstrom', 'pypeit_arc_fwhm_pix': 'pix'}.items():
             t[c].unit = u
-        t.meta.update({'description': 'MOSFIRE LSF measured from OH lines (S13); read by the instrument module (S8)',
-                       'model': 'design D25/5.3.6: FWHM_pix = max(slit / 0.24, 2.2); R = 3310 x 0.7 / slit',
-                       'ref_wave_A': REF_WAVE, 'calib_version': CALIB_VERSION,
+        t.meta.update({'description': 'MOSFIRE LSF measured from OH lines per band and slit (S13, S23d); read by the '
+                                      'instrument module (S8): one row per (filter, date, slit_width)',
+                       'model': 'design D25/5.3.6: FWHM_pix = max(slit / 0.24, 2.2); R = 3310 x 0.7 / slit; '
+                                'since S16 the quadrature rule sqrt((w / 0.292)^2 + 1.08^2) pix',
+                       'ref_wave_A': 'per row (ref_wave_A: the band middle zero-point node)', 'calib_version': CALIB_VERSION,
                        'created': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                        'script': 'scripts/mosfire/measure_lsf.py --record'})
         TABLE.parent.mkdir(parents=True, exist_ok=True)
@@ -193,5 +215,6 @@ if __name__ == '__main__':
     p.add_argument('--slit', type=float, default=1.0, help='slit width (arcsec) of the arc frames')
     p.add_argument('--record', action='store_true', help='write the row to lsf_measurements.ecsv')
     p.add_argument('--plot', action='store_true', help='write a PNG of FWHM against wavelength')
+    p.add_argument('--band', help='band (default: $BAND, $FILTER, the night manifest; J2 for the S13 nights)')
     a = p.parse_args()
-    sys.exit(main(a.date, a.wavecalib, a.slit, a.record, a.plot))
+    sys.exit(main(a.date, a.wavecalib, a.slit, a.record, a.plot, a.band))

@@ -74,13 +74,20 @@ def interp_zp(wave, zp, w):
     return float(np.interp(w, wave[g], zp[g]))
 
 
-def estimate_pwv(sf):
-    """PWV from the fitted telluric model (keck_etcs.calib.harvest.estimate_pwv)."""
+def estimate_pwv(sf, pwv_window=JWIN):
+    """PWV from the fitted telluric model (keck_etcs.calib.harvest.estimate_pwv) over ``pwv_window``
+    (one (lo, hi) or several; the band's ``pwv_window_A`` for the other bands, S23d); None without samples."""
     from keck_etcs.calib.harvest import estimate_pwv as _estimate
     m = sf.telluric.model
     res = float(m['TELL_RESLN'][0])
-    out = _estimate(np.asarray(m['WAVE'][0], float), np.asarray(m['TELLURIC'][0], float), res,
-                    float(sf.airmass), window=JWIN)
+    w, t = np.asarray(m['WAVE'][0], float), np.asarray(m['TELLURIC'][0], float)
+    windows = (pwv_window,) if np.ndim(pwv_window[0]) == 0 else tuple(pwv_window)
+    inside = np.zeros(w.size, bool)
+    for lo, hi in windows:
+        inside |= (w >= lo) & (w <= hi)
+    if not np.any(inside & np.isfinite(t) & (t > 0)):
+        return None
+    out = _estimate(w, t, res, float(sf.airmass), window=pwv_window)
     out.update({'airmass': float(sf.airmass), 'resolution': res})
     return out
 
@@ -104,8 +111,15 @@ def binned_resid(w, ratio, good, lo, hi):
     return float(np.median(ratio[sel]) - 1), int(sel.sum())
 
 
-def inspect(path):
+def inspect(path, window=JWIN, band=None):
+    """Inspect one sensfunc; ``window`` (lo, hi A) is the analysis window (the J2 window by default; a band's
+    common window from ``keck_etcs.instruments.mosfire.gate_windows`` for the other bands, S23d), and
+    ``band`` selects the PWV windows of the telluric check (``Band.pwv_window_A``; the J2 window without it)."""
     sf, wave, zp = load(path)
+    pwv_window = JWIN
+    if band is not None:
+        from keck_etcs.instruments.mosfire import MOSFIRE
+        pwv_window = MOSFIRE.bands[str(band)].pwv_window_A or JWIN
     out = {'file': str(path), 'std_name': sf.std_name, 'std_cal': sf.std_cal,
            'algorithm': sf.algorithm, 'airmass': float(sf.airmass), 'exptime': float(sf.exptime)}
     m = sf.telluric.model if sf.telluric is not None else None
@@ -117,7 +131,7 @@ def inspect(path):
                            'stretch': float(m['TELL_STRETCH'][0]),
                            'chi2': float(m['CHI2'][0]), 'success': bool(m['SUCCESS'][0]),
                            'niter': int(m['NITER'][0])}
-        out['pwv_estimate'] = estimate_pwv(sf)
+        out['pwv_estimate'] = estimate_pwv(sf, pwv_window)
 
     g = good_zp(wave, zp)
     thru = np.full_like(zp, np.nan)
@@ -128,7 +142,8 @@ def inspect(path):
         t = None if z is None else float(zeropoint_to_throughput(np.array([w]), np.array([z]),
                                                                  EFF_APERTURE)[0])
         out['zeropoint'][f'{w / 1e4:.2f}um'] = {'zp': z, 'throughput': t}
-    inj = (wave >= JWIN[0]) & (wave <= JWIN[1])
+    inj = (wave >= window[0]) & (wave <= window[1])
+    out['window_A'] = [float(window[0]), float(window[1])]
     out['zp_finite_in_window'] = bool(inj.any() and np.all(g[inj]))
     out['zp_range_A'] = [float(wave[g].min()), float(wave[g].max())] if g.any() else None
     out['thru_median_window'] = float(np.nanmedian(thru[inj & g])) if (inj & g).any() else None
@@ -137,7 +152,7 @@ def inspect(path):
     ratio = np.where(fgood, ff / np.where(fmodel > 0, fmodel, 1), np.nan)
     out['tell_resid_1.13'], n = binned_resid(fw, ratio, fgood, *TELL_WINDOW)
     out['red_edge'] = []
-    last = fw[fgood].max() if fgood.any() else JWIN[1]
+    last = fw[fgood].max() if fgood.any() else window[1]
     for lo in np.arange(12200.0, last, 50.0):
         r, n = binned_resid(fw, ratio, fgood, lo, lo + 50)
         if n:
@@ -152,10 +167,10 @@ def inspect(path):
     return out, (sf, wave, zp, fw, ff, fivar, fmodel, fgood)
 
 
-def compare(a, b):
+def compare(a, b, window=JWIN):
     (_, wa, za), (_, wb, zb) = a, b
     ga, gb = good_zp(wa, za), good_zp(wb, zb)
-    sel = ga & (wa >= JWIN[0]) & (wa <= JWIN[1]) & (wa >= wb[gb].min()) & (wa <= wb[gb].max())
+    sel = ga & (wa >= window[0]) & (wa <= window[1]) & (wa >= wb[gb].min()) & (wa <= wb[gb].max())
     zb_i = np.interp(wa[sel], wb[gb], zb[gb])
     dzp = za[sel] - zb_i
     ratio = 10 ** (0.4 * dzp)

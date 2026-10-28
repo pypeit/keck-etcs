@@ -1,13 +1,17 @@
-# keck-etcs dry run on Nautilus (S4b, design 4.8.7): reduce 2022-04-09 in one
-# pod with image 0.2.1 and gate it against the local S4 reference
-# (s3://keck-etcs/mosfire/20220409/reference/): spec1d for both LDS749B traces
+# keck-etcs dry run on Nautilus (S4b, design 4.8.7; per band since S23d, D55):
+# reduce the rows of a dry-run manifest, one pod each, and gate each against its
+# own reference, s3://keck-etcs/<s3_prefix>/reference/ (GATES_REFERENCE=auto;
+# the J dry run 2022-04-09 at mosfire/20220409/reference, the H and K dry runs
+# of 2012-11-28 at mosfire/20121128/{H,K}/reference, staged with
+# scripts/nautilus/stage_reference.py --band): spec1d for both LDS749B traces
 # and the four J0841 frames, wavelength RMS, zero point finite, median
 # throughput 0.15-0.45, reference pin == the pod's PypeIt SHA, zero points to
 # 1 percent and S2N to 5 percent. Same script block as night_job.yaml
 # (nautilus/validate_manifests.py checks they are identical); differences:
-# one row (nautilus/manifests/nights_dryrun.csv), backoffLimit 0, SPEC2D=1,
-# GATES_REFERENCE set, 2 h deadline. Re-applying skips the night (its
-# run_manifest.json is on the bucket); REPLACE=1 redoes it.
+# the rows of nautilus/manifests/nights_dryrun*.csv (set spec.completions to
+# their number), backoffLimit 0, SPEC2D=1, GATES_REFERENCE=auto, 2 h deadline.
+# Re-applying skips a night (its run_manifest.json is on the bucket); REPLACE=1
+# redoes it.
 #
 # Usage:
 #   kubectl -n pypeit create configmap keck-etcs-nights-dryrun \
@@ -49,7 +53,7 @@ spec:
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "1"}
         - {name: REPLACE, value: "0"}
-        - {name: GATES_REFERENCE, value: "s3://keck-etcs/mosfire/20220409/reference"}
+        - {name: GATES_REFERENCE, value: "auto"}      # each row's own s3://keck-etcs/<s3_prefix>/reference (S23d)
         - {name: MANIFEST, value: /opt/manifest/nights.csv}
         - name: JOB_NAME
           valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}
@@ -94,11 +98,15 @@ spec:
             [ -n "${NIGHT:-}" ] || fail "setup failed" "no row $JOB_COMPLETION_INDEX in $MANIFEST" 11
             [ "$SPEC2D_ENV" = 1 ] && export SPEC2D=1
             NIGHT_DIR="$KECK_ETCS_DATA/$S3_PREFIX"
+            # multi-band nights (D55): the manifest's band column is exported as $BAND, which reduce_standard.py,
+            # build_sensfunc.py, gates.py and harvest_sens.py read; S3_PREFIX is the band's product prefix
+            # (mosfire/<night>/<band> for Y, H, K). GATES_REFERENCE=auto means this row's own reference.
+            [ "$GATES_REFERENCE" = auto ] && GATES_REFERENCE="s3://$KECK_ETCS_BUCKET/$S3_PREFIX/reference"
             # products are always pushed with --force (S15a, 2026-10-07): a same-size object left by an
             # earlier failed run of the night is otherwise skipped by s3_sync, and the bucket keeps stale
             # sens/WaveCalib files under a run_manifest.json that describes the new ones
             FORCE="--force"
-            echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
+            echo "night=$NIGHT instrument=$INSTRUMENT s3_prefix=$S3_PREFIX band=${BAND:-} standard=$STANDARD slit=$SLIT spec2d=$SPEC2D notes=$NOTES"
             log SKIP_CHECK
             # done = run_manifest.json on the bucket with status success and passed gates;
             # a night that failed (its manifest records the failure) is retried

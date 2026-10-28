@@ -2,9 +2,11 @@
 """Stage a locally reduced night as the reference for the Nautilus gates (S4b).
 
 Usage:
-    python scripts/nautilus/stage_reference.py DATE [--push]
+    python scripts/nautilus/stage_reference.py DATE [--band H] [--push]
 
-Copies (not links) the products of ``$KECK_ETCS_DATA/mosfire/DATE`` that
+Copies (not links) the products of ``$KECK_ETCS_DATA/mosfire/DATE`` (for Y,
+H and K ``mosfire/DATE/<band>``, design D55; ``--band`` defaults to
+``$BAND``) that
 ``nautilus/gates.py --reference`` and later checks need into
 ``$KECK_ETCS_DATA/mosfire/DATE/reference/``, keeping the night's layout:
 ``run_manifest.json``, ``pypeit_pin_check.json``, ``run.log``,
@@ -19,6 +21,7 @@ with its sha256.
 """
 import argparse
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -40,8 +43,9 @@ def sha256sum(path, chunk=1 << 20):
     return h.hexdigest()
 
 
-def main(date, push=False):
-    night = paths.night_dir('mosfire', date)
+def main(date, push=False, band=None):
+    band = band or os.environ.get('BAND') or None
+    night = paths.night_dir('mosfire', date, band=band)
     ref = night / 'reference'
     if ref.exists():
         shutil.rmtree(ref)
@@ -61,7 +65,7 @@ def main(date, push=False):
         print(f'  {line}')
     if push:
         return subprocess.run([sys.executable, str(REPO / 'scripts' / 'nautilus' / 's3_sync.py'),
-                               'push', paths.s3_prefix('mosfire', date) + '/reference']).returncode
+                               'push', paths.s3_prefix('mosfire', date, band=band) + '/reference']).returncode
     return 0
 
 
@@ -69,4 +73,5 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('date', help='Night, YYYYMMDD')
     p.add_argument('--push', action='store_true', help='Push the reference to the bucket')
+    p.add_argument('--band', help='band of the products (default: $BAND); Y, H, K under <night>/<band>/ (D55)')
     sys.exit(main(**vars(p.parse_args())))
