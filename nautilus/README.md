@@ -373,6 +373,13 @@ kubectl apply -f nautilus/validate_job.yaml                                    #
 kubectl -n pypeit logs -f job/keck-etcs-validate                 # GATES: PASS ... NIGHT_DONE, per pod
 ```
 
+Outcome of the H and K dry run (2026-10-30, image 0.2.6, pin `b0447b7`):
+both pods `GATES: PASS` (8 gates each, `ref_pin` included), products
+identical to the staged references (spec1d counts ratio 1.000000, zero
+point to 0.02 percent, S/N to 0.01 percent), about 9 min wall clock, 1.3 GB
+scratch and 3.7 GiB peak memory per pod; the logs are under
+`$KECK_ETCS_DATA/runs/keck-etcs-validate/logs/`.
+
 The gates read their windows from the instrument module
 (`keck_etcs.instruments.mosfire.gate_windows`): the band group's common
 window for the zero point, its middle third for the `OPT_COUNTS`

@@ -998,11 +998,26 @@ its patterns are now split literals, as the build script's are.
 ALL CHECKS PASS; `validate_manifests.py` MANIFESTS OK;
 `check_pypeit_pin.py --image 0.2.6` PASS.
 
-**Still for you (outward-facing):** `s3_sync.py push mosfire/20121128/raw`,
-`stage_reference.py 20121128 --band H --push` and `--band K --push`, then
-the ConfigMap from `nights_dryrun_HK.csv` and `validate_job.yaml` with
-`completions: 2`, expecting `GATES: PASS` twice (each row against its own
-band's reference, `GATES_REFERENCE=auto`). Record the outcome here.
+**Dry run (done by you the same day, logs parsed here):** after the
+commit (`e0340bb`), `s3_sync.py push mosfire/20121128/raw` and
+`stage_reference.py 20121128 --band H|K --push`, the ConfigMap from
+`nights_dryrun_HK.csv` and `validate_job.yaml` with `completions: 2`
+(`parallelism: 2`; the manifest now says so). Both pods, image 0.2.6,
+`KECK_ETCS_GIT_SHAS` pypeit `b0447b7` / keck_etcs `d34a000`:
+
+| index | band | reduce | gates | agreement with the staged reference | harvest row | push |
+|---|---|---|---|---|---|---|
+| 0 (`keck-etcs-validate-0-fsn8q`) | H | success, 352 s | **PASS** (8/8; thru 0.2397, RMS 0.066) | spec1d counts ratio 1.000000 x4, zp median 1.00004, S/N to 0.00 % | `thru_median_common` 0.243, PWV 1.14 mm, flags `pwv_weak,narrow` | 107 files, 0 failed; 9.3 min wall, 3.7 GB peak |
+| 1 (`keck-etcs-validate-1-vt9gb`) | K | success, 288 s | **PASS** (8/8; thru 0.246, RMS 0.037) | 1.000000 x4, zp median 1.00017, S/N to 0.00 % | 0.262, PWV 0.58 mm, flags `pwv_extrapolated,narrow` | 108 files, 0 failed; 8.9 min wall, 3.7 GB peak |
+
+`ref_pin` PASS in both (reference and pod at `b0447b7`), monitor 56 and 64
+rows with 0 failures, status rows under `runs/keck-etcs-validate/status/`,
+`NIGHT_DONE` twice. The pod products are now on the bucket under
+`mosfire/20121128/{H,K}/`; the two logs are kept under
+`$KECK_ETCS_DATA/runs/keck-etcs-validate/logs/20261030_dryrun_HK_index{0_H,1_K}.log`
+(not committed). The per-band layout, `GATES_REFERENCE=auto` and the
+band-aware gates work in the pods as they do locally; **prompt 4 is
+closed.** Next is prompt 5 (the H and K standards and their models).
 
 **Learned:** the image's secret scan reads every file of the build
 context, the checker included, so a pattern that must appear in the tree

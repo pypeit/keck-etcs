@@ -15,7 +15,7 @@
 #
 # Usage:
 #   kubectl -n pypeit create configmap keck-etcs-nights-dryrun \
-#     --from-file=nights.csv=nautilus/manifests/nights_dryrun.csv --dry-run=client -o yaml \
+#     --from-file=nights.csv=nautilus/manifests/nights_dryrun_HK.csv --dry-run=client -o yaml \
 #     | kubectl apply -f -
 #   kubectl -n pypeit delete job keck-etcs-validate --ignore-not-found
 #   kubectl apply -f nautilus/validate_job.yaml
@@ -28,8 +28,8 @@ metadata:
   labels: {app: keck-etcs, role: validate}
 spec:
   completionMode: Indexed
-  completions: 1
-  parallelism: 1
+  completions: 2            # the rows of nights_dryrun_HK.csv (1 for the J dry run, nights_dryrun.csv)
+  parallelism: 2
   backoffLimit: 0            # a one-shot validation: a failure must be looked at
   activeDeadlineSeconds: 7200
   template:
