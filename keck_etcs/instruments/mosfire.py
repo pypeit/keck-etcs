@@ -29,18 +29,19 @@ J_DISPERSION = 1.2922
 # 2019-11-18) gives 9255-11471 A over 2040 pixels, which is the J2 footprint x 5/6 to 0.1 percent;
 # the Y window is therefore the filter's. H and K have different tilts and are wider than the
 # detector (filters 2099 and 2227 pixels wide), so the detector sets their windows. Their
-# footprints were MEASURED in plan S23d (2026-10-27; scripts/mosfire/measure_footprint.py on the
-# reference reductions of design D56, PypeIt at the pin bc18a3b in the 0.2.5 image):
+# footprints were MEASURED in plan S23d (2026-10-30; scripts/mosfire/measure_footprint.py on the
+# reference reductions of design D56, PypeIt at the pin b0447b7 in the 0.2.6 image; the 0.2.5
+# image at bc18a3b gave the same footprints to 0.1 A):
 # - H: dev-suite longslit_3x0.7_H, HIP 17971 on 2012-11-28 (LONGSLIT-3x0.7, the centred 3-bar slit,
 #   spat_id 1034), mosfire/20121128/H/redux/Calibrations/WaveCalib_A_1_DET01.fits
-#   (sha256 6243190f9afedd7dc27067ddb7f6bbdec4c5f87904db88c95bdeee6608a8bf26): pixels 0-2039 at
+#   (sha256 5ab32e499092009749b1820773ac42bb17ad3965016563e951f9697401976aa2): pixels 0-2039 at
 #   14650.5-17970.7 A, 1.6284 A/pix, fit RMS 0.066 pix. The Keck page's nominal 14680-18040 A was
 #   30 A too narrow at the blue end and 70 A too wide at the red end.
 # - K: dev-suite longslit_3x0.7_K, the same star and night, mosfire/20121128/K/redux/Calibrations/
-#   WaveCalib_A_1_DET01.fits (sha256 6e9bbfd2d05ce1d8955c5a53afca86d5944362a0e353d3a511a353e99cc54c5f):
+#   WaveCalib_A_1_DET01.fits (sha256 1cfcd3063204c39184ace99bdd0b8af0c419dccdb0cfbbad2ae84f1b4594935a):
 #   19535.9-23991.1 A, 2.1850 A/pix, RMS 0.037 pix (nominal 19540-23970 A). The dev suite's K_long
 #   (LONGSLIT-46x1.5, spat_id 1020, 2019-10-13; mosfire/20191013/K/redux/Calibrations/
-#   WaveCalib_A_1_DET01.fits, sha256 16070c6bf54e09eb620bce4906c06749c6c90937fb868b2b300095107afeb35b)
+#   WaveCalib_A_1_DET01.fits, sha256 237f9facdae959932fce29e27997e3d2fbe5d6e14609012f462305e1573611d3)
 #   gives 19529.7-23957.1 A, 2.1713 A/pix: the K tilt reproduces to about 35 A (16 pixels) at the
 #   red end between nights, the scale of a one-pixel-per-edge uncertainty on the window.
 # Dispersions: the measured mean over the footprint (PypeIt's OH templates gave 1.627 and 2.169).

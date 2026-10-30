@@ -937,3 +937,78 @@ What I learned about the repository:
   exports both; older manifests have only `filter`).
 - `measure_lsf.py --record` was broken since S6b (a missing import); the
   2022-04-09 row predates the refactor.
+
+### 2026-10-30 (Prompt #4 / S23d, closing: image 0.2.6 at the new pin, reference reductions rerun in it, references re-staged)
+
+Session on Claude Fable 5.1 (the prompt asks for Opus 5.5), continuing
+the 2026-10-27 entry. You committed the `SLITRANGE` fix on PypeIt
+`etc-fixes` as `b0447b74ea01ac0ba8496817afaa336e573791c0` (on top of the
+S17 read-noise fix `38bb1b7`), moved the local `pypeit14b` checkout to it,
+and built and pushed **image 0.2.6**
+(`gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.6`, digest
+`sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92`,
+keck-etcs `d34a000`, PypeIt `2.0.2.dev1223+gb0447b74e`, keck_etcs 0.2.6).
+The first build attempt failed in the build script's own secret scan:
+`scripts/check_docs.py` carried the literal patterns the scan greps for;
+its patterns are now split literals, as the build script's are.
+
+**Done here:**
+
+- The three Job manifests (`night_job.yaml`, `validate_job.yaml`,
+  `koa_download_job.yaml`) point at 0.2.6 (image line, digest comment,
+  `KECK_ETCS_IMAGE`, `KECK_ETCS_IMAGE_DIGEST`); `validate_manifests.py`
+  MANIFESTS OK. `nautilus/README.md` section 3 has the 0.2.6 row
+  (**Current**) and section 4 loses its "Pending" read-noise bullet (the
+  pin carries it). `check_pypeit_pin.py --image 0.2.6`: all three checks
+  PASS (the checkout is at the pin with an empty diff, the image's
+  `KECK_ETCS_GIT_SHAS.pypeit` equals it); a bare tag now resolves to the
+  Nautilus image, as the usage line always said.
+- **The four reference reductions and the two sensfuncs rerun in 0.2.6**
+  (no patch needed; the 0.2.5 products are kept aside under
+  `$KECK_ETCS_DATA/mosfire_products_image0.2.5/`, not in the layout, until
+  you discard them): all four `success` (152, 185, 490, 206 s), every
+  `run_manifest.json` records pin `b0447b7`, keck-etcs `d34a000` and the
+  0.2.6 digest, pin check PASS in image mode. Against the 0.2.5 products:
+  the H, K and K_long **footprints are identical to 0.1 A** and the
+  wavelength RMS to three decimals (`measure_footprint.py`; the WaveCalib
+  files differ in bytes, so their sha256 in `mosfire.py` and in
+  `lsf_measurements.ecsv` are the new ones); the **LSF rows re-recorded
+  with `measure_lsf.py --record` are numerically identical** (H 0.7"
+  2.5597, K 0.7" 2.6135, K 1.5" 5.3704 pix); the extracted **S/N per frame
+  is 5 percent lower** (H 144-151 for 151-160, K 125-129 for 133-139,
+  K_long HIP 17971 132-136 for 140-144) with the median counts within 0.5
+  percent, which is the CDS read noise of 21 e- now in the variance (the
+  first products with the S17 fix); the long2pos star is as faint as
+  before (S/N 2-7). Sensfunc medians: H **0.2397** over 14900-17800 A
+  (0.2414 before), K **0.2459** over 19800-23700 A (0.2472); `gates.py
+  --band H|K`: all four gates PASS for both. Brackett check rerun: line
+  rms 0.0187 against continuum 0.0184 (ratio 1.02), masks 10 and 30 A
+  identical to 1e-4 mag, same verdict. Thermal fits rerun: 2012-11-28
+  eps_eff 0.468 (0.457 at 275 K), 2019-10-13 0.226 (0.287): unchanged.
+- References re-staged: `stage_reference.py 20121128 --band H` and
+  `--band K` (10 files each, MANIFEST.txt rewritten; the
+  `run_manifest.json` inside carries the 0.2.6 provenance for the
+  `ref_pin` gate).
+- `CHANGES.md` (S23d entry: the image, the pin, the rerun; the S17
+  read-noise note says "pinned by 0.2.6"), design 4.8.2/9.4 and the
+  settled-questions list name the new pin and image; `mosfire.py`'s
+  footprint comment records the rerun.
+
+**Verification:** `pytest keck_etcs/tests` 128 passed; `check_docs.py`
+ALL CHECKS PASS; `validate_manifests.py` MANIFESTS OK;
+`check_pypeit_pin.py --image 0.2.6` PASS.
+
+**Still for you (outward-facing):** `s3_sync.py push mosfire/20121128/raw`,
+`stage_reference.py 20121128 --band H --push` and `--band K --push`, then
+the ConfigMap from `nights_dryrun_HK.csv` and `validate_job.yaml` with
+`completions: 2`, expecting `GATES: PASS` twice (each row against its own
+band's reference, `GATES_REFERENCE=auto`). Record the outcome here.
+
+**Learned:** the image's secret scan reads every file of the build
+context, the checker included, so a pattern that must appear in the tree
+is written as split literals. The read-noise change moves the extracted
+S/N by 5 percent at these count levels without touching the wavelength
+solutions, the LSF or the footprints; the throughput medians move by 0.5
+percent through the extraction weights. A `cd DIR && (a) & (b) &` line
+runs `b` in the old directory: two logs landed in the repository root and
+were moved.

@@ -148,7 +148,8 @@ bash nautilus/build_image.sh --push     # build and push <version> and latest
 
 | tag | PypeIt pin (`etc-fixes`) | keck-etcs | digest | notes |
 |---|---|---|---|---|
-| 0.2.5 | `bc18a3ba46d1d331da0875424c63999e578a4937` | `10a469f` | `sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4` | `construct_basename` fix (`/` in KOA target names); long2pos bar split; S15b sweep. **Current** |
+| 0.2.6 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `d34a000` | `sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92` | pin moved to `etc-fixes` `b0447b7`: read noise from `SAMPMODE`/`NUMREADS` (S17) and `SLITRANGE` from product headers for `pypeit_sensfunc` on short long slits (S23d); per-band layout `mosfire/<night>/<band>/`, `--band`, `GATES_REFERENCE=auto`; H/K reference reductions. **Current** |
+| 0.2.5 | `bc18a3ba46d1d331da0875424c63999e578a4937` | `10a469f` | `sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4` | `construct_basename` fix (`/` in KOA target names); long2pos bar split; S15b sweep. |
 | 0.2.4 | `fb6fb62c46383b09c5c13f1edcad97d3367fa0cd` | `58d5652` | `sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b` | harvest `excluded_nonlinear` flag; S15b batch 1 |
 | 0.2.3 | `fb6fb62c46383b09c5c13f1edcad97d3367fa0cd` | `fdfb1d7` | `sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf` | 4" bar wavelength transfer (`transfer_wavecal`), specphot object filter; S15a pilot |
 | 0.2.2 | `fb4790520e4ccd49d39d42ed8438a614f307030b` | `09e9eee` | `sha256:920bd25f80483fe1c47ae70605bbd299229e6ecb593ca29f31fe5ebdfd746138` | long2pos bars, OH-arc cap (`MAX_OH_ARCS`), align-box fix, frozen monitor lines |
@@ -206,11 +207,6 @@ Images are about 2.2 GB.
 
   Any night reduced afterwards carries the new `pypeit_git_sha`. Until the
   local checkout is at the new pin, the local check fails by design.
-- **Pending:** the MOSFIRE read-noise fix (`ronoise` from
-  `SAMPMODE`/`NUMREADS`, design D19; patch in
-  `nautilus/patches/pypeit_mosfire_ronoise.patch`) is committed on
-  `etc-fixes` as `38bb1b7` but not pinned yet. Move the pin to it, with
-  image 0.2.6, before the next batch.
 
 ## 5. kubectl idioms and the credentials test
 

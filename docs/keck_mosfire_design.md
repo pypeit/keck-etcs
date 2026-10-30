@@ -67,7 +67,8 @@ describes what was built for the MOSFIRE J milestone. It runs to keck_etcs
   - the 3-MAD test runs over 11900-12450 A;
   - an era curve is completed over a band window from the nearest era
     that measured the rest of it.
-- **Pin (D31, 4.8.2):** on PypeIt `etc-fixes` (`bc18a3b`), not `develop`.
+- **Pin (D31, 4.8.2):** on PypeIt `etc-fixes` (`bc18a3b`; `b0447b7` since
+  image 0.2.6, S23d), not `develop`.
 - **Workstation (D35):** the reference reduction and the local checks run
   on the Linux workstation, in `pypeit14b`, with the checkout at the pin.
 - **Jobs (4.8.1, 4.8.4, 4.8.6):** per-index retries and exit-2 data
@@ -621,10 +622,12 @@ MOSFIRE fix found in reduction:
 - `fb47905` (image 0.2.2): `get_arc_extract_center` and
   `alignment_box_rows`;
 - `fb6fb62` (0.2.3, 0.2.4): `transfer_wavecal` and `long2pos_bar_widths`;
-- `bc18a3b` (0.2.5): `construct_basename`.
+- `bc18a3b` (0.2.5): `construct_basename`;
+- `b0447b7` (0.2.6, S23d): the `ronoise` fix (D19, `38bb1b7`) and
+  `SLITRANGE` from product headers in `config_specific_par`
+  (`pypeit_sensfunc` on a short long slit).
 
-Image 0.2.5 is current. The `ronoise` fix (D19) is on `etc-fixes` as
-`38bb1b7` and goes into the next image. `nautilus/README.md` has every tag
+Image 0.2.6 is current. `nautilus/README.md` has every tag
 with its digest, keck-etcs commit and pin. The `--allow-branch` flag
 anticipated in plan S17 does not exist: `PIN_BRANCHES` serves the purpose.
 
@@ -1430,7 +1433,9 @@ by the user, each tied to the plan step that checks it:
   Linux workstation (`pypeit14b`), with the PypeIt checkout at the pin
   (`etc-fixes` `bc18a3b`); `check_pypeit_pin.py` passes with an empty diff.
   The laptop arrangement of v0.3.1 (`orig-hires-fixes`, allow-list) is not
-  used. Since S17 the checkout is at `38bb1b7`, one commit past the pin, and
+  used. Since S23d (2026-10-30) the checkout is at `b0447b7`, the 0.2.6
+  pin, and the check passes locally and against the image. Between S17
+  and S23d the checkout was at `38bb1b7`, one commit past the pin, and
   the check fails by design until the pin moves (D35).
 - **Credentials (S1b):** *settled.* `prp-s3-credentials` in `pypeit` reads
   and writes `s3://keck-etcs` (inspect pod); the fallback secret was not
@@ -1438,7 +1443,7 @@ by the user, each tied to the plan step that checks it:
 - **Registry (S4a):** *done* (user, 2026-09-30). GitLab project
   `profx/keck-etcs` with a deploy token (username
   `gitlab+deploy-token-1383`; the token stays with the user). Pushes use
-  their own Docker config (`~/.docker-keck-etcs`). Images 0.1.0-0.2.5 are
+  their own Docker config (`~/.docker-keck-etcs`). Images 0.1.0-0.2.6 are
   listed in `nautilus/README.md`.
 - **KOA from the cluster (S14b):** *settled 2026-10-05.* `koa_probe_job.yaml`
   reached KOA's TAP service and downloaded a frame at 10.9 MB/s; the
@@ -1692,10 +1697,11 @@ gates of P8 and the reference comparison of 4.8.7. Their slits are narrow,
 so they are LSF, footprint, sky and pipeline references, not throughput
 points (D4).
 
-*S23d results (2026-10-27).* The four setups were reduced with
-`reduce_standard.py` inside the 0.2.5 image (PypeIt at the pin bc18a3b;
-the local `pypeit14b` checkout had moved to another branch, so the image
-is where "at the pin" holds), the current repository mounted, with the raw
+*S23d results (2026-10-27, rerun 2026-10-30 in image 0.2.6).* The four
+setups were reduced with `reduce_standard.py` inside the image (first
+0.2.5 at the pin bc18a3b with the `SLITRANGE` patch applied; then, once
+that fix was committed and pinned, 0.2.6 at b0447b7, whose products are
+the ones kept and staged), the current repository mounted, with the raw
 frames staged under `mosfire/20121128/raw` (both H and K), `20191013/raw`
 and `20180718/raw` and the products under `mosfire/<night>/<band>/`
 (P8). `longslit_3x0.7_H` and `_K`: the HIP 17971 frames (2.9 s) serve as
@@ -1717,7 +1723,11 @@ spec1d of a short long slit (`LONGSLIT-3x0.7`) crashes in
 `config_specific_par` (`slitrange` is None for a product header);
 `nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch` reads the
 header's `SLITRANGE` card instead and was applied inside the image for
-the reference sensfuncs; it goes into the next pin.
+the reference sensfuncs; it is committed on `etc-fixes` as `b0447b7` and
+pinned by image 0.2.6. The 0.2.6 rerun (the first with the CDS read noise
+of 21 e-, D19) reproduces the footprints to 0.1 A, the wavelength RMS and
+the LSF rows exactly, and lowers the extracted S/N per frame by about 5
+percent and the throughput medians by 0.5 percent (H 0.240, K 0.246).
 
 **P10 = D57 (Q57, agreed), order of work.** H first (the largest wide-slit sample, no
 new physics; it exercises every band generalisation), then K (the thermal

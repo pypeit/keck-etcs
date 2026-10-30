@@ -14,7 +14,8 @@ from the pin: ``git diff --name-only <pin> HEAD`` plus uncommitted changes
 2. PASS/FAIL: every listed file matches ``nautilus/pypeit_pin_allowlist.txt``
    (offending files are named).
 
-With ``--image TAG`` it also runs the container image and requires its
+With ``--image TAG`` (a tag of ``gitlab-registry.nrp-nautilus.io/profx/keck-etcs``,
+or a full image reference) it also runs the container image and requires its
 ``KECK_ETCS_GIT_SHAS`` (JSON) ``pypeit`` entry to equal the pin exactly (the
 local checkout's SHA may differ by design and is only reported).
 
@@ -106,7 +107,12 @@ def changed_files(checkout, pin):
     return sorted(set(diff)), sorted(set(status))
 
 
+DEFAULT_IMAGE = 'gitlab-registry.nrp-nautilus.io/profx/keck-etcs'
+
+
 def image_pypeit_sha(tag):
+    if '/' not in tag and ':' not in tag:          # a bare tag ("0.2.6") names the Nautilus image
+        tag = f'{DEFAULT_IMAGE}:{tag}'
     cmd = ['docker', 'run', '--rm', tag, 'python', '-c',
            "import os; print(os.environ.get('KECK_ETCS_GIT_SHAS', ''))"]
     res = subprocess.run(cmd, capture_output=True, text=True)

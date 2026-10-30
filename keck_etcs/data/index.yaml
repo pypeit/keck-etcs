@@ -20,8 +20,8 @@ files:
       (S23b)
   mosfire/lsf_measurements.ecsv:
     calib_version: mosfire-2026.10-dev
-    created: '2026-10-27T20:48:22Z'
-    sha256: 2b4555991046e317f584985f08681ee45439e2c302aa4a372b080efefd759573
+    created: '2026-10-30T18:55:55Z'
+    sha256: 49b804fd574df24c619f344cee5181014dc2dc78e3b2d00fb608ecd5ee9dc912
     script: scripts/mosfire/measure_lsf.py --record
     provenance: 4 LSF measurement(s) from OH lines in PypeIt WaveCalib arc spectra
   mosfire/monitor/monitor_lines_J2.ecsv:

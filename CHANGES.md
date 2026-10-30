@@ -30,8 +30,12 @@ fed it.
     `pypeit_sensfunc` crashes on a spec1d of a short long slit
     (`LONGSLIT-3x0.7`) because `config_specific_par` splits a `slitrange`
     that the spec1d header cannot yield; the patch reads the header's
-    `SLITRANGE` card. Applied inside the image for the reference sensfuncs;
-    the next pin carries it.
+    `SLITRANGE` card. Committed on `etc-fixes` as `b0447b7` (on top of the
+    S17 read-noise fix `38bb1b7`) and pinned by **image 0.2.6**
+    (`sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92`,
+    keck-etcs `d34a000`); the reference reductions and sensfuncs above
+    were rerun in it, so the staged H and K references carry the new pin.
+    The 0.2.6 image is the first with the CDS read noise of 21 e- (S17).
   - **D52 check:** PypeIt's IR algorithm does not use `hydrogen_mask_wid`
     (only UVIS does), and the Vega model leaves no Brackett residual on
     HIP 17971 in H (`scripts/mosfire/brackett_mask_check.py`: data-minus-fit
@@ -133,8 +137,8 @@ fed it.
   every frame).
   - Committed on `etc-fixes` as `38bb1b747d55a5b9205cbeb62734b0e870223990`;
     the patch is `nautilus/patches/pypeit_mosfire_ronoise.patch`.
-  - Not yet pinned. The next image (0.2.6) should pin it. No released
-    product uses it.
+  - Pinned by image 0.2.6 (S23d; pin `b0447b7` includes it). No released
+    product uses it yet.
   - A CDS lamp-off flat pair gives 21.4 e- (`measure_read_noise.py`).
 - **Docs (S18):**
   - `README.md` usage;
