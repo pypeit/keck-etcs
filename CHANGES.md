@@ -90,9 +90,13 @@ fed it.
     manifest; it failed on the slit width of such a frame before).
   - **Image 0.2.7**
     (`sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2`,
-    keck-etcs `c5c8e53`, PypeIt pin unchanged at `b0447b7`) carries all of
-    the above; the 2012-11-28 H and K references were rebuilt with the
-    final settings and re-staged, so a 0.2.6 pod would fail `zp_agree`.
+    keck-etcs `c5c8e53`, PypeIt pin unchanged at `b0447b7`) ran the pilot;
+    the 2012-11-28 H and K references were rebuilt with the final settings
+    and re-staged, so a 0.2.6 pod would fail `zp_agree`. The tag was
+    re-pushed on 2026-10-31 at keck-etcs `bf0b499` with the same pin
+    (`sha256:e6c69cb7ffd438aebffcd95069542a80c921075d63181cff438b538dbdb76a79`),
+    without the PypeIt bar matcher; **image 0.2.8** (pin `5e92ff9`, the
+    matcher commit on `etc-fixes`) is the one to rerun the two nights with.
 
 - **Reference reductions, footprints, multi-band layout and gates (S23d;
   D52, D55, D56, D59, D60; "Other bands" part H prompt 4):**

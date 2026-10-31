@@ -1272,13 +1272,23 @@ window; plus the PypeIt `test_keck_mosfire.py`, 3 passed); `check_docs.py` ALL C
 `validate_manifests.py` MANIFESTS OK; `verify_nights.py` ALL OK on the two
 pod nights; `status_table.py` written (27 nights on the bucket).
 
-**Next (for the user):** commit PypeIt `etc-fixes` (`keck_mosfire.py`,
-`test_keck_mosfire.py`), then I move `nautilus/pypeit_pin.txt` to it,
-`build_image.sh --push` gives 0.2.8, and the two nights rerun on Nautilus
-(`REPLACE=1`, a two-row manifest or the pilot manifest: the two successes
-skip); then `verify_nights.py`, `status_table.py` and the merge again (pod
-rows replace the local ones). Commit keck-etcs (the files in `git status`,
-`monitor_lines_H.ecsv` and the three new standard curves untracked).
+**The pin and the version.** The user committed PypeIt `etc-fixes`
+`5e92ff9` (the matcher) and keck-etcs `0f2c5bc`/`bf0b499`, then re-pushed
+the tag **0.2.7** at `bf0b499` (digest
+`sha256:e6c69cb7ffd438aebffcd95069542a80c921075d63181cff438b538dbdb76a79`)
+before the pin had moved: that image still installs PypeIt `b0447b7` and
+cannot reduce the two nights. `nautilus/pypeit_pin.txt` is now `5e92ff9`
+(`check_pypeit_pin.py` PASS locally), the version is **0.2.8**, the three
+Job manifests say 0.2.8 with the digest marked PENDING, and the README
+table notes the re-push. `check_docs.py` fails on purpose until the 0.2.8
+row with its digest exists (the manifests must use the README's current
+image); `validate_manifests.py` is OK.
+
+**Next (for the user):** commit, `bash nautilus/build_image.sh --push`
+(0.2.8 at pin `5e92ff9`), report the digest; I fill the manifests and the
+README row. Then the two nights rerun on Nautilus (`REPLACE=1`; the pilot
+manifest works, the two successes skip), `verify_nights.py`,
+`status_table.py` and the merge again (pod rows replace the local ones).
 
 **Learned about the repository:** the Jobs read their manifest from a
 ConfigMap, so "apply the Job" without re-creating the ConfigMap runs the
