@@ -108,12 +108,19 @@ def run(cmd, log, cwd):
 
 
 def slit_width_of(manifest, obj):
-    """Slit (bar) width [arcsec] of an object: the specphot bar table, else the mask name (``LONGSLIT-3x0.7``)."""
+    """Slit (bar) width [arcsec] of an object: the specphot bar table, else the mask name (``LONGSLIT-3x0.7``).
+
+    A long2pos_specphot night whose bar geometry could not be matched to the
+    traced slits (``specphot.bars`` is None, the ``arc_fwhm`` method; 2015-09-17
+    H) still knows a 4.0" bar from ``wide_slit`` on the object.
+    """
     import re
     sp = manifest.get('specphot') or {}
-    for b in sp.get('bars', []):
-        if int(b['spat_id']) == int(obj.get('slit', -1)):
+    for b in sp.get('bars') or []:
+        if b.get('spat_id') is not None and int(b['spat_id']) == int(obj.get('slit', -1)):
             return float(b['width_arcsec'])
+    if sp and obj.get('wide_slit'):
+        return 4.0
     frames = {f['filename']: f for f in manifest['frames']}
     for key in ('maskname', 'decker', 'slit'):
         v = frames.get(obj['frame'], {}).get(key) or manifest.get(key)

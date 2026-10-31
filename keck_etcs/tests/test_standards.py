@@ -185,8 +185,48 @@ def test_build_sensfunc_edge_mask_and_resolution_guess(builder):
     assert '    resln_frac_bounds = 0.4, 1.5\n    resln_guess = 1560.4\n    tell_npca = 3' in out
     assert builder.with_resln(text, {'resln_guess': None}) == text
     assert 'resln_guess = 900.0' in builder.with_resln(out, {'resln_guess': {'value': 900.0}})
-    man = {'specphot': {'bars': [{'spat_id': 946, 'width_arcsec': 4.0}, {'spat_id': 990, 'width_arcsec': 0.7}]},
+    man = {'specphot': {'bars': [{'spat_id': None, 'width_arcsec': 0.7},        # an untraced bar (2014-06-01 H)
+                                 {'spat_id': 946, 'width_arcsec': 4.0}, {'spat_id': 990, 'width_arcsec': 0.7}]},
            'frames': [{'filename': 'a.fits', 'maskname': 'LONGSLIT-3x0.7'}]}
     assert builder.slit_width_of(man, {'slit': 946, 'frame': 'a.fits'}) == 4.0
     assert builder.slit_width_of(man, {'slit': 1, 'frame': 'a.fits'}) == 0.7
     assert builder.slit_width_of({'frames': [{'filename': 'b.fits'}]}, {'slit': 1, 'frame': 'b.fits'}) is None
+    # the arc_fwhm method leaves specphot.bars None (2015-09-17 H, the first H pilot): a wide-bar object is 4.0"
+    man = {'specphot': {'bars': None, 'method': 'arc_fwhm', 'wide': [1031]}, 'frames': [{'filename': 'c.fits'}]}
+    assert builder.slit_width_of(man, {'slit': 1031, 'frame': 'c.fits', 'wide_slit': True}) == 4.0
+    assert builder.slit_width_of(man, {'slit': 990, 'frame': 'c.fits', 'wide_slit': False}) is None
+
+
+def test_driver_specphot_bars_by_position(driver, tmp_path):
+    """S24a: the long2pos bars are matched to the traced slits by position (PypeIt's matcher), so an untraced bar
+    (2014-06-01 H) or a spurious slit (2015-09-17 H) keeps the geometry; the ``(align)`` tag names the same mask."""
+    from astropy.io import fits
+    from pypeit.spectrographs.keck_mosfire import KeckMOSFIRESpectrograph
+    assert driver.mask_of('long2pos_specphot (align)') == 'long2pos_specphot' == driver.mask_of('long2pos_specphot')
+    if not hasattr(KeckMOSFIRESpectrograph, 'long2pos_bar_slits'):
+        pytest.skip('PypeIt without long2pos_bar_slits')
+    bars = [(20, 0.7, 45.554), (21, 4.0, 44.996), (22, 0.7, 44.438), (23, 4.0, 0.0), (24, 0.7, -44.44),
+            (25, 4.0, -44.998), (26, 0.7, -45.556)]
+    cols = [fits.Column(name='Slit_Number', format='4A', array=[str(b[0]) for b in bars]),
+            fits.Column(name='Target_in_Slit', format='10A', array=['pos'] * 7),
+            fits.Column(name='Target_Priority', format='6A', array=['10.00'] * 7),
+            fits.Column(name='Position_of_Slit', format='8A', array=[str(b[2]) for b in bars]),
+            fits.Column(name='Slit_width', format='6A', array=[f'{b[1]:.3f}' for b in bars]),
+            fits.Column(name='Target_to_center_of_slit_distance', format='6A', array=['0.000'] * 7)]
+    hdr = fits.Header({'MASKNAME': 'long2pos_specphot', 'CRPIX2': 1035, 'PSCALE': 0.1799})
+    raw = tmp_path / 'm150917_0247.fits'
+    fits.HDUList([fits.PrimaryHDU(header=hdr), fits.BinTableHDU.from_columns(cols, name='Mechanical_Slit_List')]
+                 ).writeto(raw)
+    # 2015-09-17 H: seven bars and a spurious 847-pixel slit at 1610; the 4.0" bars by position
+    rows = [{'slit': s, 'fwhm_pix': f} for s, f in ((903, 2.75), (943, 1.44), (987, 2.77), (1032, 8.29), (1076, 2.75),
+                                                     (1120, 1.31), (1164, 2.63), (1610, 2.73))]
+    sp = driver.specphot_wide_slits(raw, rows)
+    assert sp['method'] == 'geometry' and sp['wide'] == [943, 1032, 1120] and sp['bars_without_slit'] == []
+    assert [b['spat_id'] for b in sp['bars']] == [903, 943, 987, 1032, 1076, 1120, 1164]
+    assert sp['fwhm_check'] is False                      # the mixed-mask arcs: narrow lines in two 4.0" bars
+    # 2014-06-01 H: bar 26 not traced (the masked slit appears as 0)
+    rows = [{'slit': s, 'fwhm_pix': f} for s, f in ((0, None), (987, 2.82), (1031, 8.22), (1076, 2.78), (1120, 8.54),
+                                                     (1163, 2.67))]
+    sp = driver.specphot_wide_slits(raw, rows)
+    assert sp['wide'] == [1031, 1120] and sp['bars_without_slit'] == [26, 25] and sp['fwhm_check'] is True
+    assert sp['bars'][0]['spat_id'] is None

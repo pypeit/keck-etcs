@@ -41,7 +41,7 @@ metadata:
   labels: {app: keck-etcs, role: koa-download}
 spec:
   completionMode: Indexed
-  completions: 19            # = rows in the manifest CSV (nights_batch1.csv)
+  completions: 4             # = rows in the manifest CSV (4: nights_pilot_H.csv, plan S24a; 19 for nights_batch1.csv)
   parallelism: 2             # politeness to KOA
   backoffLimit: 4
   activeDeadlineSeconds: 14400

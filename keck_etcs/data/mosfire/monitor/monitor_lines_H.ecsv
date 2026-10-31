@@ -1,0 +1,34 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: wave, datatype: float64}
+# - {name: amplitude_list, datatype: float64}
+# - {name: frac_identified, datatype: float64}
+# - {name: isolated, datatype: bool}
+# - {name: gemini_trans, datatype: float64}
+# - {name: rule1, datatype: bool}
+# - {name: rule2, datatype: bool}
+# - {name: rule4, datatype: bool}
+# - {name: flux_1arcsec, datatype: float64}
+# - {name: raw_peak_p999, datatype: float64}
+# - {name: rule3, datatype: bool}
+# - {name: chosen, datatype: bool}
+# meta: !!omap
+# - dates: ['20121128', '20140601', '20150917', '20170615', '20241224']
+# - {band: H}
+# - {rules: design 4.9.4}
+# - chosen: [15240.788, 15654.833, 16234.899, 16903.502]
+# - {fwhm_5arcsec_A: 5.87870036101083}
+# - {isolation_slit_arcsec: 1.0}
+# - {dispersion_A_per_pix: 1.6284}
+# - {rule1_nights_with_OH_arcs: 1}
+# - {rule3_slit_arcsec: 0.7}
+# schema: astropy-2.0
+wave amplitude_list frac_identified isolated gemini_trans rule1 rule2 rule4 flux_1arcsec raw_peak_p999 rule3 chosen
+14832.902 1370.0 1.0 True 0.9352606534957886 True True True 500.1140467977832 4817.697000000626 True False
+15240.788 3520.0 1.0 True 0.9954853023801531 True True True 1624.7353803800652 4817.697000000626 True True
+15654.833 1930.0 1.0 True 0.9996615597179958 True True True 1205.0246149184422 4817.697000000626 True True
+16234.899 2680.0 1.0 True 0.9985720770699638 True True True 1466.3924279298017 4817.697000000626 True True
+16502.244 1800.0 1.0 True 0.9774018253598894 True True True 1094.951541435688 4817.697000000626 True False
+16903.502 3480.0 1.0 True 0.9900533606608709 True True True 2195.9311454925773 4817.697000000626 True True
+16955.012 1330.0 1.0 True 0.9978407025337219 True True True 743.813232483736 4817.697000000626 True False

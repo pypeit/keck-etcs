@@ -47,6 +47,47 @@ fed it.
     HD 159008 2015-09-17, HD 133772 2017-06-15); `night_job.yaml`
     `completions: 4`. `check_std_peaks.py --band`; `check_pypeit_pin.py
     --image` takes a bare tag.
+  - **The H pilot's fixes** (after the 0.2.7 run; the H white dwarf night
+    2014-06-01 failed `no trace`, 2015-09-17 `sens failed`):
+    - PypeIt (`etc-fixes`, pin to move with image 0.2.8):
+      `KeckMOSFIRESpectrograph.long2pos_match_bars`/`long2pos_bar_slits`
+      match the seven long2pos bars to the traced slits by position (bar
+      23 at `CRPIX2`, one CSU pitch of 44 pixels per bar; unit test on the
+      three observed layouts); `transfer_wavecal` uses it instead of
+      requiring one slit per bar, so an untraced bar (2014-06-01 H: bar
+      26, and the posC 4" bar whose own fit had failed) or a spurious slit
+      (2015-09-17 H: 847 pixels above the mask) no longer leaves every 4"
+      bar with its own poor fit; a bar keeps its own fit when the
+      transferred one is worse.
+    - `reduce_standard.py`: `specphot_wide_slits` uses the same matcher
+      (`bars_without_slit` recorded; the arc-FWHM rule stays the fallback);
+      on a long2pos_specphot night, calibration frames of another CSU mask
+      are left out (2015-09-17: two of the four Ne/Ar arcs were taken
+      through the plain `long2pos` mask, whose bars 21 and 25 are 0.7"
+      wide, so the combined arc mixed narrow and wide lines in two 4" bars).
+      `build_sensfunc.slit_width_of` survives a bar without a slit.
+    - `select_monitor_lines.py --band`: per-band products (D55), the band's
+      dispersion for the isolation window, rule 1 over the nights with OH
+      arcs only (a Ne/Ar lamp night identifies no OH line), rule 3 from the
+      narrowest slit of the first night.
+  - **H pilot results** (2026-10-31; `nautilus/README.md` section 11):
+    2024-12-24 HD 79108 and 2017-06-15 HD 133772 passed in the 0.2.7 pods
+    (median H throughput 0.318 and 0.323 through 4" bars); 2014-06-01
+    Feige 110 (4 wide-bar frames, 0.322) and 2015-09-17 HD 159008 (3
+    frames, 0.305) pass locally with the fixes above and await the pod
+    rerun. The A0V zero points at 16500 A are within 0.05 mag of the white
+    dwarf's (D2: HD 159008 -0.052, HD 133772 +0.001, HD 79108 -0.012 mag).
+    `standards.ecsv` gains the five H rows (the 2012-11-28 reference
+    HIP 17971 at 0.7", 0.238, included); `calib_monitor.ecsv` their monitor
+    rows, now replaced per night *and band* by the merge (a J and an H
+    reduction of 2014-06-01 coexist).
+  - **H monitor lines frozen** (D45; `monitor_lines_H.ecsv`, four OH lines
+    15240.8, 15654.8, 16234.9, 16903.5 A, `MONITOR` of
+    `keck_etcs/instruments/mosfire.py`): rule 1 on the one night with OH
+    arcs (the long2pos_specphot pilot nights are Ne/Ar-calibrated), rule 3
+    from the reference's 0.7" slit. `monitor.line_fluxes` measures a
+    long2pos frame's OH lines in its 0.7" bars (`bar_widths` from the run
+    manifest; it failed on the slit width of such a frame before).
   - **Image 0.2.7**
     (`sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2`,
     keck-etcs `c5c8e53`, PypeIt pin unchanged at `b0447b7`) carries all of

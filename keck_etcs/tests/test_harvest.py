@@ -113,6 +113,8 @@ def test_shipped_standards_table_has_the_band_neutral_columns():
                    format='ascii.ecsv')
     assert list(t.colnames) == list(hv.ROW_COLUMNS)
     nodes = {str(f): str(n) for f, n in zip(t['filter'], t['zp_nodes_A'])}
-    assert nodes == {'J': '12000/12500/13000', 'J2': '11500/12000/12500'}
-    assert set(str(w) for w in t['common_window_A']) == {'11900-12450'}
+    # per band since S24a (the H pilot rows): the group's nodes and common window (D58)
+    assert nodes == {'J': '12000/12500/13000', 'J2': '11500/12000/12500', 'H': '15500/16500/17500'}
+    assert {(str(f), str(w)) for f, w in zip(t['filter'], t['common_window_A'])} == \
+        {('J', '11900-12450'), ('J2', '11900-12450'), ('H', '14900-17800')}
     assert not any(np.ma.is_masked(v) for v in t['thru_median_common'])

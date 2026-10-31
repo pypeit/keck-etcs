@@ -280,32 +280,38 @@ def split_merged_bars(pfile, redux, raw_file, log, env):
 def specphot_wide_slits(raw_file, wave_rows):
     """The 4.0" bars of a long2pos_specphot reduction (``spat_id`` of the traced slits).
 
-    Geometry: the mask's ``Mechanical_Slit_List`` (bar widths by slit number); the
-    traced slits in increasing spatial position are the bars in decreasing slit
-    number (2017-06-15: 26, 25, ..., 20). Used when the counts agree. The arc
-    line FWHM per slit (WaveCalib) is the check: a 4.0" bar's arc lines are
-    wider than a 0.7" bar's (2017-06-15: 3.0-3.8 against 1.8-2.1 pix). Without
-    the geometry, the bars whose arc FWHM is above the midpoint of the range are
-    taken, when the range spans more than a factor 1.3.
+    Geometry: the mask's ``Mechanical_Slit_List`` (bar widths by slit number),
+    matched to the traced slits by spatial position with PypeIt's
+    ``KeckMOSFIRESpectrograph.long2pos_bar_slits`` (bar 23 at ``CRPIX2``, one
+    CSU pitch of 44 pix per bar; the same matching ``transfer_wavecal`` uses for
+    the 4.0" bars' wavelength solutions). A bar without a traced slit
+    (2014-06-01 H: bar 26) or a spurious slit (2015-09-17 H: an 847-pix slit
+    above the mask) no longer loses the geometry; before the S24a pilot the
+    counts had to agree. The arc line FWHM per slit (WaveCalib) is the check: a
+    4.0" bar's arc lines are wider than a 0.7" bar's (2017-06-15: 3.0-3.8
+    against 1.8-2.1 pix). Without the geometry (a PypeIt without the matcher,
+    or no bar list), the bars whose arc FWHM is above the midpoint of the range
+    are taken, when the range spans more than a factor 1.3.
     """
     fw = {int(w['slit']): w.get('fwhm_pix') for w in wave_rows}
     slits = sorted(fw)
     rec = {'slits': slits, 'arc_fwhm_pix': fw, 'bars': None, 'method': None, 'wide': [],
-           'fwhm_check': None}
-    bars = []
+           'fwhm_check': None, 'bars_without_slit': None}
+    matched = []
     try:
-        with fits.open(raw_file) as hdul:
-            mech = hdul['Mechanical_Slit_List'].data
-            bars = sorted(((int(str(r['Slit_Number']).strip()), float(str(r['Slit_width']).strip()))
-                           for r in mech if str(r['Slit_Number']).strip()), reverse=True)
-    except (KeyError, ValueError, OSError):
-        bars = []
+        from pypeit.spectrographs.keck_mosfire import KeckMOSFIRESpectrograph
+        matched = KeckMOSFIRESpectrograph.long2pos_bar_slits(raw_file, slits)
+    except (ImportError, AttributeError, KeyError, ValueError, OSError) as e:
+        print(f'  long2pos_specphot: no bar geometry ({type(e).__name__}: {e}); arc FWHM fallback')
     good = [f for f in fw.values() if f is not None]
-    if bars and len(bars) == len(slits):
-        rec['bars'] = [{'spat_id': s, 'bar': b, 'width_arcsec': w} for s, (b, w) in zip(slits, bars)]
-        rec['wide'] = [s for s, (_, w) in zip(slits, bars) if w > 2.0]
+    if matched and any(m[3] is not None for m in matched):
+        rec['bars'] = [{'spat_id': (None if i is None else slits[i]), 'bar': b, 'width_arcsec': w}
+                       for b, w, _, i in matched]
+        rec['wide'] = [slits[i] for b, w, _, i in matched if w > 2.0 and i is not None]
+        rec['bars_without_slit'] = [b for b, w, _, i in matched if i is None]
         rec['method'] = 'geometry'
-        narrow = [fw[s] for s in slits if s not in rec['wide'] and fw[s] is not None]
+        narrow = [fw[s] for s in slits if s not in rec['wide'] and fw[s] is not None
+                  and s in {slits[i] for *_, i in matched if i is not None}]
         wide = [fw[s] for s in rec['wide'] if fw[s] is not None]
         if narrow and wide:
             rec['fwhm_check'] = bool(min(wide) > max(narrow))
@@ -486,6 +492,12 @@ def pair_nods(tbl):
     return problems
 
 
+def mask_of(decker):
+    """The CSU mask of a PypeIt ``decker`` value without its ``(align)`` tag (``long2pos_specphot (align)`` ->
+    ``long2pos_specphot``)."""
+    return str(decker).replace('(align)', '').strip()
+
+
 def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     """Merge and patch the pypeit_setup output; return (path, table, notes)."""
     from pypeit.inputfiles import PypeItFile
@@ -549,6 +561,20 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
                          f'(long slit: OH arcs; kept in raw/ for the monitor): {list(tbl["filename"][lamp])}')
             old = [o for o, k in zip(old, lamp) if not k]
             tbl = tbl[~lamp]
+    if specphot:
+        # calibration frames of another CSU mask are left out (2015-09-17 H: two of the four Ne/Ar arcs
+        # were taken through the plain long2pos mask, whose bars 21 and 25 are 0.7" wide, so the combined
+        # arc mixed narrow and wide lines in two 4.0" bars and their fits followed the narrow lines of a
+        # slit 3 pixels away); "(align)" is the same mask with its 4.0" bars as alignment boxes
+        std_masks = {mask_of(d) for d, t in zip(tbl['decker'], tbl['frametype']) if 'standard' in t}
+        other = np.array([(('flat' in t) or ('arc' in t)) and ('standard' not in t) and mask_of(d) not in std_masks
+                          for d, t in zip(tbl['decker'], tbl['frametype'])]) if std_masks else np.zeros(len(tbl), bool)
+        if other.any():
+            notes.append(f'{int(other.sum())} calibration frame(s) of another mask left out (standard mask '
+                         f'{sorted(std_masks)}): ' + ', '.join(f'{fn} ({d})' for fn, d in
+                                                              zip(tbl['filename'][other], tbl['decker'][other])))
+            old = [o for o, k in zip(old, other) if not k]
+            tbl = tbl[~other]
     if long2pos and not specphot and lamp_wavecal:
         par_text = with_block(par_text, '[[wavelengths]]', lamp_wavelength_lines(filt))
         notes.append(f'long2pos with lamp arcs: wavelengths from keck_mosfire_arcs_{filt}.fits (Ar, Ne), as the '

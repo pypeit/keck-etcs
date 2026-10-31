@@ -170,9 +170,12 @@ def merge_monitor(dirs):
     for f in files:
         new = Table.read(f, format='ascii.ecsv')
         nights = set(str(n) for n in new['night'] if str(n))
+        bands = set(str(b) for b in new['filter'] if str(b))
         new_pod = any(is_pod({'image': i}) for i in new['image'])
         if old is not None:
-            mine = np.isin(np.asarray(old['night']).astype(str), list(nights))
+            # a night's rows are replaced per band (D55: 2014-06-01 has J and H products)
+            mine = np.isin(np.asarray(old['night']).astype(str), list(nights)) \
+                & np.isin(np.asarray(old['filter']).astype(str), list(bands))
             if np.any(mine) and not new_pod and any(is_pod({'image': i}) for i in old['image'][mine]):
                 print(f'  kept in-pod monitor rows for {sorted(nights)} (local file {f.name} not merged)')
                 continue

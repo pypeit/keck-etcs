@@ -1150,3 +1150,144 @@ keck-etcs side. The `pilot` rules of `make_night_manifest.py` silently
 drew from every band once the census table held them all. `conda run`
 buffers a script's output until it exits, so a running reduction's log
 looks empty from outside; the night's own `run.log` shows progress.
+
+### 2026-10-31 (Prompt #5 / S24a, part 2: the H pilot, two long2pos fixes, the H monitor lines frozen)
+
+Session on Claude Fable 5.1 (the prompt asks for Opus 5.5).
+
+**Image 0.2.7** (`gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.7`,
+`sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2`,
+keck-etcs `c5c8e53`, PypeIt pin `b0447b7`; `check_pypeit_pin.py --image
+0.2.7` PASS): the three Job manifests, the README table (section 3) and
+CHANGES carry it. The user pushed the re-staged H and K references.
+
+**The pilot.** The first launch ran both Jobs against the ConfigMaps'
+previous content (the 19-row J batch 1): the download Job re-skipped 19 J
+nights and the four night pods skipped their J rows in seconds; nothing on
+the bucket changed. The ConfigMaps were re-created from
+`nights_pilot_H.csv`, the KOA download Job (4 rows, 3 min) and then the
+night Job (4 completions, parallelism 4) ran; `koa_download_job.yaml` now
+says 4 completions. Monitored every 30 min (`/loop`); done in 18 min:
+
+| Index | Night | Standard | Mask | Pod (0.2.7) | Wall [s] | Peak [GiB] | Gates | Frames in 4" bars | Median thru | zp_mid (16500 A) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 20140601 | Feige 110 (WD) | long2pos_specphot (align) | `no trace` (exit 13) | 532 | - | - | 0 | - | - |
+| 1 | 20241224 | HD 79108 (A0V, H 6.163) | long2pos_specphot | success | 332 | 8.20 | PASS | 2 | 0.318 | 19.778 |
+| 2 | 20150917 | HD 159008 (A0V, H 6.800) | long2pos_specphot | `sens failed` (exit 14) | 1053 | - | - | 1 (crash) | - | - |
+| 3 | 20170615 | HD 133772 (A0V, H 7.225) | long2pos_specphot | success | 830 | 8.20 | PASS | 2 | 0.323 | 19.791 |
+
+The two successes are verified (`verify_nights.py 20241224 20170615 --band
+H --digest ... --pin b0447b7`: ALL OK; 20241224 needed a forced pull first,
+because the night's earlier local products had the same sizes as the pod's).
+Scratch 0.73 and 1.36 GB.
+
+**What failed, and the fixes.** Both failures are the long2pos bar
+geometry in H, not the sensfunc settings:
+
+1. *2014-06-01 (`no trace`)*: six slits traced for seven bars (bar 26, a
+   0.7" posC bar, not traced; the posC 4" bar 25 traced as slit 943 but
+   its own wavelength fit failed, so it was flagged bad and the two frames
+   with the star in it had no object); the posA 4" bar 21 (slit 1120) had
+   its own fit at RMS 1.08 px. PypeIt's `transfer_wavecal` requires one
+   traced slit per bar and refused the whole mask.
+2. *2015-09-17 (`sens failed`)*: eight slits traced for seven bars (a
+   spurious 847-pixel slit at 1187-2034, above the mask), the same
+   refusal; the arc-FWHM fallback of `specphot_wide_slits` found only one
+   wide bar and left `specphot.bars = None`, on which
+   `build_sensfunc.slit_width_of` crashed. Underneath: two of the night's
+   four Ne/Ar arcs (m150917_0472/0473) were taken through the plain
+   `long2pos` mask, whose bars 21 and 25 are 0.7" wide, so the combined arc
+   mixed 3-px and 17-px lines in those bars and their fits followed the
+   narrow lines (FWHM "1.3 px", cross-correlation with the neighbours 0.3).
+3. **PypeIt (`etc-fixes`, uncommitted; the pin moves with image 0.2.8):**
+   `KeckMOSFIRESpectrograph.long2pos_match_bars` and `long2pos_bar_slits`
+   match the bars to the traced slits by position: bar 23 (posB) sits at
+   `CRPIX2`, bar n is `23 - n` CSU pitches (CSU length plus gap, 44 px)
+   above it; a bar takes the slit within a third of a pitch (the three
+   observed layouts agree to 4 px; `test_long2pos_match_bars`).
+   `transfer_wavecal` skips a bar without a slit, ignores a slit without a
+   bar, and keeps a bar's own fit when the transferred one is worse (the
+   mixed-mask night gave RMS 1.5 and 5.9 px against its own 0.3 and 0.2).
+4. **`reduce_standard.py`:** `specphot_wide_slits` uses the same matcher
+   (`bars` with `spat_id` None for an untraced bar, `bars_without_slit`;
+   the arc-FWHM rule stays the fallback for a PypeIt without it); on a
+   long2pos_specphot night, calibration frames whose CSU mask differs from
+   the standard's (`mask_of`, the `(align)` tag dropped) are left out with
+   a note. `build_sensfunc.slit_width_of` takes 4.0" from `wide_slit`
+   when the bar table has no entry. Tests
+   `test_driver_specphot_bars_by_position` (a synthetic
+   `Mechanical_Slit_List`) and the extended builder test.
+5. **Local reruns** (PypeIt working tree, `--skip-pin-check`, the pod's
+   steps without the push): 2014-06-01 PASS with 4 wide-bar frames
+   (0364/0376 in bar 21, 0367/0379 in bar 25; transfers at cc 0.90-0.91,
+   RMS 0.050 and 0.062 px; 436 s; median throughput 0.322, harvest 0.327,
+   zp_mid 19.790); 2015-09-17 PASS with 3 frames (0248/0256 in bar 21,
+   0259 in bar 25, RMS 0.059 and 0.078 px; the posB frame 0247 drops out
+   at RMS 0.505 against `SPECPHOT_RMS_PIX` 0.5; 932 s; 0.305, harvest
+   0.310, zp_mid 19.738). The failed pod products are parked locally as
+   `mosfire/<night>/H_pod_0.2.7_failed/`; the bucket still holds the failed
+   manifests (status table: `no trace`, `sens failed`), to be replaced by
+   the pod rerun.
+
+**A0V against the white dwarf (D2, S15a criterion):** zero points at
+16500 A through 4" bars, Feige 110 2014-06-01 19.790; HD 159008 2015-09-17
+(same era) -0.052 mag (5 percent fainter); HD 133772 2017-06-15 +0.001;
+HD 79108 2024-12-24 -0.012 mag (the 2017-2025 era has no H white dwarf
+night; the two eras agree to 1 percent here). All within 20 percent: PASS.
+No A0V frame is saturated (raw peaks 12-14k ADU). The reference HIP 17971
+at 0.7" gives 0.238 (zp_mid 19.471), slit losses included, as in the
+sensfunc test.
+
+**H monitor lines frozen** (`select_monitor_lines.py 20121128 20140601
+20150917 20170615 20241224 --band H --nlines 5`; the script now takes
+`--band` for the per-band layout, the band's dispersion for the isolation
+window, rule 1 over the nights with OH arcs only and rule 3 from the
+narrowest slit of the first night): the four long2pos_specphot nights are
+Ne/Ar-calibrated (12-16 percent of their identified lines fall on OH
+wavelengths) and are left out of rule 1, which the 2012-11-28 reference
+alone decides; 91 OH_R24000 lines are at least 100 A inside 14650-17971 A,
+23 pass rule 1, 27 rule 2, 79 rule 4, 7 all three, all 7 rule 3 (0.7"
+fluxes 500-2200 e-/s/arcsec^2, raw peak 4.8k ADU); the brightest per
+sub-window: **15240.788, 15654.833, 16234.899, 16903.502 A** (the reddest
+sub-window, 17247-17871 A, has none). File
+`keck_etcs/data/mosfire/monitor/monitor_lines_H.ecsv`, sha256
+`041aa1c266bb7b8f4e9fb1ca6dc4eb17d21c1a414f090ad6c5eaa51c073cf7e4`;
+`MONITOR['monitor_lines']['OH']['H']` set; `test_mosfire_config` checks
+it. The monitor was rerun on the five H nights: `monitor.line_fluxes` had
+no slit width for a long2pos frame (`TypeError`); it now measures the OH
+lines in the mask's 0.7" bars (`bar_widths` from `specphot.bars`), 137-265
+rows per night, no `monitor_failed`.
+
+**Merge:** `harvest_sens.py --merge` of the five H harvests (the reference
+harvested first: `harvest 20121128 --band H --standard HIP17971`):
+`standards.ecsv` 20 -> 25 rows, five curves under `throughput/standards/`,
+`calib_monitor.ecsv` 3307 rows. The monitor merge replaced rows per night
+only, so the J pod rows of 2014-06-01 blocked its H rows; it now keys on
+night and band.
+
+**Verification:** `pytest keck_etcs/tests` 134 passed (two shipped-table
+tests now expect the H rows: the J era file's provenance is checked
+against its own bands' rows, `standards.ecsv` carries the H nodes and
+window; plus the PypeIt `test_keck_mosfire.py`, 3 passed); `check_docs.py` ALL CHECKS PASS;
+`validate_manifests.py` MANIFESTS OK; `verify_nights.py` ALL OK on the two
+pod nights; `status_table.py` written (27 nights on the bucket).
+
+**Next (for the user):** commit PypeIt `etc-fixes` (`keck_mosfire.py`,
+`test_keck_mosfire.py`), then I move `nautilus/pypeit_pin.txt` to it,
+`build_image.sh --push` gives 0.2.8, and the two nights rerun on Nautilus
+(`REPLACE=1`, a two-row manifest or the pilot manifest: the two successes
+skip); then `verify_nights.py`, `status_table.py` and the merge again (pod
+rows replace the local ones). Commit keck-etcs (the files in `git status`,
+`monitor_lines_H.ecsv` and the three new standard curves untracked).
+
+**Learned about the repository:** the Jobs read their manifest from a
+ConfigMap, so "apply the Job" without re-creating the ConfigMap runs the
+previous batch, harmlessly (the skip check) but silently; the README now
+says so. `s3_sync.py pull` skips same-size objects, so a night reduced
+locally before its pod run keeps stale local products until `--force`.
+The CSU bar geometry is fixed (bar 23 at `CRPIX2`, 44 px per bar) and
+holds to 4 px on every long2pos night seen, which is a better key than
+slit counts. A KOA night's lamp arcs can come from a different CSU mask
+than its standard (the plain `long2pos` beside `long2pos_specphot`), and
+PypeIt combines them into one arc. The monitor's OH fluxes never ran on a
+long2pos night before, because J has no frozen lines (`'J': ()`).

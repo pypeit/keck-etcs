@@ -230,9 +230,16 @@ MONITOR = {
     # MOSFIRE (align) arc-extraction fix, pending the 0.2.2 pod rerun).
     # J (and Ne/Ar lamp lines) are not frozen yet: no J long-slit night has
     # been reduced (the J pilot nights are long2pos_specphot, rerun with 0.2.2).
-    # Y, H and K: empty until frozen on their reference and pilot nights (parts H, K, Y).
+    # H frozen in S24a (2026-10-31): select_monitor_lines.py 20121128 20140601 20150917
+    # 20170615 20241224 --band H --nlines 5. Rule 1 counts the one night with OH arcs
+    # (the 2012-11-28 reference, LONGSLIT-3x0.7; the four long2pos_specphot pilot nights
+    # are Ne/Ar-calibrated and identify no OH line); 7 of 91 lines pass rules 1-4 and
+    # the brightest per sub-window is kept (4: the reddest sub-window has none). Rule 3
+    # flux from the 0.7" slit. Output keck_etcs/data/mosfire/monitor/monitor_lines_H.ecsv,
+    # sha256 041aa1c266bb7b8f4e9fb1ca6dc4eb17d21c1a414f090ad6c5eaa51c073cf7e4.
+    # Y and K: empty until frozen on their reference and pilot nights (parts K, Y).
     'monitor_lines': {'OH': {'J2': (11591.847, 11788.495, 12229.206, 12287.158), 'J': (),
-                             'Y': (), 'H': (), 'K': ()}},
+                             'Y': (), 'H': (15240.788, 15654.833, 16234.899, 16903.502), 'K': ()}},
     'monitor_lines_status': 'frozen',
 }
 

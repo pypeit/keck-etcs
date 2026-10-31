@@ -235,14 +235,21 @@ def process_raw(path, spectrograph='keck_mosfire', det=1, frame='pixelflatframe'
     return np.asarray(img.image, float), bpm
 
 
-def central_rows_mask(slits_file, shape, fraction=0.5):
-    """Boolean (spec, spat) mask of each slit's central ``fraction`` of spatial rows."""
+def central_rows_mask(slits_file, shape, fraction=0.5, spat_ids=None):
+    """Boolean (spec, spat) mask of each slit's central ``fraction`` of spatial rows.
+
+    ``spat_ids`` restricts the mask to those slits (the 0.7" bars of a
+    long2pos mask, S24a); None means every slit.
+    """
     from pypeit.slittrace import SlitTraceSet
     slits = SlitTraceSet.from_file(str(slits_file), chk_version=False)
     left, right, _ = slits.select_edges()
     spat = np.arange(shape[1])[None, :]
     mask = np.zeros(shape, bool)
+    keep = None if spat_ids is None else {int(x) for x in spat_ids}
     for i in range(left.shape[1]):
+        if keep is not None and int(slits.spat_id[i]) not in keep:
+            continue
         lo = left[:, i] + 0.5 * (1 - fraction) * (right[:, i] - left[:, i])
         hi = right[:, i] - 0.5 * (1 - fraction) * (right[:, i] - left[:, i])
         mask |= (spat >= lo[:, None]) & (spat <= hi[:, None])
@@ -420,7 +427,8 @@ def sun_altitude(mjd_mid, site):
 
 
 def line_fluxes(raw_frames, spec1d_of, flat_file, slits_file, raw_dir, lines, config, band, night,
-                thru_curve=None, pwv=None, spectrograph='keck_mosfire', source='OH', provisional=True):
+                thru_curve=None, pwv=None, spectrograph='keck_mosfire', source='OH', provisional=True,
+                bar_widths=None):
     """OH (sky) line fluxes per on-sky frame (design 4.9.4, as revised in S6b).
 
     For every frame and monitor line:
@@ -441,6 +449,13 @@ def line_fluxes(raw_frames, spec1d_of, flat_file, slits_file, raw_dir, lines, co
     All fluxes are medians over the slit's central rows with the frame's
     objects masked to ±3 FWHM, divided by platescale x slit width
     (e-/s/arcsec^2, integrated over the line).
+
+    A long2pos mask has no single slit width: with ``bar_widths``
+    (``{spat_id: width_arcsec}``, the ``specphot.bars`` of the run manifest;
+    S24a) the lines are measured in its narrowest bars only (the 0.7" bars,
+    the same width as the H reference long slit), and that width is the
+    row's ``slit_width``. Without it such a frame gets one ``no_slit_width``
+    row.
     """
     from astropy.io import fits as afits
     from pypeit.flatfield import FlatImages
@@ -461,8 +476,17 @@ def line_fluxes(raw_frames, spec1d_of, flat_file, slits_file, raw_dir, lines, co
         img, _ = process_raw(path, spectrograph, frame='scienceframe')
         img = np.where(norm > 0, img / texp / np.where(norm > 0, norm, 1.0), np.nan)
         width, _ = slit_from_decker(fr['decker'])
-        fwhm_a = sky_line_fwhm_A(width, disp)
         mask = spat_central.copy()
+        if width is None and bar_widths:
+            width = min(bar_widths.values())
+            narrow = [sid for sid, w in bar_widths.items() if w == width]
+            mask &= central_rows_mask(slits_file, norm.shape, config['slit_row_fraction'], narrow).any(axis=0)
+        if width is None:
+            rows.append(row(night=night, instrument=config['instrument'], metric='line_flux', source=source,
+                            frame=fr['filename'], decker=fr['decker'], filter=band, value=None,
+                            flag='no_slit_width'))
+            continue
+        fwhm_a = sky_line_fwhm_A(width, disp)
         s1 = spec1d_of.get(fr['filename'])
         if s1:
             for so in SpecObjs.from_fitsfile(str(s1), chk_version=False):
@@ -590,11 +614,14 @@ def monitor_night(night_dir, run_manifest_path=None, raw_dir=None, harvest_dir=N
 
     lines = cfg['monitor_lines'].get('OH', {}).get(band, ())
     flat0 = sorted(cal.glob('Flat_*.fits'))
+    bars = {int(b['spat_id']): float(b['width_arcsec'])
+            for b in ((m.get('specphot') or {}).get('bars') or []) if b.get('spat_id') is not None}
     if lines and flat0:
         key = flat0[0].stem.replace('Flat_', '')
         guarded('OH', lambda: line_fluxes(onsky, spec1d_of, flat0[0], cal / f'Slits_{key}.fits.gz', raw_dir,
                                           lines, cfg, band, night, thru_curve=thru, pwv=pwv,
-                                          provisional=cfg.get('monitor_lines_status') == 'provisional'))
+                                          provisional=cfg.get('monitor_lines_status') == 'provisional',
+                                          bar_widths=bars or None))
 
     prov = {k: m.get(k) for k in PROVENANCE}
     for r in rows:

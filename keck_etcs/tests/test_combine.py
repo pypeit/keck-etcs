@@ -67,7 +67,9 @@ def test_shipped_era_file_provenance_matches_its_rows():
     era = MOSFIRE.eras[1]
     t = Table.read(DATA_DIR / MOSFIRE.throughput_file(era), format='ascii.ecsv')
     rows = Table.read(DATA_DIR / 'mosfire' / 'throughput' / 'standards.ecsv', format='ascii.ecsv')
-    used = [r for r in rows if combine.in_era(r['date'], era) and 'excluded' not in str(r['flag'])]
+    # the file is per band group (S23b, D49): only its bands' rows feed it (the H rows since S24a do not)
+    used = [r for r in rows if combine.in_era(r['date'], era) and 'excluded' not in str(r['flag'])
+            and str(r['filter']) in t.meta['bands']]
     assert t.meta['images'] == sorted({str(r['image']) for r in used})
     assert t.meta['pypeit_git_shas'] == sorted({str(r['pypeit_git_sha']) for r in used})
     assert t.colnames == ['wave', 'thru_median', 'thru_mad', 'n_std']

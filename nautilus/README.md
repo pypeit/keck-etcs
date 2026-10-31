@@ -190,7 +190,11 @@ Images are about 2.2 GB.
     - the read noise from `SAMPMODE`/`NUMREADS` (S17, `38bb1b7`);
     - `SLITRANGE` from product headers in `config_specific_par`, so that
       `pypeit_sensfunc` works on a short long slit (S23d, `b0447b7`;
-      `nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch`).
+      `nautilus/patches/pypeit_mosfire_slitrange_spec1d.patch`);
+    - `long2pos_match_bars`/`long2pos_bar_slits`: the long2pos bars matched
+      to the traced slits by position, so `transfer_wavecal` works with an
+      untraced bar or a spurious slit, and keeps a bar's own fit when the
+      transfer is worse (S24a H pilot; image 0.2.8, pending).
   - This is a recorded exception to D31 until `etc-fixes` merges into
     `develop`.
 - **`scripts/check_pypeit_pin.py`** checks the local checkout against the
@@ -388,6 +392,21 @@ identical to the staged references (spec1d counts ratio 1.000000, zero
 point to 0.02 percent, S/N to 0.01 percent), about 9 min wall clock, 1.3 GB
 scratch and 3.7 GiB peak memory per pod; the logs are under
 `$KECK_ETCS_DATA/runs/keck-etcs-validate/logs/`.
+
+Outcome of the H pilot (2026-10-31, `nights_pilot_H.csv`, image 0.2.7,
+`night_job.yaml` with 4 completions at parallelism 4; both ConfigMaps must
+be re-created from the manifest first, or the Jobs silently run the
+ConfigMaps' previous manifest, which is what the first launch did): the two
+2017-2025 A0V nights passed in the pods (2024-12-24 HD 79108 in 332 s,
+2017-06-15 HD 133772 in 830 s; 8.2 GiB peak each, 0.7-1.4 GB scratch); the
+white dwarf 2014-06-01 (Feige 110) failed `no trace` and 2015-09-17
+(HD 159008) `sens failed`, both from the long2pos bar geometry: one slit
+count differs from the seven bars (an untraced bar; a spurious slit), so
+PypeIt's `transfer_wavecal` gave up and the 4" bars kept their own poor
+fits. Fixed in PypeIt (bars matched to slits by position) and in
+`reduce_standard.py` (calibration frames of another CSU mask left out:
+2015-09-17 had two Ne/Ar arcs through the plain `long2pos` mask); both
+nights pass locally and are to be rerun in the next image (`REPLACE=1`).
 
 The gates read their windows from the instrument module
 (`keck_etcs.instruments.mosfire.gate_windows`): the band group's common

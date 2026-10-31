@@ -47,6 +47,14 @@ def test_mosfire_config():
     assert cfg['flat_nodes']['J2'] == (11250.0, 11500.0, 11750.0, 12000.0, 12250.0, 12500.0)
     assert len(cfg['flat_nodes']['J']) == 8
     assert 4 <= len(cfg['monitor_lines']['OH']['J2']) <= 6
+    # H frozen in S24a: four OH lines inside the H window, the file's chosen list
+    h = cfg['monitor_lines']['OH']['H']
+    lo, hi = cfg['band_windows']['H']
+    assert len(h) == 4 and all(lo + 100 < w < hi - 100 for w in h)
+    from astropy.table import Table
+    from keck_etcs.instruments.base import DATA_DIR
+    t = Table.read(DATA_DIR / 'mosfire' / 'monitor' / 'monitor_lines_H.ecsv', format='ascii.ecsv')
+    assert tuple(t.meta['chosen']) == h and t.meta['band'] == 'H'
     assert cfg['monitor_lines_status'] == 'frozen'
     with pytest.raises(KeyError):
         mc.get_config('keck_lris_red')

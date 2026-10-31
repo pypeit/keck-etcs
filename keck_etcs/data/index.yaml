@@ -11,13 +11,12 @@ files:
     provenance: Gemini Observatory IR sky background and ATRAN transmission, as redistributed in Keck
       XTcalc v2.3; 12 (airmass, PWV) grids, flux-conserving rebin to 0.05 nm over 950-2450 nm
   mosfire/throughput/standards.ecsv:
-    calib_version: mosfire-2026.10
-    created: '2026-10-27T17:22:59Z'
-    sha256: f19c23d7132d53be7edcdcf32fe9d24f0c1558bce5838b2b76066509a487d5fe
-    script: scripts/mosfire/harvest_sens.py --merge; scripts/mosfire/migrate_standards_table.py
-    provenance: 20 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
-      in mosfire/throughput/standards/; metric columns migrated to zp_lo/mid/hi and thru_median_common
-      (S23b)
+    calib_version: mosfire-2026.10-dev
+    created: '2026-10-31T23:04:50Z'
+    sha256: abe881c80f3f981c7a1671cd15fd2293db4687e14c5ed0a9b0b3167c858ec2b9
+    script: scripts/mosfire/harvest_sens.py --merge
+    provenance: 25 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
+      in mosfire/throughput/standards/
   mosfire/lsf_measurements.ecsv:
     calib_version: mosfire-2026.10-dev
     created: '2026-10-30T18:55:55Z'
@@ -31,11 +30,11 @@ files:
     script: scripts/mosfire/select_monitor_lines.py 20220409 20241230 20250723 --band J2 --nlines 5
     provenance: J2 OH monitor-line ranking (design 4.9.4); 4 lines frozen into MONITOR (S15a)
   mosfire/monitor/calib_monitor.ecsv:
-    calib_version: mosfire-2026.10
-    created: '2026-10-08T14:44:42Z'
-    sha256: ca0fd0a8114b1cf3094b77b81d3d942069c5b2bf3fa8fb6cbfe9279edbe96b04
+    calib_version: mosfire-2026.10-dev
+    created: '2026-10-31T23:04:50Z'
+    sha256: 2e5d7c5081587bca3e9c2cc2463b2c48969fe8b35a1cb444f5ed7d70934e3df3
     script: scripts/mosfire/harvest_sens.py --merge
-    provenance: 2456 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
+    provenance: 3307 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
   mosfire/filters/mosfire_Y.ecsv:
     calib_version: mosfire-2026.10
     created: '2026-10-05T01:36:11Z'
