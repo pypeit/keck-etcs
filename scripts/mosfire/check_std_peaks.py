@@ -2,9 +2,11 @@
 """Peak raw counts of the standard star in the frames a sensfunc used (plan S15a verification).
 
 Usage:
-    conda run -n pypeit14b python scripts/mosfire/check_std_peaks.py DATE [DATE ...] [--limit 26000]
+    conda run -n pypeit14b python scripts/mosfire/check_std_peaks.py DATE [DATE ...] [--limit 26000] [--band H]
 
-For each night under ``$KECK_ETCS_DATA/mosfire/<DATE>``, reads
+For each night under ``$KECK_ETCS_DATA/mosfire/<DATE>`` (``<DATE>/<band>``
+with ``--band``, the Y/H/K layout of design D55; the raw frames stay under
+``<DATE>/raw``), reads
 ``run_manifest.json``, takes the standard objects the sensfunc used
 (``specphot_use`` on long2pos_specphot nights, otherwise every standard
 object) and, in each object's raw frame (``raw/``), the 99.9th percentile
@@ -29,15 +31,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('dates', nargs='+')
     ap.add_argument('--limit', type=float, default=26000.)
+    ap.add_argument('--band', help='band of the products (Y/H/K layout, D55; default: the J layout)')
     a = ap.parse_args(argv)
     for date in a.dates:
-        night = paths.night_dir('mosfire', date)
+        night = paths.night_dir('mosfire', date, band=a.band)
+        rawdir = paths.night_dir('mosfire', date) / 'raw'
         m = json.loads((night / 'run_manifest.json').read_text())
         objs = [o for o in m['objects'] if 'standard' in o['frametype'] and o.get('sign') == 'positive']
         if m.get('specphot'):
             objs = [o for o in objs if o.get('specphot_use')]
         for o in objs:
-            raw = night / 'raw' / o['frame']
+            raw = rawdir / o['frame']
             if not raw.exists():
                 print(f'{date} {o["frame"]}: raw frame not local')
                 continue

@@ -1643,6 +1643,47 @@ need more components). PypeIt's `tweak_standard` has no clean window for H
 and K; the filter-edge handling stays on the keck-etcs side (the edge trim
 of P2), which is not a PypeIt defect.
 
+*S24a result for H (2026-10-30; `sensfunc_perturbation_test.py --band H
+--polyorders 4 5 6 8 --tell-npca 2 3 4 5` on `longslit_3x0.7_H` (HIP 17971,
+0.7", S/N 150) and on the brightest 2017-2025 `long2pos_specphot` A0V
+night of the census, HD 79108 on 2024-12-24 (H = 6.16, 4" bars, S/N 260,
+raw peaks 14k ADU); the tables are in the header of
+`keck_mosfire_H.sens`):* **polyorder 4, tell_npca 2** pass on both nights
+(stability 0.3-0.7 percent, next-order rms 0.6 and 0.9 percent, edges 0.4
+and 1.0 percent; tell_npca 3 passes too, 0.2-0.4 percent from 2; orders 5
+and 6 fail the 1 percent step to the next order on one night each). The
+test only passed after two band-neutral settings that
+`build_sensfunc.py` now applies to Y, H and K (J keeps PypeIt's defaults
+until its next re-reduction, so that the released J products stay
+reproducible): (1) a **filter-edge mask**, pixels where the filter
+transmission is below half its peak (H: outside 14664-18075 A) masked in
+spec1d copies before the per-frame fits and the coadd, because a star in
+an off-centre 4" bar sees 300 A beyond the half-maximum, where the steep
+zero point pulls every polynomial order off by 10-30 percent inside the
+window (chi2 5500 against 1000 masked); (2) PypeIt's `resln_guess` from
+the band's LSF rule at the effective slit width (the smaller of the bar
+width and the star's spatial FWHM) with `resln_frac_bounds` 0.4-1.5,
+because the sampling-based default (R about 3300, bounded to 0.6-1.4x)
+pinned the wide-bar fit at its lower bound. The wide-bar fit still runs to
+its bounds in resolution and pixel shift (R below 1000, shift -5 px), and
+a diagnostic fit with the bounds opened to 0.2x and +-25 px ran to those
+too at the same chi2: on a 1.45 s A0V coadd the H telluric features are
+too weak to constrain the model's resolution and shift, which the
+throughput medians do not feel (0.317-0.319 across every setting). The
+bounds are therefore a convenience, not a measurement; the K doc, where
+the tellurics are strong, is where they are tested. Thermal continuum and the K
+`tell_npca` are the K doc's.
+
+*D51 cross-check on HIP 17971 (2026-10-30):* with the band's own
+magnitude the reference-night medians move from the J-scaled model's by
+-2 percent in H (2MASS H - J = -0.024 against Vega's +0.02: 0.2353 for
+0.2397) and **-10 percent in K** (Ks - J = -0.118: 0.2201 for 0.2459).
+An A0V star has J - Ks near 0, so HIP 17971 (HD 24000, in Perseus near
+Per-emb 25) is either reddened or not a clean A0V; the band's own
+magnitude is the right flux level either way (D51), and the K doc should
+check the star's colour against the K white dwarf and the other A0V
+nights before the K release.
+
 **P7 = D54 (Q54, agreed), metrics per band.** The harvest row (4.4) keeps its structure
 with band-neutral column names: `zp_lo`, `zp_mid`, `zp_hi` at the band's
 three nodes, `thru_median_common` over the band's common window, and the

@@ -2,7 +2,7 @@
 """Turn a selection of KOA candidate nights into a Nautilus night manifest (plan S14; design 4.8.4).
 
 Usage:
-    conda run -n pypeit14b python scripts/koa/make_night_manifest.py pilot
+    conda run -n pypeit14b python scripts/koa/make_night_manifest.py pilot [--band H]
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py dryrun
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py batch1
     conda run -n pypeit14b python scripts/koa/make_night_manifest.py BATCH --nights 20150904 20211027 [...]
@@ -14,7 +14,9 @@ Reads ``keck_etcs/data/mosfire/koa_standards_candidates.ecsv``
 night) with the columns ``night_job.yaml`` expects (design 4.8.4: ``night,
 instrument, s3_prefix, standard, slit, spec2d, notes``) plus the optional
 columns the driver reads (plan S15a): ``std_class`` (WD, archive or A0V),
-``jmag_2mass``, ``std_ra``, ``std_dec`` (degrees), ``filter`` and ``band``
+``jmag_2mass``, ``hmag_2mass``, ``kmag_2mass`` (the 2MASS magnitudes of an
+A0V star; the band's own one scales its model, design D51, plan S24a),
+``std_ra``, ``std_dec`` (degrees), ``filter`` and ``band``
 (the band to reduce, the same value twice: ``band`` is the D55 name, exported
 to the pod as ``$BAND``; ``filter`` the S14 one). A night observed in several
 bands is several rows, one per (night, band), and ``s3_prefix`` is the
@@ -43,7 +45,24 @@ types, both standard classes and all eras:
 5. a usable wide-slit night in era 2025-04.. .
 
 Within a rule the row with the most flats wins, then the most lamp arcs,
-then the latest night. ``batch1`` (KOA prompt 2): every reducible public wide-slit night, then
+then the latest night.
+
+``pilot --band H`` (plan S24a, H-2; ``nights_pilot_<band>.csv``, the K and
+Y docs reuse it) applies the band's rules (:func:`select_pilot_band`),
+4 nights where the census allows:
+
+1. the white dwarf on a wide slit with a wavelength calibrator, any era
+   (H has one, Feige 110 on 2014-06-01);
+2. the **brightest** reducible A0V on ``long2pos_specphot`` with matching
+   lamp arcs in era 2017-02..2025-02 (H-3: the D53 polyorder-test night);
+3. a reducible wide-slit A0V in era 2012-04..2016-09 (arcs if long2pos),
+   most flats first, then the brightest;
+4. a second reducible 2017-02..2025-02 A0V on another night and program
+   than rule 2, most flats first, then the brightest (the A0V/A0V
+   comparison in one era);
+5. a usable wide-slit night in era 2025-04.. (none in H).
+
+``batch1`` (KOA prompt 2): every reducible public wide-slit night, then
 reducible Hennawi/Yang/Wang nights, up to 20 nights, 2022-04-09 excluded.
 
 ``dryrun`` rewrites ``nights_dryrun.csv`` (2022-04-09,
@@ -65,12 +84,13 @@ REPO = Path(__file__).resolve().parents[2]
 CAND = REPO / 'keck_etcs' / 'data' / 'mosfire' / 'koa_standards_candidates.ecsv'
 OUTDIR = REPO / 'nautilus' / 'manifests'
 COLS = ('night', 'instrument', 's3_prefix', 'standard', 'slit', 'spec2d', 'notes')
-OPTIONAL = ('std_class', 'jmag_2mass', 'std_ra', 'std_dec', 'filter', 'band')
+OPTIONAL = ('std_class', 'jmag_2mass', 'hmag_2mass', 'kmag_2mass', 'std_ra', 'std_dec', 'filter', 'band')
+MAGS = ('jmag_2mass', 'hmag_2mass', 'kmag_2mass')
 USABLE = ('WD', 'archive', 'A0V')
 CLASS_RANK = {'WD': 0, 'archive': 1, 'A0V': 2, 'other': 3}
 DRYRUN_NOTE = 'S4b dry run; reference at mosfire/20220409/reference'
 DRYRUN_HK = {'night': '20121128', 'standard': 'HIP17971', 'slit': 'LONGSLIT-3x0.7', 'std_ra': 57.6335, 'std_dec': 29.7446,
-             'jmag_2mass': 8.005, 'bands': ('H', 'K')}
+             'jmag_2mass': 8.005, 'hmag_2mass': 7.981, 'kmag_2mass': 7.887, 'bands': ('H', 'K')}
 """The S23d dry runs (D56): the dev-suite longslit_3x0.7_H/_K night, HIP 17971 (= HD 24000, A0V; the SIMBAD
 name in the candidate table) on the centred 3-bar 0.7" slit, with the 2013-10-15 dome flats the dev suite
 pairs it with. KOA holds no H or K flats for 2012-11-28, so the raw frames are the dev-suite ones pushed to
@@ -93,17 +113,23 @@ def manifest_row(r, spec2d=0, notes=None):
     """One manifest row for a candidate row: a (night, band); the products' s3_prefix follows design D55
     (``mosfire/<night>`` for J, J2 and J3, ``mosfire/<night>/<band>`` for Y, H and K; the raw frames are
     shared under ``mosfire/<night>/raw``)."""
-    j = float(r['jmag_2mass'])
     band = str(r['filter'])
+    mags = {c: ('' if not np.isfinite(float(r[c])) else f'{float(r[c]):.3f}') if c in r.colnames else '' for c in MAGS}
     return {'night': str(r['night']), 'instrument': 'mosfire',
             's3_prefix': paths.s3_prefix('mosfire', str(r['night']), band=band),
             'standard': str(r['standard']).replace(' ', ''), 'slit': str(r['maskname']), 'spec2d': str(spec2d),
             'notes': notes if notes is not None else
             (f"{r['std_class']} {r['std_archive']} {r['std_sptype']}; {r['filter']}; {r['n_frames']} frames; "
              f"flats {r['n_flats']}; lamp arcs {r['n_lamp_arcs']}; prog {r['progid']} {r['progpi']}; era {r['era']}"),
-            'std_class': str(r['std_class']), 'jmag_2mass': '' if not np.isfinite(j) else f'{j:.3f}',
+            'std_class': str(r['std_class']), **mags,
             'std_ra': f"{float(r['std_ra']):.6f}", 'std_dec': f"{float(r['std_dec']):.6f}", 'filter': band,
             'band': band}
+
+
+def band_mag_column(band):
+    """The manifest column of the 2MASS magnitude a band's A0V model is scaled to (D51); J for the J group and Y."""
+    from keck_etcs.calib.standards import mag_column
+    return mag_column(band)
 
 
 def single_filter_nights(t):
@@ -114,6 +140,9 @@ def single_filter_nights(t):
 
 
 def select_pilot(t):
+    """The J pilot (plan S15a): J-group rows only, so the selection is reproducible from the all-band census table
+    of S23c (``pilot --band`` serves the other bands)."""
+    t = t[np.isin(t['filter'], ['J', 'J2', 'J3'])]
     use = t[np.isin(t['std_class'], USABLE) & t['wide_slit'] & t['reducible'] & (t['night'] != '20220409')]
     one = single_filter_nights(t)
     l2p = lambda r: 'long2pos_specphot' in str(r['maskname'])
@@ -137,6 +166,40 @@ def select_pilot(t):
             picked.append(cands[0])
             why.append(name)
     return picked, why
+
+
+def select_pilot_band(t, band):
+    """The pilot of a band other than J (plan S24a, H-2; see the module docstring)."""
+    magcol = band_mag_column(band)
+    use = t[(t['filter'] == band) & np.isin(t['std_class'], USABLE) & t['wide_slit'] & t['reducible']
+            & (t['night'] != '20220409')]
+    one = single_filter_nights(t)
+    l2p = lambda r: 'long2pos_specphot' in str(r['maskname'])
+    calib = lambda r: (not l2p(r)) or bool(r['lamp_arcs_match'])
+    era1, era2, era3 = '2012-04..2016-09', '2017-02..2025-02', '2025-04..'
+    mag = lambda r: float(r[magcol]) if np.isfinite(float(r[magcol])) else 99.0
+    by_brightness = lambda rows: sorted(rows, key=lambda r: (mag(r), -int(r['n_flats'])))
+    rank_bright = lambda rows: sorted(rows, key=lambda r: (-int(r['n_flats']), mag(r), -int(r['n_lamp_arcs'])))
+    rules = [
+        (f'WD wide slit with a wavelength calibrator, any era', lambda r: r['std_class'] == 'WD' and calib(r), rank),
+        (f'brightest A0V long2pos_specphot with lamp arcs, {era2} (the D53 polyorder-test night, H-3)',
+         lambda r: r['std_class'] == 'A0V' and l2p(r) and bool(r['lamp_arcs_match']) and r['era'] == era2, by_brightness),
+        (f'A0V wide slit, {era1} (arcs if long2pos), most flats then brightest',
+         lambda r: r['std_class'] == 'A0V' and r['era'] == era1 and calib(r), rank_bright),
+        (f'second A0V, {era2}, another night and program than rule 2, most flats then brightest',
+         lambda r: r['std_class'] == 'A0V' and r['era'] == era2 and calib(r), rank_bright),
+        (f'usable wide slit, {era3}', lambda r: r['era'] == era3 and calib(r) and (str(r['night']), str(r['standard'])) in one, rank),
+    ]
+    picked, why = [], []
+    for name, rule, order in rules:
+        taken = {str(p['night']) for p in picked}
+        progs = {str(p['progid']) for p in picked}
+        cands = [r for r in order(list(use)) if rule(r) and str(r['night']) not in taken
+                 and not (name.startswith('second A0V') and str(r['progid']) in progs)]
+        if cands:
+            picked.append(cands[0])
+            why.append(name)
+    return picked[:4], why[:4]
 
 
 def select_batch1(t, size=BATCH1_SIZE):
@@ -181,8 +244,8 @@ def check(path):
         want = paths.s3_prefix('mosfire', r['night'], band=band) if (r['night'].isdigit() and len(r['night']) == 8) else None
         if r['s3_prefix'] != want:
             probs.append(f'row {i}: s3_prefix {r["s3_prefix"]!r} (expected {want!r} for band {band})')
-        if r.get('std_class') == 'A0V' and not (r.get('jmag_2mass') and r.get('std_ra') and r.get('std_dec')):
-            probs.append(f'row {i}: A0V without J or coordinates')
+        if r.get('std_class') == 'A0V' and not (r.get(band_mag_column(band or 'J')) and r.get('std_ra') and r.get('std_dec')):
+            probs.append(f'row {i}: A0V without its band magnitude ({band_mag_column(band or "J")}) or coordinates')
         if ' ' in r['standard']:
             probs.append(f'row {i}: space in standard')
     if len({(r['night'], r.get('band') or r.get('filter') or '') for r in rows}) != len(rows):
@@ -190,7 +253,7 @@ def check(path):
     return probs, len(rows)
 
 
-def main(batch, nights=None, era=None, usable_wide=False):
+def main(batch, nights=None, era=None, usable_wide=False, band=None):
     t = Table.read(CAND, format='ascii.ecsv')
     why = None
     if batch == 'dryrun':
@@ -206,11 +269,12 @@ def main(batch, nights=None, era=None, usable_wide=False):
                          'notes': f'S23d dry run (D56): dev-suite longslit_3x0.7_{band} raw frames (standard 2012-11-28, '
                                   f'dome flats 2013-10-15) pushed to mosfire/{d["night"]}/raw; reference at '
                                   f'mosfire/{d["night"]}/{band}/reference',
-                         'std_class': 'A0V', 'jmag_2mass': f"{d['jmag_2mass']:.3f}", 'std_ra': f"{d['std_ra']:.6f}",
+                         'std_class': 'A0V', **{c: f"{d[c]:.3f}" for c in MAGS}, 'std_ra': f"{d['std_ra']:.6f}",
                          'std_dec': f"{d['std_dec']:.6f}", 'filter': band, 'band': band})
     elif batch == 'pilot':
-        picked, why = select_pilot(t)
+        picked, why = select_pilot_band(t, band) if band else select_pilot(t)
         rows = [manifest_row(r) for r in picked]
+        batch = f'pilot_{band}' if band else batch
     elif batch == 'batch1':
         picked, why = select_batch1(t)
         rows = [manifest_row(r) for r in picked]
@@ -220,6 +284,8 @@ def main(batch, nights=None, era=None, usable_wide=False):
             sub = sub[np.isin(sub['night'], [str(n) for n in nights])]
         if era:
             sub = sub[sub['era'] == era]
+        if band:
+            sub = sub[sub['filter'] == band]
         if usable_wide:
             sub = sub[np.isin(sub['std_class'], USABLE) & sub['wide_slit'] & sub['reducible']]
         # one row per (night, band) (D55): a night observed in several bands becomes several rows
@@ -231,8 +297,9 @@ def main(batch, nights=None, era=None, usable_wide=False):
     probs, n = check(path)
     print(f'wrote {path.relative_to(REPO)}: {n} night(s)')
     for i, r in enumerate(rows):
-        print(f"  {r['night']} {r['standard']:12s} {r['std_class']:7s} {r['slit']:26s} {r['filter']:3s} J={r['jmag_2mass'] or '-':>6s}"
-              + (f'   <- {why[i]}' if why else ''))
+        mc = band_mag_column(r['band'] or 'J')
+        print(f"  {r['night']} {r['standard']:12s} {r['std_class']:7s} {r['slit']:26s} {r['filter']:3s} "
+              f"{mc[0].upper()}={r[mc] or '-':>6s}" + (f'   <- {why[i]}' if why else ''))
     print('  manifest check: ' + ('OK (parses with the columns night_job.yaml expects)' if not probs else '; '.join(probs)))
     return 0 if not probs else 1
 
@@ -244,5 +311,6 @@ if __name__ == '__main__':
     p.add_argument('--era')
     p.add_argument('--usable-wide', action='store_true',
                    help='only usable, reducible wide-slit nights (flats and a wavelength calibrator)')
+    p.add_argument('--band', help='band: pilot rules per band (nights_pilot_<band>.csv), or a filter on a batch')
     a = p.parse_args()
-    sys.exit(main(a.batch, a.nights, a.era, a.usable_wide))
+    sys.exit(main(a.batch, a.nights, a.era, a.usable_wide, a.band))

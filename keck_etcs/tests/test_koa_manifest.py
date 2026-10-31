@@ -42,7 +42,7 @@ def test_census_filter_tokens():
     assert sm.BASE_WHERE == sm.base_where(('J', 'J2', 'J3'))
 
 
-@pytest.mark.parametrize('name', ['nights_dryrun.csv', 'nights_pilot.csv'])
+@pytest.mark.parametrize('name', ['nights_dryrun.csv', 'nights_pilot.csv', 'nights_dryrun_HK.csv', 'nights_pilot_H.csv'])
 def test_manifests_parse_like_the_night_job(name):
     mm = load(REPO / 'scripts' / 'koa' / 'make_night_manifest.py', 'make_night_manifest')
     probs, n = mm.check(MANIFESTS / name)
@@ -52,6 +52,16 @@ def test_manifests_parse_like_the_night_job(name):
     if name == 'nights_pilot.csv':
         assert 3 <= n <= 5 and '20220409' not in {r['night'] for r in rows}
         assert {'WD', 'A0V'} <= {r['std_class'] for r in rows}
+    if name == 'nights_pilot_H.csv':
+        # S24a (H-2, H-3): 4 H nights, a WD and A0V stars across the two eras, every row an H row with its
+        # products under mosfire/<night>/H; the A0V rows carry hmag_2mass (D51)
+        assert n == 4 and all(r['band'] == 'H' and r['s3_prefix'].endswith('/H') for r in rows)
+        assert {'WD', 'A0V'} <= {r['std_class'] for r in rows}
+        assert all(r['hmag_2mass'] for r in rows if r['std_class'] == 'A0V')
+        assert '20241224' in {r['night'] for r in rows}          # the brightest 2017-2025 A0V, the D53 test night
+    if name == 'nights_dryrun_HK.csv':
+        assert n == 2 and {r['band'] for r in rows} == {'H', 'K'}
+        assert all(r['hmag_2mass'] == '7.981' and r['kmag_2mass'] == '7.887' for r in rows)
 
 
 def test_night_classes_and_slits():

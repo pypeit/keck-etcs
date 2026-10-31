@@ -81,10 +81,14 @@ are typed ``science`` only (2025-07-23: 36 frames combined into the arc ran
 out of 16 GiB).
 
 The standard (``--std-class``, ``--std-name``, ``--std-ra``, ``--std-dec``,
-``--jmag``; defaults from the night-manifest columns the night job exports,
-``STD_CLASS``, ``STANDARD``, ``STD_RA``, ``STD_DEC``, ``JMAG_2MASS``) is
-recorded in ``run_manifest.json`` under ``standard``; the A0V sensfunc
-itself is built by ``build_sensfunc.py``. The manifest's ``band`` column
+``--mag``, ``--jmag``; defaults from the night-manifest columns the night
+job exports, ``STD_CLASS``, ``STANDARD``, ``STD_RA``, ``STD_DEC`` and the
+band's 2MASS column, ``JMAG_2MASS`` for Y and the J group, ``HMAG_2MASS``
+for H, ``KMAG_2MASS`` for K (design D51, plan S24a;
+``keck_etcs.calib.standards.mag_column``), plus ``JMAG_2MASS`` as the
+cross-check magnitude of the other bands) is recorded in
+``run_manifest.json`` under ``standard`` (``mag_2mass``, ``mag_band_2mass``,
+``jmag_2mass``); the A0V sensfunc itself is built by ``build_sensfunc.py``. The manifest's ``band`` column
 (``$BAND``; the older ``filter`` column, ``$FILTER``, means the same) is
 the default ``--filter``, for nights with the standard in more than one
 band (plan S14, S23d); without either, the raw frames' ``FILTER`` cards
@@ -649,20 +653,34 @@ def spec1d_qa(redux, tbl, platescale):
 
 # ---------------------------------------------------------------- standard
 
-def standard_record(args):
-    """The night's standard from the options or the night-manifest environment (see docstring)."""
+def standard_record(args, band=None):
+    """The night's standard from the options or the night-manifest environment (see docstring).
+
+    ``mag_2mass`` is the magnitude the A0V model is scaled to: ``--mag``, else
+    the band's manifest column (``standards.mag_column``), else ``--jmag`` /
+    ``JMAG_2MASS`` when the band is scaled in J; ``jmag_2mass`` is the J
+    cross-check (D51). An A0V standard needs coordinates and ``mag_2mass``.
+    """
     from keck_etcs.calib import standards
     env = lambda k: os.environ.get(k) or None
     fl = lambda v: None if v in (None, '') else float(v)
+    tb = standards.tmass_band(band) if band else 'J'
+    jmag = fl(args.jmag or env('JMAG_2MASS'))
+    mag = fl(getattr(args, 'mag', None))
+    if mag is None:
+        mag = standards.mag_from_env(band) if band else None
+    if mag is None and tb == 'J':
+        mag = jmag
     rec = {'name': args.std_name or env('STANDARD'), 'ra': fl(args.std_ra or env('STD_RA')),
-           'dec': fl(args.std_dec or env('STD_DEC')), 'jmag_2mass': fl(args.jmag or env('JMAG_2MASS')),
+           'dec': fl(args.std_dec or env('STD_DEC')), 'mag_2mass': mag, 'mag_band_2mass': tb, 'jmag_2mass': jmag,
            'std_class_manifest': args.std_class or env('STD_CLASS')}
     rec.update(standards.classify(rec['ra'], rec['dec'], std_class=rec['std_class_manifest']))
     if rec['std_class'] == 'A0V':
         if rec['ra'] is None or rec['dec'] is None:
             raise StageError('setup failed', 'A0V standard without STD_RA/STD_DEC: cannot identify its frames')
-        if rec['jmag_2mass'] is None:
-            raise StageError('setup failed', 'A0V standard without a 2MASS J (JMAG_2MASS)')
+        if rec['mag_2mass'] is None:
+            raise StageError('setup failed', f'A0V standard without a 2MASS {tb} magnitude '
+                                             f'(--mag or ${standards.mag_column(band or "J").upper()})')
     return rec
 
 
@@ -782,7 +800,7 @@ def main(args):
             par_text = with_slitedges(par_text, SPECPHOT_SLITEDGES)
         manifest['par_block'] = par_text
         pfile = redux / f'{SPECTROGRAPH}_{date}.pypeit'
-        std = standard_record(args)
+        std = standard_record(args, band)
         manifest['standard'] = std
         pfile, tbl, notes, filt, par_text = build_pypeit_file(setup_dir, pfile, args.filter, par_text, raw, std)
         manifest['filter'] = filt
@@ -974,7 +992,10 @@ if __name__ == '__main__':
     parser.add_argument('--std-name', help='Standard name (default: $STANDARD)')
     parser.add_argument('--std-ra', help='Standard RA [deg] (default: $STD_RA; needed for A0V)')
     parser.add_argument('--std-dec', help='Standard Dec [deg] (default: $STD_DEC; needed for A0V)')
-    parser.add_argument('--jmag', help='2MASS J of an A0V standard (default: $JMAG_2MASS)')
+    parser.add_argument('--mag', help="2MASS magnitude of an A0V standard in the band's 2MASS band (D51; default: "
+                                       "the band's manifest column, $JMAG_2MASS/$HMAG_2MASS/$KMAG_2MASS)")
+    parser.add_argument('--jmag', help='2MASS J of an A0V standard (default: $JMAG_2MASS; the magnitude for Y and '
+                                       'the J group, the cross-check for H and K)')
     parser.add_argument('--skip-pin-check', action='store_true',
                         help='Run even if the pin check fails (recorded in run_manifest.json)')
     sys.exit(main(parser.parse_args()))

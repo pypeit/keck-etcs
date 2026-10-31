@@ -62,7 +62,7 @@ metadata:
   labels: {app: keck-etcs, role: night}
 spec:
   completionMode: Indexed
-  completions: 1             # = rows in the manifest CSV
+  completions: 4             # = rows in the manifest CSV (4: nights_pilot_H.csv, plan S24a)
   parallelism: 4             # raise only after the pilot measures rate and memory
   backoffLimitPerIndex: 1    # one retry per night for infrastructure failures (exit 1, OOM)
   podFailurePolicy:

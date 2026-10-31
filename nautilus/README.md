@@ -259,11 +259,19 @@ through the in-cluster endpoint.
 **1. Write the night manifest.** Create
 `nautilus/manifests/nights_<batch>.csv`, with columns `night, instrument,
 s3_prefix, standard, slit, spec2d, notes` and the optional `std_class,
-jmag_2mass, std_ra, std_dec, filter, band`, from the KOA search
-(`scripts/koa/make_night_manifest.py`). One row per (night, band): a night
-observed in several bands is several rows, and `s3_prefix` is the band's
-product prefix (`mosfire/<night>` for J, J2, J3; `mosfire/<night>/<band>`
-for Y, H, K; design D55). Push it to `s3://keck-etcs/manifests/`.
+jmag_2mass, hmag_2mass, kmag_2mass, std_ra, std_dec, filter, band`, from
+the KOA search (`scripts/koa/make_night_manifest.py`). One row per (night,
+band): a night observed in several bands is several rows, and `s3_prefix`
+is the band's product prefix (`mosfire/<night>` for J, J2, J3;
+`mosfire/<night>/<band>` for Y, H, K; design D55). The pod exports every
+column upper-cased; an A0V standard's model is scaled to the band's own
+2MASS magnitude (`JMAG_2MASS` for Y and the J group, `HMAG_2MASS` for H,
+`KMAG_2MASS` for K; design D51, plan S24a), so the A0V rows of a band
+need that column. Pilots per band: `make_night_manifest.py pilot` (J,
+`nights_pilot.csv`) and `pilot --band H` (`nights_pilot_H.csv`, 4 nights:
+the H white dwarf, the brightest 2017-2025 A0V, a 2012-2016 A0V and a
+second 2017-2025 A0V; the K and Y docs reuse the rules). Push it to
+`s3://keck-etcs/manifests/`.
 
 **2. Download the raw frames** (`koa_download_job.yaml`, D37):
 

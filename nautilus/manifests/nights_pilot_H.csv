@@ -1,0 +1,5 @@
+night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,hmag_2mass,kmag_2mass,std_ra,std_dec,filter,band
+20140601,mosfire,mosfire/20140601/H,Feige110,long2pos_specphot (align),0,WD xshooter DOp; H; 12 frames; flats 11; lamp arcs 2; prog C223M Steidel; era 2012-04..2016-09,WD,,,,349.993333,-5.165611,H,H
+20241224,mosfire,mosfire/20241224/H,HD79108,long2pos_specphot,0,A0V simbad A0V; H; 6 frames; flats 13; lamp arcs 6; prog U262 Mobasher; era 2017-02..2025-02,A0V,6.142,6.163,6.119,138.053670,3.866978,H,H
+20150917,mosfire,mosfire/20150917/H,HD159008,long2pos_specphot,0,A0V simbad A0V; H; 13 frames; flats 44; lamp arcs 4; prog U042M Quataert; era 2012-04..2016-09,A0V,6.822,6.800,6.775,263.211291,-13.482099,H,H
+20170615,mosfire,mosfire/20170615/H,HD133772,long2pos_specphot,0,A0V simbad A0V; H; 6 frames; flats 26; lamp arcs 12; prog C263 Heida; era 2017-02..2025-02,A0V,7.242,7.225,7.238,226.642669,-12.907061,H,H

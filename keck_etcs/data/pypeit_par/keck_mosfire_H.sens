@@ -1,20 +1,55 @@
-# pypeit_sensfunc parameters for Keck/MOSFIRE H-band standards (design 4.3, D52, D53).
-# PROVISIONAL (plan S23d, 2026-10-27): polyorder 5 and tell_npca 3 are the J
-# choices carried over (design 9.3: start at 5 for the wider H and K windows;
-# the S24a polyorder test on longslit_3x0.7_H and the first wide-slit KOA
-# night decides, scripts/mosfire/sensfunc_perturbation_test.py --polyorders),
-# No hydrogen-line mask: PypeIt's IR algorithm (telluric.sensfunc_telluric) does
-# not use hydrogen_mask_wid (only the UVIS algorithm does), and the S23d check on
-# HIP 17971 in H (scripts/mosfire/brackett_mask_check.py) found the Vega model's
-# Brackett lines leave no residual at R ~ 3000 (data-minus-fit rms at Br10-18
-# 0.019 mag against 0.018 mag in the continuum), so D52's 30 A mask is moot here.
+# pypeit_sensfunc parameters for Keck/MOSFIRE H-band standards (design 4.3, D51, D52, D53).
 # Ships inside the Nautilus image; used by scripts/mosfire/build_sensfunc.py --band H.
+#
+# polyorder 4 and tell_npca 2 are the result of the D53 test (plan S24a, 2026-10-30,
+# scripts/mosfire/sensfunc_perturbation_test.py --band H --polyorders 4 5 6 8 --tell-npca 2 3 4 5,
+# PypeIt at the pin b0447b7): the lowest value whose zero point is stable to < 1 percent under
+# 1e-5 input perturbations (3 seeds) and differs from the next value up by < 1 percent rms over
+# the common window 14900-17800 A and < 2 percent rms within 100 A of its edges, on the two
+# nights below (both at polyorder 4; tell_npca 3 passes too, 0.2-0.4 percent from 2).
+#
+#   longslit_3x0.7_H, HIP 17971 (A0V, H = 7.981), 2012-11-28, LONGSLIT-3x0.7 (0.7"), S/N 150
+#   polyorder stability  next  next_rms  next_max  edge_rms  edge_max  thru_med     chi2  pass
+#           4   0.0065     5   0.0063   0.0105   0.0041   0.0072   0.2348   771.31  PASS
+#           5   0.0107     6   0.0078   0.0119   0.0073   0.0106   0.2353   770.44  FAIL
+#           6   0.0018     8   0.0146   0.0458   0.0336   0.0458   0.2329   614.83  FAIL
+#           8   0.0045     -     -        -        -        -      0.2340   389.40  -
+#   tell_npca (at polyorder 4)
+#           2   0.0069     3   0.0037   0.0058   0.0026   0.0035   0.2355   869.21  PASS
+#           3   0.0065     4   0.0018   0.0025   0.0005   0.0010   0.2348   771.31  PASS
+#           4   0.0070     5   0.0017   0.0071   0.0046   0.0071   0.2344   759.76  PASS
+#           5   0.0045     -     -        -        -        -      0.2345   774.62  -
+#
+#   KOA long2pos_specphot, HD 79108 (A0V, H = 6.163), 2024-12-24, 4.0" bars, S/N 260
+#   polyorder stability  next  next_rms  next_max  edge_rms  edge_max  thru_med     chi2  pass
+#           4   0.0030     5   0.0092   0.0166   0.0101   0.0166   0.3173  1148.05  PASS
+#           5   0.0049     6   0.0107   0.0466   0.0213   0.0466   0.3192  1033.52  FAIL
+#           6   0.0023     8   0.0114   0.0201   0.0103   0.0163   0.3184  1283.52  FAIL
+#           8   0.0014     -     -        -        -        -      0.3163  1102.34  -
+#   tell_npca (at polyorder 4)
+#           2   0.0067     3   0.0015   0.0037   0.0024   0.0037   0.3173  1174.03  PASS
+#           3   0.0030     4   0.0035   0.0069   0.0056   0.0069   0.3173  1148.05  PASS
+#           4   0.0041     5   0.0018   0.0070   0.0053   0.0070   0.3164  1111.13  PASS
+#           5   0.0066     -     -        -        -        -      0.3164  1112.64  -
+#
+# The tables hold with two per-night settings that build_sensfunc.py adds for Y, H and K
+# (sens/<NAME>_<DATE>_sens_setup.json): the filter-edge mask (pixels with filter transmission
+# below half the peak, 14664-18075 A in H, masked in spec1d copies before the fits; without it
+# an off-centre 4" bar's 300 A beyond the half-maximum pull every order off by 10-30 percent
+# inside the window) and [[IR]] resln_guess from the LSF rule at the effective slit width with
+# resln_frac_bounds 0.4-1.5 (PypeIt's sampling guess and 0.6-1.4 bounds pin a wide-bar fit).
+# No hydrogen-line mask: PypeIt's IR algorithm (telluric.sensfunc_telluric) does not use
+# hydrogen_mask_wid (only the UVIS algorithm does), and the S23d check on HIP 17971
+# (scripts/mosfire/brackett_mask_check.py) found the Vega model's Brackett lines leave no
+# residual at R ~ 3000 (data-minus-fit rms at Br10-18 0.019 mag against 0.018 mag in the
+# continuum), so D52's 30 A mask is moot here. The A0V model is scaled to the star's 2MASS H
+# (D51; build_sensfunc.py adds star_type/star_mag per night).
 [sensfunc]
   algorithm = IR
-  polyorder = 5
+  polyorder = 4
   extrap_blu = 0.0
   extrap_red = 0.0
   [[IR]]
     telgridfile = TellPCA_3000_26000_R10000.fits
     maxiter = 2
-    tell_npca = 3
+    tell_npca = 2

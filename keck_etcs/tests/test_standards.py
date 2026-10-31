@@ -130,3 +130,63 @@ def test_a0v_model_per_band_round_trip():
     assert '2MASS K = 7.0' in text and f"star_mag = {rec['v_equivalent']:.5f}" in text
     _, rj = standards.sens_par_lines(7.0)
     assert rj['band_2mass'] == 'J' and rj['j_2mass'] == 7.0 and rj['a0v_jhk_offset_mag'] == 0.0
+
+
+def test_band_magnitude_column_and_env(monkeypatch):
+    """S24a: the A0V model takes the band's own 2MASS magnitude from the manifest column of that band (D51)."""
+    assert [standards.mag_column(b) for b in ('Y', 'J', 'J2', 'H', 'K')] == \
+        ['jmag_2mass', 'jmag_2mass', 'jmag_2mass', 'hmag_2mass', 'kmag_2mass']
+    env = {'JMAG_2MASS': '6.142', 'HMAG_2MASS': '6.163', 'KMAG_2MASS': ''}
+    assert standards.mag_from_env('H', env) == 6.163 and standards.mag_from_env('J', env) == 6.142
+    assert standards.mag_from_env('K', env) is None and standards.mag_from_env('Y', {}) is None
+
+
+def test_driver_standard_record_uses_the_band_magnitude(driver, monkeypatch):
+    """The driver's record: --mag, else the band's column, else J for the J group; H and K keep J as the cross-check."""
+    import types
+    for k in ('STANDARD', 'STD_RA', 'STD_DEC', 'STD_CLASS', 'JMAG_2MASS', 'HMAG_2MASS', 'KMAG_2MASS'):
+        monkeypatch.delenv(k, raising=False)
+    args = types.SimpleNamespace(std_name='HD79108', std_ra='138.05367', std_dec='3.866978', std_class='A0V',
+                                 jmag='6.142', mag=None)
+    monkeypatch.setenv('HMAG_2MASS', '6.163')
+    rec = driver.standard_record(args, 'H')
+    assert rec['std_class'] == 'A0V' and rec['mag_2mass'] == 6.163 and rec['mag_band_2mass'] == 'H'
+    assert rec['jmag_2mass'] == 6.142
+    rec = driver.standard_record(args, 'J')
+    assert rec['mag_2mass'] == 6.142 and rec['mag_band_2mass'] == 'J'
+    args.mag = '6.2'
+    assert driver.standard_record(args, 'K')['mag_2mass'] == 6.2
+    args.mag = None
+    with pytest.raises(driver.StageError):
+        driver.standard_record(args, 'K')                # no --mag, no $KMAG_2MASS
+
+
+@pytest.fixture(scope='module')
+def builder():
+    path = Path(__file__).resolve().parents[2] / 'scripts' / 'mosfire' / 'build_sensfunc.py'
+    spec = importlib.util.spec_from_file_location('build_sensfunc', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_build_sensfunc_edge_mask_and_resolution_guess(builder):
+    """S24a (D53): the filter-edge mask window and the telluric resolution guess for Y, H and K; J untouched."""
+    lo, hi = builder.filter_window('H')
+    assert 14600 < lo < 14700 and 18000 < hi < 18150            # the H filter's half-maximum points
+    assert builder.filter_window('H', 0.9)[0] > lo
+    r07, fwhm07, src = builder.resln_guess('H', 0.7)
+    r4, fwhm4, _ = builder.resln_guess('H', 4.0)
+    assert 3500 < r07 < 4500 and fwhm07 == pytest.approx(2.5597, abs=1e-3)      # the measured 0.7" row
+    assert r4 < r07 / 4 and src.startswith('measured')
+    assert builder.EDGE_GROUPS == ('Y', 'H', 'K') and builder.FILTER_MASK_FRAC == 0.5
+    text = '[sensfunc]\n  polyorder = 5\n  [[IR]]\n    tell_npca = 3\n'
+    out = builder.with_resln(text, {'resln_guess': {'value': 1560.4}})
+    assert '    resln_frac_bounds = 0.4, 1.5\n    resln_guess = 1560.4\n    tell_npca = 3' in out
+    assert builder.with_resln(text, {'resln_guess': None}) == text
+    assert 'resln_guess = 900.0' in builder.with_resln(out, {'resln_guess': {'value': 900.0}})
+    man = {'specphot': {'bars': [{'spat_id': 946, 'width_arcsec': 4.0}, {'spat_id': 990, 'width_arcsec': 0.7}]},
+           'frames': [{'filename': 'a.fits', 'maskname': 'LONGSLIT-3x0.7'}]}
+    assert builder.slit_width_of(man, {'slit': 946, 'frame': 'a.fits'}) == 4.0
+    assert builder.slit_width_of(man, {'slit': 1, 'frame': 'a.fits'}) == 0.7
+    assert builder.slit_width_of({'frames': [{'filename': 'b.fits'}]}, {'slit': 1, 'frame': 'b.fits'}) is None

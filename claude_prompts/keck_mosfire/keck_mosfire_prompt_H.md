@@ -1027,3 +1027,126 @@ solutions, the LSF or the footprints; the throughput medians move by 0.5
 percent through the extraction weights. A `cd DIR && (a) & (b) &` line
 runs `b` in the old directory: two logs landed in the repository root and
 were moved.
+
+### 2026-10-30 (Prompt #5 / S24a, part 1: the H sensfunc parameters measured, the A0V model in the band's own 2MASS magnitude, the H pilot manifest; pilot BLOCKED on the image rebuild)
+
+Session on Claude Fable 5.1 (the prompt asks for Opus 5.5). No new Q&A
+answers (H-1..H-4 as folded in). Everything below ran locally in
+`pypeit14b`, which is at the pin `b0447b7` (the 0.2.6 image's) with a
+clean tree, so "at the pin" holds without the image.
+
+**The D53 test** (`scripts/mosfire/sensfunc_perturbation_test.py`, extended:
+`--band` sets the common window, `--polyorders` and `--tell-npca` loop over
+the parameter with `--n` 1e-5 perturbations per value, `--jobs` runs the
+fits in parallel; per value the stability, the rms and max difference to
+the next value up over the window and within 100 A inside its edges; the
+lowest value passing 1 / 1 / 2 percent is chosen; JSON and tables). Nights:
+the reference `longslit_3x0.7_H` (HIP 17971, 0.7", S/N 150) and, per H-3,
+the brightest reducible 2017-2025 `long2pos_specphot` A0V of the census,
+**HD 79108 on 2024-12-24** (H = 6.16, 1.45 s frames, airmass 1.49; KOA
+download of 25 frames with `download_mosfire_night.py 20241224 --bands H`,
+reduced with `reduce_standard.py` in 392 s: two frames with the star in a
+4" bar, S/N 260, wavelength RMS 0.058 px on both bars, raw peaks 12-14k
+ADU so linear; gates PASS, median throughput 0.32 through the 4" bar).
+
+The first run on HD 79108 failed everything (chi2 5500, orders 10-30
+percent apart) and exposed two things PypeIt's defaults do wrong for a
+star in an off-centre wide bar, both fixed on the keck-etcs side in
+`build_sensfunc.py` for Y, H and K (J untouched: its release must stay
+reproducible until the next J re-reduction):
+
+1. **Filter-edge mask.** The 4" bar at spat 946 covers 14350-18267 A, 300 A
+   beyond the H filter's half-maximum at both ends; the zero point rises
+   steeply there and a polynomial fitted across it overshoots by 10-30
+   percent inside 15000-15300 A. Pixels with filter transmission below half
+   the peak (outside 14664-18075 A) are now masked in spec1d copies
+   (`sens/spec1d_*_fmask.fits`) before the per-frame fits and the coadd.
+   chi2 5500 -> 1040.
+2. **Telluric resolution guess.** PypeIt guesses R from the sampling (3
+   px per element, R about 3300) and bounds the fit to 0.6-1.4 of it; the
+   wide-bar fit sat at the lower bound. `[[IR]] resln_guess` is now the
+   band's LSF rule at the effective slit width (the smaller of the bar
+   width and the star's spatial FWHM) and `resln_frac_bounds` 0.4-1.5.
+   The wide-bar fit still runs to the bounds (and to 0.2x / -25 px when
+   opened that far, at the same chi2): on a 1.45 s A0V coadd the H
+   tellurics do not constrain resolution and shift, and the throughput
+   medians do not feel them (0.317-0.319 across every setting). The
+   reference night's fit also sat at 0.6x (its star is 0.41" FWHM in the
+   0.7" slit). `sens/<NAME>_<DATE>_sens_setup.json` records both.
+
+With those, **polyorder 4 and tell_npca 2 pass on both nights** (reference:
+stability 0.65 percent, next-order rms 0.63, edges 0.41; HD 79108: 0.30 /
+0.92 / 1.01 percent; tell_npca 3 passes too, 0.2-0.4 percent from 2;
+orders 5 and 6 fail the 1 percent step on one night each; the highest
+order tried, 8, is the reference only). Written to
+`keck_etcs/data/pypeit_par/keck_mosfire_H.sens` with both tables in the
+header (polyorder 4, tell_npca 2, no hydrogen mask line); design 9.3 has
+the result paragraph. The tables and JSON are under
+`mosfire/<night>/H/sens/polyorder_test/` (the pre-mask runs under
+`polyorder_test_nomask/`, the 0.6x-bounds run under
+`polyorder_test_bounds06/`).
+
+**The A0V model in the band's own 2MASS magnitude (D51):** the night
+manifests carry `hmag_2mass` and `kmag_2mass` beside `jmag_2mass`
+(`make_night_manifest.py`, `status_row.py`, `night_failures.py`; the pod
+exports every column); `reduce_standard.py --mag` and `build_sensfunc.py
+--mag` default to the band's column (`standards.mag_column`,
+`mag_from_env`), `--jmag` stays the J cross-check; `run_manifest.json`
+`standard` records `mag_2mass` and `mag_band_2mass`;
+`nights_dryrun_HK.csv` regenerated with the two columns. **Cross-check
+finding:** on HIP 17971 the band-scaled model is 0.022 mag brighter than
+the J-scaled one in H (median throughput 0.2397 -> 0.2349 with the final
+file) and **0.120 mag brighter in K (0.2459 -> 0.2205)**: 2MASS J - Ks =
++0.118 for a star that should have about 0; reddened (it sits in Perseus)
+or not a clean A0V. The band's own magnitude is the right flux level
+either way; design 9.3 asks the K doc to check the star's colour against
+the K white dwarf before the K release. HD 79108: +0.023 mag offset.
+
+**Pilot manifest** (`make_night_manifest.py pilot --band H`,
+`nautilus/manifests/nights_pilot_H.csv`, H-2; the J pilot rules are now
+confined to the J group so that `pilot` reproduces `nights_pilot.csv` from
+the all-band census table): Feige 110 2014-06-01 (the one H white dwarf
+on a wide slit with a calibrator, 2012-2016), HD 79108 2024-12-24
+(the test night), HD 159008 2015-09-17 (2012-2016 A0V, 44 flats), HD
+133772 2017-06-15 (second 2017-2025 A0V, another program; also the J
+pilot's A0V night). `night_job.yaml` `completions: 4`, `parallelism: 4`
+(the J pilot peaked at 7.6-11.7 GiB on 16 Gi).
+
+**Also:** `check_std_peaks.py --band`; the per-night sens parameter copy
+is now written for archive standards too (`<NAME>_<DATE>_std.sens`) when
+it carries the resolution lines; the reference sensfuncs of 2012-11-28 H
+and K were rebuilt with the final file and settings and **re-staged**
+(`stage_reference.py 20121128 --band H|K`; gates PASS, H 0.2349, K 0.2205);
+the version is bumped to **0.2.7** (`__init__`, `CITATION.cff`, `README.md`,
+`docs/wmko_api_note.md`).
+
+**Verification:** `pytest keck_etcs/tests` 133 passed (new: the band
+magnitude column and environment, the driver's record per band, the
+builder's edge mask / resolution guess / slit width, the H pilot and HK
+dry-run manifests); `check_docs.py` ALL CHECKS PASS;
+`validate_manifests.py` MANIFESTS OK; gates PASS on the three local
+nights.
+
+**For you, before the pilot (outward-facing):**
+1. commit; `bash nautilus/build_image.sh --push` (the `.sens` file, the
+   driver and `build_sensfunc.py` changed; the pin stays `b0447b7`), and
+   give me the 0.2.7 digest: I then update the three Job manifests and
+   the README table as for 0.2.6;
+2. `stage_reference.py 20121128 --band H --push` and `--band K --push`
+   (the staged references changed with the sensfunc settings; a pod on
+   0.2.7 reproduces them, a pod on 0.2.6 would fail `zp_agree`);
+3. the pilot, with your go-ahead: the KOA download Job on
+   `nights_pilot_H.csv` (`koa_download_job.yaml`, 4 rows; 2024-12-24 is
+   already local, `s3_sync.py push mosfire/20241224/raw` would spare its
+   download) and `night_job.yaml` (completions 4, parallelism 4). Then I
+   sync, harvest, merge, freeze the H monitor lines and write part 2 of
+   this entry with the status table.
+
+**Learned:** PypeIt's IR sensfunc fits the zero point over every unmasked
+pixel, filter edges included, and guesses the telluric resolution from the
+pixel sampling; neither is a defect (they are parameters), but a standard
+in a wide bar of an off-centre long2pos position needs both set from the
+keck-etcs side. The `pilot` rules of `make_night_manifest.py` silently
+drew from every band once the census table held them all. `conda run`
+buffers a script's output until it exits, so a running reduction's log
+looks empty from outside; the night's own `run.log` shows progress.

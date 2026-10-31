@@ -10,6 +10,44 @@ fed it.
 
 ## Code (unreleased, after 0.2.5)
 
+- **H sensfunc parameters, the A0V model in H, the H pilot (S24a; D51,
+  D53; "Other bands" part H prompt 5):**
+  - `scripts/mosfire/sensfunc_perturbation_test.py --polyorders 4 5 6 8
+    --tell-npca 2 3 4 5 --band H --jobs N`: the D53 parameter test (the
+    1e-5 perturbation stability, the rms difference to the next value up
+    over the band's common window and within 100 A of its edges; the
+    lowest value passing 1, 1 and 2 percent is chosen; tables and JSON).
+    **H: polyorder 4, tell_npca 2** (`keck_mosfire_H.sens`, tables in its
+    header; design 9.3) on `longslit_3x0.7_H` (HIP 17971, 0.7") and the
+    brightest 2017-2025 `long2pos_specphot` A0V night, HD 79108
+    2024-12-24 (downloaded and reduced locally at the pin; gates PASS,
+    median throughput 0.32 through the 4" bar).
+  - `scripts/mosfire/build_sensfunc.py`, for Y, H and K (J keeps PypeIt's
+    defaults so the released J products stay reproducible): the
+    **filter-edge mask** (spec1d copies with `OPT_MASK`/`BOX_MASK` false
+    where the band's filter transmission is below half its peak, before
+    the per-frame fits and the coadd) and the **telluric resolution
+    guess** (`[[IR]] resln_guess` from the band's LSF rule at the smaller
+    of the slit width and the star's spatial FWHM). Both came out of the
+    test: a star in an off-centre 4" bar sees 300 A beyond the filter's
+    half-maximum, where the steep zero point pulls a low-order polynomial
+    off by 10-30 percent inside the window, and PypeIt's sampling-based
+    resolution guess (R about 3300, bounded to 0.6-1.4x) pins a 4"-bar fit
+    at its lower bound. `sens/<NAME>_<DATE>_sens_setup.json` records both.
+  - The A0V model takes the band's own 2MASS magnitude (D51): the night
+    manifests carry `hmag_2mass` and `kmag_2mass` beside `jmag_2mass`
+    (`make_night_manifest.py`, `status_row.py`, `night_failures.py`), the
+    pod exports them, `reduce_standard.py --mag` and `build_sensfunc.py
+    --mag` default to the band's column (`standards.mag_column`), `--jmag`
+    stays the J cross-check; `run_manifest.json` `standard` gains
+    `mag_2mass` and `mag_band_2mass`.
+  - `make_night_manifest.py pilot --band H` writes
+    `nautilus/manifests/nights_pilot_H.csv` (H-2: the H white dwarf
+    Feige 110 2014-06-01, the brightest 2017-2025 A0V HD 79108 2024-12-24,
+    HD 159008 2015-09-17, HD 133772 2017-06-15); `night_job.yaml`
+    `completions: 4`. `check_std_peaks.py --band`; `check_pypeit_pin.py
+    --image` takes a bare tag.
+
 - **Reference reductions, footprints, multi-band layout and gates (S23d;
   D52, D55, D56, D59, D60; "Other bands" part H prompt 4):**
   - the dev-suite reference nights `longslit_3x0.7_H`, `longslit_3x0.7_K`,

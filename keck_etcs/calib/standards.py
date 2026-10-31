@@ -63,6 +63,23 @@ def tmass_band(band):
     except KeyError:
         raise KeyError(f'no 2MASS band for instrument band {band!r}; add it to BAND_TO_TMASS') from None
 
+
+def mag_column(band):
+    """The night-manifest column holding the 2MASS magnitude an instrument band's A0V model is scaled to.
+
+    ``jmag_2mass`` for Y and the J group, ``hmag_2mass`` for H, ``kmag_2mass``
+    for K (the census columns of ``koa_standards_candidates.ecsv``; the night
+    job exports each as its upper-cased name, e.g. ``HMAG_2MASS``).
+    """
+    return f'{tmass_band(band).lower()}mag_2mass'
+
+
+def mag_from_env(band, environ=None):
+    """The band's 2MASS magnitude from the night-manifest environment (``None`` when unset or empty)."""
+    import os
+    v = (environ if environ is not None else os.environ).get(mag_column(band).upper())
+    return None if v in (None, '') else float(v)
+
 VEGA_V = 0.03
 """Vega's V magnitude as assumed by PypeIt's ``VegaStandard``."""
 
