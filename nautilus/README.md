@@ -148,7 +148,8 @@ bash nautilus/build_image.sh --push     # build and push <version> and latest
 
 | tag | PypeIt pin (`etc-fixes`) | keck-etcs | digest | notes |
 |---|---|---|---|---|
-| 0.2.6 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `d34a000` | `sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92` | pin moved to `etc-fixes` `b0447b7`: read noise from `SAMPMODE`/`NUMREADS` (S17) and `SLITRANGE` from product headers for `pypeit_sensfunc` on short long slits (S23d); per-band layout `mosfire/<night>/<band>/`, `--band`, `GATES_REFERENCE=auto`; H/K reference reductions. **Current** |
+| 0.2.7 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `c5c8e53` | `sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2` | S24a: H sensfunc settings (`keck_mosfire_H.sens`, polyorder 4, tell_npca 2); A0V model scaled to the band's own 2MASS magnitude (D51, `--mag`, `HMAG_2MASS`/`KMAG_2MASS`); filter-edge mask and LSF `resln_guess` for Y/H/K sensfuncs; `nights_pilot_H.csv`. **Current** |
+| 0.2.6 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `d34a000` | `sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92` | pin moved to `etc-fixes` `b0447b7`: read noise from `SAMPMODE`/`NUMREADS` (S17) and `SLITRANGE` from product headers for `pypeit_sensfunc` on short long slits (S23d); per-band layout `mosfire/<night>/<band>/`, `--band`, `GATES_REFERENCE=auto`; H/K reference reductions. |
 | 0.2.5 | `bc18a3ba46d1d331da0875424c63999e578a4937` | `10a469f` | `sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4` | `construct_basename` fix (`/` in KOA target names); long2pos bar split; S15b sweep. |
 | 0.2.4 | `fb6fb62c46383b09c5c13f1edcad97d3367fa0cd` | `58d5652` | `sha256:258e52f474676199e52a9a3969861445c542fcc6790940792e9de5ccac31d13b` | harvest `excluded_nonlinear` flag; S15b batch 1 |
 | 0.2.3 | `fb6fb62c46383b09c5c13f1edcad97d3367fa0cd` | `fdfb1d7` | `sha256:99cc0d6379326b165270eba073a8b12ac716d71965a406781fe8a9293da42adf` | 4" bar wavelength transfer (`transfer_wavecal`), specphot object filter; S15a pilot |
@@ -176,7 +177,7 @@ Images are about 2.2 GB.
   - `pypeit_pin_allowlist.txt` lists the paths that may differ locally
     without affecting a MOSFIRE J reduction.
 - **Today:** the pin is `b0447b7` on PypeIt's `etc-fixes` branch
-  (image 0.2.6; `bc18a3b` for images 0.2.5 and earlier).
+  (images 0.2.6 and 0.2.7; `bc18a3b` for images 0.2.5 and earlier).
   - That branch is `develop` (`f3a1f1d`) plus the MOSFIRE fixes found while
     reducing:
     - `pypeit_cache_github_data`;

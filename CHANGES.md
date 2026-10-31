@@ -47,6 +47,11 @@ fed it.
     HD 159008 2015-09-17, HD 133772 2017-06-15); `night_job.yaml`
     `completions: 4`. `check_std_peaks.py --band`; `check_pypeit_pin.py
     --image` takes a bare tag.
+  - **Image 0.2.7**
+    (`sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2`,
+    keck-etcs `c5c8e53`, PypeIt pin unchanged at `b0447b7`) carries all of
+    the above; the 2012-11-28 H and K references were rebuilt with the
+    final settings and re-staged, so a 0.2.6 pod would fail `zp_agree`.
 
 - **Reference reductions, footprints, multi-band layout and gates (S23d;
   D52, D55, D56, D59, D60; "Other bands" part H prompt 4):**
