@@ -95,8 +95,10 @@ fed it.
     and re-staged, so a 0.2.6 pod would fail `zp_agree`. The tag was
     re-pushed on 2026-10-31 at keck-etcs `bf0b499` with the same pin
     (`sha256:e6c69cb7ffd438aebffcd95069542a80c921075d63181cff438b538dbdb76a79`),
-    without the PypeIt bar matcher; **image 0.2.8** (pin `5e92ff9`, the
-    matcher commit on `etc-fixes`) is the one to rerun the two nights with.
+    without the PypeIt bar matcher. **Image 0.2.8**
+    (`sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef`,
+    keck-etcs `78e2058`, PypeIt pin `5e92ff9`, the matcher commit on
+    `etc-fixes`) is the one to rerun the two nights with.
 
 - **Reference reductions, footprints, multi-band layout and gates (S23d;
   D52, D55, D56, D59, D60; "Other bands" part H prompt 4):**

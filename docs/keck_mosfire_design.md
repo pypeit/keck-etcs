@@ -626,7 +626,7 @@ MOSFIRE fix found in reduction:
 - `b0447b7` (0.2.6, 0.2.7, S23d): the `ronoise` fix (D19, `38bb1b7`) and
   `SLITRANGE` from product headers in `config_specific_par`
   (`pypeit_sensfunc` on a short long slit);
-- the S24a H pilot commit (image 0.2.8, pending): `long2pos_match_bars`
+- `5e92ff9` (0.2.8, S24a): `long2pos_match_bars`
   and `long2pos_bar_slits` match the long2pos bars to the traced slits by
   position (bar 23 at `CRPIX2`, one CSU pitch of 44 pixels per bar), so
   `transfer_wavecal` no longer refuses a mask whose slit count differs
@@ -634,7 +634,7 @@ MOSFIRE fix found in reduction:
   flagged bad; 2015-09-17 H: a spurious 847-pixel slit above the mask),
   and a bar keeps its own fit when the transferred one is worse.
 
-Image 0.2.7 is current. `nautilus/README.md` has every tag
+Image 0.2.8 is current. `nautilus/README.md` has every tag
 with its digest, keck-etcs commit and pin. The `--allow-branch` flag
 anticipated in plan S17 does not exist: `PIN_BRANCHES` serves the purpose.
 

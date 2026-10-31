@@ -52,7 +52,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: download
-        # image 0.2.8, digest PENDING (the push of 2026-10-31; keck-etcs after bf0b499, PypeIt pin 5e92ff9)
+        # image 0.2.8, digest sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef (keck-etcs 78e2058, PypeIt pin 5e92ff9)
         image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8
         imagePullPolicy: Always
         env:
@@ -62,7 +62,7 @@ spec:
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
         - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "PENDING"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef"}
         - {name: MANIFEST, value: /opt/manifest/nights.csv}
         - name: JOB_NAME
           valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}

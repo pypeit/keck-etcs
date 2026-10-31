@@ -1284,11 +1284,17 @@ table notes the re-push. `check_docs.py` fails on purpose until the 0.2.8
 row with its digest exists (the manifests must use the README's current
 image); `validate_manifests.py` is OK.
 
-**Next (for the user):** commit, `bash nautilus/build_image.sh --push`
-(0.2.8 at pin `5e92ff9`), report the digest; I fill the manifests and the
-README row. Then the two nights rerun on Nautilus (`REPLACE=1`; the pilot
-manifest works, the two successes skip), `verify_nights.py`,
-`status_table.py` and the merge again (pod rows replace the local ones).
+**Image 0.2.8** pushed by the user:
+`sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef`,
+keck-etcs `78e2058`, PypeIt pin `5e92ff9` (image label checked;
+`check_pypeit_pin.py --image 0.2.8` PASS); the three Job manifests, the
+README table (**Current**), CHANGES and the design doc carry it;
+`check_docs.py` passes again.
+
+**Next (for the user):** commit; rerun the two nights on Nautilus
+(`REPLACE=1` with the pilot manifest: the two successes skip), then
+`verify_nights.py`, `status_table.py` and the merge again (pod rows
+replace the local ones).
 
 **Learned about the repository:** the Jobs read their manifest from a
 ConfigMap, so "apply the Job" without re-creating the ConfigMap runs the
