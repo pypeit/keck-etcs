@@ -33,6 +33,12 @@ fed it.
     spurious slit's arc FWHM measured 0.3 px and `curve_fit` on one pixel
     crashed `run_pypeit`); `test_fit_arcspec_tiny_fwhm`. Image 0.2.9 is
     built on this pin for the sweep (`sweep_batch1_H.csv`, 19 nights).
+  - `scripts/nautilus/backup_products.py` backs up the band directories
+    too (`mosfire/<night>/<band>/`, D55): before S24b its filters only
+    knew the night level, so no H product had reached the backup; adds
+    `pod.log`, `gates.json`, `pypeit_pin_check.json` to the set;
+    `--prefix mosfire/<night>/H`; `--release` uses the rows' `s3_prefix`
+    (band kept). `test_backup_products.py`.
   - `keck_etcs.calib.harvest.curve_name`: a multi-band product's curve
     file is `<standard>_<night>_<band>.ecsv` (D55). The J and H rows of
     one night shared `<standard>_<night>.ecsv`, and the H merges of S24a

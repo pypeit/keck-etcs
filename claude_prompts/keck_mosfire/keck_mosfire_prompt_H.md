@@ -1455,6 +1455,19 @@ user's. Note: a ConfigMap `keck-etcs-nights-sweep1` from the J sweep
 the (night, band) keys of `status_table.py`, `night_failures.py` and
 `check_standards_table.py` keep apart.
 
+**Backup script fixed for the band layout.** A dry run of
+`backup_products.py --prefix mosfire/20140606` matched only the root
+`manifests/**` and `runs/**` (161 objects, 0.2 MB): its filters knew the
+night level only, so no H product (pilot or batch 1) had ever reached
+`AIOcean:keck-etcs/`. `filter_rules` now adds every pattern under the band
+directories (`[A-Z]*/`, D55) and accepts `mosfire/<night>/<band>`;
+`pod.log`, `gates.json` and `pypeit_pin_check.json` join the set;
+`release_prefixes()` replaces `release_nights()` (the old
+`split('/')[-1]` would have returned `H` for an H row). Dry run of one H
+night: 71 files (40 `sens/`, 23 `redux/`, 3 `harvest/`, the JSON/log files,
+`raw/manifest.ecsv`); of the whole set: 2331 objects, 366 MB, 1303 files to
+copy. `test_backup_products.py` (2 passed). The `--run` is the user's.
+
 **Learned.** The installed PypeIt is an editable checkout: while the user
 works on another branch (`speed_up_B` at the end of this session) the
 keck-etcs tests skip the bar-matcher test and local reductions must not be

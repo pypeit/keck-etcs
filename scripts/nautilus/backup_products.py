@@ -10,16 +10,20 @@ Usage:
 
 A thin wrapper around ``rclone copy nautilus_s3:keck-etcs/ AIOcean:keck-etcs/``
 and ``rclone check --one-way`` with one filter set. Included, per night under
-``mosfire/<YYYYMMDD>/``:
+``mosfire/<YYYYMMDD>/`` and, for a band outside the legacy J/J2 layout
+(D55; ``paths.night_dir``), under ``mosfire/<YYYYMMDD>/<band>/`` as well
+(S24b: the H products of a night sit under ``H/``, the raw frames and
+``raw/manifest.ecsv`` are shared by the bands):
 
 - ``sens/**``: the sensfuncs, their QA plots and logs, and the A0V ``.sens``
   and ``*_std_model.json`` records the harvest needs to classify an A0V row.
   This is a superset of design 4.8.9's ``sens/sens_*.fits`` plus QA (the
   prompt's Context lists ``sens/**``);
 - ``harvest/**`` (rows, curves, ``<night>_monitor.ecsv``);
-- ``run_manifest.json``, ``run.log``, ``redux/*.pypeit``;
+- ``run_manifest.json``, ``run.log``, ``pod.log``, ``gates.json``,
+  ``pypeit_pin_check.json``, ``redux/*.pypeit``;
 - ``redux/Science/spec1d_*``;
-- ``raw/manifest.ecsv``;
+- ``raw/manifest.ecsv`` (night level only);
 
 and, at the bucket root, ``manifests/**`` and ``runs/**``. Everything else
 is excluded: the raw frames, ``spec2d_*``, ``Calibrations/`` (pull
@@ -29,9 +33,9 @@ The default is a dry run: it reports the objects and bytes in the set
 (``rclone size``) and how many files a copy would transfer. ``--run`` copies,
 then runs ``rclone check --one-way`` with the same filters and counts the
 matches, missing files, differences and errors. ``--release TAG`` copies the
-set of the contributing nights (``--nights``, default: every row of
-``keck_etcs/data/mosfire/throughput/standards.ecsv`` not flagged
-``excluded``) into ``AIOcean:keck-etcs/releases/TAG/``, which freezes a
+set of the contributing products (``--nights``, default: the ``s3_prefix``
+of every row of ``keck_etcs/data/mosfire/throughput/standards.ecsv`` not
+flagged ``excluded``, band directories included) into ``AIOcean:keck-etcs/releases/TAG/``, which freezes a
 calibration release's inputs (S16). Each run writes a JSON summary to
 ``$KECK_ETCS_DATA/runs/backup/`` (local; never committed) and prints it for
 the prompt-doc log. Idempotent: rclone skips files already identical at the
@@ -53,17 +57,33 @@ from keck_etcs import paths  # noqa: E402
 
 SRC = 'nautilus_s3:keck-etcs'
 DST = 'AIOcean:keck-etcs'
-NIGHT_PATTERNS = ('sens/**', 'harvest/**', 'run_manifest.json', 'run.log', 'redux/*.pypeit',
-                  'redux/Science/spec1d_*', 'raw/manifest.ecsv')
+NIGHT_PATTERNS = ('sens/**', 'harvest/**', 'run_manifest.json', 'run.log', 'pod.log', 'gates.json',
+                  'pypeit_pin_check.json', 'redux/*.pypeit', 'redux/Science/spec1d_*')
+NIGHT_ONLY_PATTERNS = ('raw/manifest.ecsv',)
+BAND_GLOB = '[A-Z]*'        # a band directory (H, K, Y, ...; D55); raw/ and redux/ are lower case
 ROOT_PATTERNS = ('manifests/**', 'runs/**')
 
 
 def filter_rules(prefixes=None, nights=None, roots=True):
-    """rclone filter lines for the D39 set, limited to ``prefixes`` (``mosfire/<night>``) or ``nights``."""
+    """rclone filter lines for the D39 set, limited to ``prefixes`` or ``nights``.
+
+    A prefix is ``mosfire/<night>`` (every band of the night: the legacy
+    J/J2 products at the night level and every ``<band>/`` directory) or
+    ``mosfire/<night>/<band>`` (that band's products plus the night-level
+    ``raw/manifest.ecsv``). ``nights`` are ``YYYYMMDD`` (every band).
+    """
     if nights:
         prefixes = [paths.s3_prefix('mosfire', n) for n in nights]
     bases = [p.strip('/') for p in prefixes] if prefixes else ['mosfire/*']
-    rules = [f'+ /{b}/{pat}' for b in bases for pat in NIGHT_PATTERNS]
+    rules = []
+    for b in bases:
+        parts = b.split('/')
+        night, band = '/'.join(parts[:2]), (parts[2] if len(parts) > 2 else None)
+        if band is None:
+            rules += [f'+ /{night}/{pat}' for pat in NIGHT_PATTERNS]
+            band = BAND_GLOB
+        rules += [f'+ /{night}/{band}/{pat}' for pat in NIGHT_PATTERNS]
+        rules += [f'+ /{night}/{pat}' for pat in NIGHT_ONLY_PATTERNS]
     if roots:
         rules += [f'+ /{pat}' for pat in ROOT_PATTERNS]
     return rules + ['- **']
@@ -76,15 +96,17 @@ def rclone(args, check=True):
     return r
 
 
-def release_nights():
+def release_prefixes():
+    """The ``s3_prefix`` (night, or night/band) of every usable row of the standards table."""
     from astropy.table import Table
     t = Table.read(REPO / 'keck_etcs' / 'data' / 'mosfire' / 'throughput' / 'standards.ecsv', format='ascii.ecsv')
-    return sorted({str(r['s3_prefix']).split('/')[-1] for r in t if 'excluded' not in str(r['flag'])})
+    return sorted({str(r['s3_prefix']).strip('/') for r in t if 'excluded' not in str(r['flag'])})
 
 
 def main(run=False, prefixes=None, release=None, nights=None, check_only=False, src=SRC, dst=DST):
     if release:
-        nights = nights or release_nights()
+        if not nights and not prefixes:
+            prefixes = release_prefixes()
         dst = f'{dst}/releases/{release}'
     rules = filter_rules(prefixes, nights, roots=True)
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -132,7 +154,8 @@ def main(run=False, prefixes=None, release=None, nights=None, check_only=False, 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--run', action='store_true', help='copy for real (default: dry run)')
-    p.add_argument('--prefix', nargs='+', dest='prefixes', help='limit to these night prefixes, e.g. mosfire/20220409')
+    p.add_argument('--prefix', nargs='+', dest='prefixes',
+                   help='limit to these prefixes, e.g. mosfire/20220409 (every band) or mosfire/20140606/H')
     p.add_argument('--release', help='copy the contributing nights into releases/TAG/ (S16)')
     p.add_argument('--nights', nargs='+', help='nights (YYYYMMDD) for --release (default: from standards.ecsv)')
     p.add_argument('--check-only', action='store_true', help='only rclone check --one-way')

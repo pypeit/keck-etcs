@@ -507,8 +507,11 @@ the high-level products (D39, design 4.8.9) with `rclone` from
 `nautilus_s3:keck-etcs/` to the Google shared drive `AIOcean:keck-etcs/`.
 
 - **Included, per night:** `sens/**`, `harvest/**`, `run_manifest.json`,
-  `run.log`, `redux/*.pypeit`, `redux/Science/spec1d_*` and
-  `raw/manifest.ecsv`.
+  `run.log`, `pod.log`, `gates.json`, `pypeit_pin_check.json`,
+  `redux/*.pypeit`, `redux/Science/spec1d_*` and `raw/manifest.ecsv`,
+  at the night level (legacy J/J2 layout) and under every band directory
+  `mosfire/<night>/<band>/` (D55; H since S24b). `--prefix` takes
+  `mosfire/<night>` (every band) or `mosfire/<night>/H`.
 - **Included, at the bucket root:** `manifests/**` and `runs/**`.
 - **Excluded:** raw frames, `spec2d_*`, `Calibrations/` and `QA/`.
 
