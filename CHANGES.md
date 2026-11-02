@@ -74,8 +74,7 @@ fed it.
     2024-12-24 HD 79108 and 2017-06-15 HD 133772 passed in the 0.2.7 pods
     (median H throughput 0.318 and 0.323 through 4" bars); 2014-06-01
     Feige 110 (4 wide-bar frames, 0.322) and 2015-09-17 HD 159008 (3
-    frames, 0.305) pass locally with the fixes above and await the pod
-    rerun. The A0V zero points at 16500 A are within 0.05 mag of the white
+    frames, 0.305) passed in the 0.2.8 pods with the fixes above. The A0V zero points at 16500 A are within 0.05 mag of the white
     dwarf's (D2: HD 159008 -0.052, HD 133772 +0.001, HD 79108 -0.012 mag).
     `standards.ecsv` gains the five H rows (the 2012-11-28 reference
     HIP 17971 at 0.7", 0.238, included); `calib_monitor.ecsv` their monitor

@@ -408,7 +408,8 @@ PypeIt's `transfer_wavecal` gave up and the 4" bars kept their own poor
 fits. Fixed in PypeIt (bars matched to slits by position) and in
 `reduce_standard.py` (calibration frames of another CSU mask left out:
 2015-09-17 had two Ne/Ar arcs through the plain `long2pos` mask); both
-nights pass locally and are to be rerun in the next image (`REPLACE=1`).
+nights then passed in image 0.2.8 (853 and 1535 s, 7.9 and 12.5 GiB
+peak); every H pilot night is `success` with passed gates.
 
 The gates read their windows from the instrument module
 (`keck_etcs.instruments.mosfire.gate_windows`): the band group's common

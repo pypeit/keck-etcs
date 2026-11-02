@@ -1291,10 +1291,38 @@ keck-etcs `78e2058`, PypeIt pin `5e92ff9` (image label checked;
 README table (**Current**), CHANGES and the design doc carry it;
 `check_docs.py` passes again.
 
-**Next (for the user):** commit; rerun the two nights on Nautilus
-(`REPLACE=1` with the pilot manifest: the two successes skip), then
-`verify_nights.py`, `status_table.py` and the merge again (pod rows
-replace the local ones).
+**The rerun on 0.2.8** (night Job on the pilot manifest, 4 completions;
+monitored every 30 min, done in 26 min): indices 1 and 3 skipped as done
+on the bucket (3-5 s); index 0, 2014-06-01 Feige 110, `GATES: PASS` with
+the 4 wide-bar frames (slits 943 and 1120 at RMS 0.062 and 0.050 px),
+median throughput 0.3224, 853 s, 7.9 GiB peak, 1.34 GB scratch; index 2,
+2015-09-17 HD 159008, `GATES: PASS` with 3 frames (RMS 0.078 and 0.059 px),
+0.3052, 1535 s, 12.5 GiB peak, 1.07 GB scratch. The pod results equal the
+local ones. Products pulled (`--force`; the local products parked as
+`H_local_fixed/`), `verify_nights.py --band H` ALL OK for all four nights
+(20140601 and 20150917 against the 0.2.8 digest and pin `5e92ff9`,
+20241224 and 20170615 against 0.2.7 and `b0447b7`, the pin of their
+image), `status_table.py`: the four H nights `success` with passed gates.
+The merge replaced the two local rows and their monitor rows by the pod
+ones (`standards.ecsv` H rows: Feige 110 0.3267 and zp_mid 19.789 on
+0.2.8/`5e92ff9`, HD 159008 0.3105 and 19.738, the two 0.2.7 rows
+unchanged, HIP 17971 local). `pytest` 134 passed, `check_docs.py` ALL
+CHECKS PASS.
+
+**Final status table** (bucket, `status_table.py`):
+
+| Night | Standard | Image | PypeIt | Gates | Wall [s] | Peak [GiB] | Frames in 4" bars | Median thru | zp_mid |
+|---|---|---|---|---|---|---|---|---|---|
+| 20140601 | Feige 110 (WD) | 0.2.8 | `5e92ff9` | PASS | 853 | 7.9 | 4 | 0.322 | 19.789 |
+| 20150917 | HD 159008 (A0V) | 0.2.8 | `5e92ff9` | PASS | 1535 | 12.5 | 3 | 0.305 | 19.738 |
+| 20170615 | HD 133772 (A0V) | 0.2.7 | `b0447b7` | PASS | 830 | 8.2 | 2 | 0.323 | 19.791 |
+| 20241224 | HD 79108 (A0V) | 0.2.7 | `b0447b7` | PASS | 332 | 8.2 | 2 | 0.318 | 19.778 |
+
+The two 0.2.7 nights stay on their image: the matcher changes nothing on a
+night whose seven bars were all traced. S24a is complete; the next step is
+prompt 6 (S24b, the H batches).
+
+**Next (for the user):** commit (the merged tables, the log).
 
 **Learned about the repository:** the Jobs read their manifest from a
 ConfigMap, so "apply the Job" without re-creating the ConfigMap runs the

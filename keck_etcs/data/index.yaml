@@ -12,8 +12,8 @@ files:
       XTcalc v2.3; 12 (airmass, PWV) grids, flux-conserving rebin to 0.05 nm over 950-2450 nm
   mosfire/throughput/standards.ecsv:
     calib_version: mosfire-2026.10-dev
-    created: '2026-10-31T23:04:50Z'
-    sha256: abe881c80f3f981c7a1671cd15fd2293db4687e14c5ed0a9b0b3167c858ec2b9
+    created: '2026-11-01T00:32:39Z'
+    sha256: 700ce30b60075e809928daaafb17afe6cfc19219e07a163caeeece672a375ef5
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 25 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
       in mosfire/throughput/standards/
@@ -31,8 +31,8 @@ files:
     provenance: J2 OH monitor-line ranking (design 4.9.4); 4 lines frozen into MONITOR (S15a)
   mosfire/monitor/calib_monitor.ecsv:
     calib_version: mosfire-2026.10-dev
-    created: '2026-10-31T23:04:50Z'
-    sha256: 2e5d7c5081587bca3e9c2cc2463b2c48969fe8b35a1cb444f5ed7d70934e3df3
+    created: '2026-11-01T00:32:39Z'
+    sha256: 0461ef728dc255f759a9190f605c43ea252b0a6ce693ff896eabda57fc230548
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 3307 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
   mosfire/filters/mosfire_Y.ecsv:
