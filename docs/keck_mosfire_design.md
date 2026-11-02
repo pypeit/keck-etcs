@@ -632,9 +632,13 @@ MOSFIRE fix found in reduction:
   `transfer_wavecal` no longer refuses a mask whose slit count differs
   from its seven bars (2014-06-01 H: bar 26 not traced, the posC 4" bar
   flagged bad; 2015-09-17 H: a spurious 847-pixel slit above the mask),
-  and a bar keeps its own fit when the transferred one is worse.
+  and a bar keeps its own fit when the transferred one is worse;
+- `b8a6a19` (0.2.9, S24b): `arc.fit_arcspec` skips a fit window
+  narrower than three pixels and survives a failed Gaussian fit (a
+  spurious slit's empty arc, FWHM 0.3 pixels, crashed `run_pypeit` on
+  2016-01-08 H).
 
-Image 0.2.8 is current. `nautilus/README.md` has every tag
+Image 0.2.9 is current. `nautilus/README.md` has every tag
 with its digest, keck-etcs commit and pin. The `--allow-branch` flag
 anticipated in plan S17 does not exist: `PIN_BRANCHES` serves the purpose.
 

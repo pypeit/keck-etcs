@@ -1435,10 +1435,25 @@ HD 133772, HD 47944, BD+25 2478, HD 79108, HD 44128, HD 21875),
 `calib_monitor.ecsv` 5916 rows, 17 `_H` curves. Backup
 (`backup_products.py --run`) and the sweep launch are the user's.
 
-**Image 0.2.9 prepared:** `__version__` 0.2.9, `pypeit_pin.txt`
-`b8a6a19cc5e8a54899ea318065a41333c8ef7163`, the three manifests at 0.2.9
-with `sha256:PENDING_PUSH` for the digest, README table row. `check_docs.py`
-fails until the digest is filled in after the push.
+**Image 0.2.9 built and pushed** (by the user, from keck-etcs `c3e6df6`
+with PypeIt `etc-fixes` at `b8a6a19cc5e8a54899ea318065a41333c8ef7163`):
+digest
+`sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a`
+(confirmed read-only with `docker manifest inspect`; the image label
+`org.opencontainers.image.revision` records both commits). Filled into the
+three Job manifests, the `nautilus/README.md` image table (0.2.9
+**Current**, 0.2.8 "Ran H batch 1"), the README current-code line and the
+design 9.6 as-built list. `validate_manifests.py` MANIFESTS OK,
+`check_docs.py` ALL CHECKS PASS, `check_pypeit_pin.py --image 0.2.9` PASS
+(the PypeIt checkout is back on `etc-fixes` at the pin), pytest 139
+passed, 3 deselected. The sweep recipe of `nautilus/README.md` section 7
+was dry-run locally (`kubectl apply --dry-run=client`: Job
+`keck-etcs-nights-sweep1`, 19 completions, parses); the launch is the
+user's. Note: a ConfigMap `keck-etcs-nights-sweep1` from the J sweep
+(S15c) still exists and the recipe's `apply` replaces it; the bucket's
+`runs/keck-etcs-nights-sweep1/status/` therefore holds J rows too, which
+the (night, band) keys of `status_table.py`, `night_failures.py` and
+`check_standards_table.py` keep apart.
 
 **Learned.** The installed PypeIt is an editable checkout: while the user
 works on another branch (`speed_up_B` at the end of this session) the

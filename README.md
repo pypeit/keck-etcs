@@ -10,7 +10,7 @@ NIR sky from the Gemini Maunakea models, and the detector terms from Keck's
 measured values. The ETCs can be refreshed as new data come in.
 
 The first instrument is **Keck/MOSFIRE, J and J2 long-slit spectroscopy**.
-The current code is `keck_etcs` 0.2.8, with calibration `mosfire-2026.10`.
+The current code is `keck_etcs` 0.2.9, with calibration `mosfire-2026.10`.
 The documentation, with an in-browser calculator, is at
 <https://keck-etcs.readthedocs.io/en/keck-mosfire/> (the `latest` version follows `main`
 once `keck-mosfire` is merged). The results are in
