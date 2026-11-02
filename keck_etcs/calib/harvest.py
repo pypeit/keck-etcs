@@ -434,7 +434,7 @@ def harvest(sens_path, run_manifest_path, standard=None, filter_curve=None, curv
     one = lambda vals: vals[0] if len(vals) == 1 else None
 
     model = std_model_record(sens_path, standard, night)
-    curve_file = f'{curve_dir}/{standard}_{night}.ecsv'
+    curve_file = f'{curve_dir}/{curve_name(standard, night, m.get("s3_prefix"))}.ecsv'
     row = {
         'date': date_iso,
         'mjd': float(np.mean([raw[f]['mjd'] for f in files])) if files else None,
@@ -506,6 +506,15 @@ def row_table(rows):
     for c, u in UNITS.items():
         t[c].unit = u
     return t
+
+
+def curve_name(standard, night, s3_prefix=None):
+    """Stem of a standard's curve and row files: ``<standard>_<night>`` in the single-band (J) era and
+    ``<standard>_<night>_<band>`` when the product prefix carries a band (``mosfire/<night>/<band>``, D55), so
+    the J and H curves of one night do not share a file (S24b: three J curves had been overwritten by H ones)."""
+    parts = str(s3_prefix or '').rstrip('/').split('/')
+    band = parts[2] if len(parts) > 2 and parts[2] else None
+    return f'{standard}_{night}' + (f'_{band}' if band else '')
 
 
 def write_outputs(row, curve, outdir):

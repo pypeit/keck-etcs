@@ -199,6 +199,28 @@ def merge_monitor(dirs):
     INDEX.write_text(head + yaml.safe_dump(idx, sort_keys=False, width=100))
 
 
+def heal_band_metrics(rows):
+    """Fill a row's band metrics (``zp_lo/mid/hi``, ``thru_median_common``, ``zp_nodes_A``, ``common_window_A``)
+    from its stored curve when they are missing: a row file harvested before S23a lacks them (the J-era in-pod
+    harvests), and merging such a file again (S24b, restoring the J curves) must not leave the migrated table
+    row (S23b, ``migrate_standards_table.py``) without them. Same functions as the harvest."""
+    from keck_etcs.instruments.mosfire import MOSFIRE
+    for r in rows:
+        if r.get('zp_nodes_A') not in (None, '', '--'):
+            continue
+        path = THRU_DIR / str(r['thru_curve_file'])
+        if not path.exists() or str(r['filter']) not in MOSFIRE.bands:
+            continue
+        band = MOSFIRE.bands[str(r['filter'])]
+        curve = Table.read(path, format='ascii.ecsv')
+        r.update({k: hv.zp_at(curve, w) for k, w in zip(hv.ZP_KEYS, band.zp_nodes_A)})
+        r['thru_median_common'] = (None if 'nofilter' in str(r['flag'])
+                                   else hv.median_in(curve, *band.common_window_A, col='thru'))
+        r['zp_nodes_A'] = hv.zp_nodes_str(band.zp_nodes_A)
+        r['common_window_A'] = hv.window_str(band.common_window_A)
+        print(f"  band metrics of ({r['standard']}, {r['date']}, {r['filter']}) filled from {path.name}")
+
+
 def cmd_merge(dirs):
     new = []
     for d in dirs:
@@ -223,14 +245,26 @@ def cmd_merge(dirs):
                   else (r[c].item() if hasattr(r[c], 'item') else r[c]))
               for c in hv.ROW_COLUMNS}
         key = tuple(str(rd[k]) for k in KEY)
+        # the stored curve name carries the band of a multi-band product (D55; rows harvested before S24b named
+        # the H curve as the J one)
+        name = hv.curve_name(rd['standard'], str(rd['date']).replace('-', ''), rd['s3_prefix']) + '.ecsv'
+        rd['thru_curve_file'] = f'standards/{name}'
+        target = THRU_DIR / 'standards' / name
         action = 'added'
         if key in index:
             old = rows[index[key]]
+            keep = None
             if is_pod(old) and not is_pod(rd):
-                print(f'  kept in-pod row {key} (local row not merged)')
-                continue
-            if is_pod(rd) == is_pod(old) and str(created.get('|'.join(key), '')) > str(when):
-                print(f'  kept newer row {key}')
+                keep = 'kept in-pod row'
+            elif is_pod(rd) == is_pod(old) and str(created.get('|'.join(key), '')) >= str(when):
+                # the same or a newer harvest: the table row stays (it may carry columns migrated since, S23b)
+                keep = 'kept table row (same or newer harvest)'
+            if keep:
+                old['thru_curve_file'] = rd['thru_curve_file']
+                if not target.exists():
+                    shutil.copy2(curve_path, target)
+                    keep += f'; curve {name} restored'
+                print(f'  {keep} {key}')
                 continue
             rows[index[key]] = rd
             action = 'replaced'
@@ -238,8 +272,14 @@ def cmd_merge(dirs):
             index[key] = len(rows)
             rows.append(rd)
         created['|'.join(key)] = str(when)
-        shutil.copy2(curve_path, THRU_DIR / 'standards' / curve_path.name)
-        print(f'  {action} {key} (image {rd["image"]}); curve {curve_path.name}')
+        shutil.copy2(curve_path, target)
+        print(f'  {action} {key} (image {rd["image"]}); curve {name}')
+    heal_band_metrics(rows)
+    referenced = {Path(str(r['thru_curve_file'])).name for r in rows}
+    for stale in sorted(THRU_DIR.glob('standards/*.ecsv')):
+        if stale.name not in referenced:
+            stale.unlink()
+            print(f'  removed stale curve {stale.name} (no row refers to it)')
     out = hv.row_table(rows)
     out.sort(['date', 'standard'])
     out.meta.update({

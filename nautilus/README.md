@@ -148,7 +148,8 @@ bash nautilus/build_image.sh --push     # build and push <version> and latest
 
 | tag | PypeIt pin (`etc-fixes`) | keck-etcs | digest | notes |
 |---|---|---|---|---|
-| 0.2.8 | `5e92ff9416105763b1aae2ee39bde1fa8321c919` | `78e2058` | `sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef` | S24a H pilot fixes: PypeIt `long2pos_match_bars`/`long2pos_bar_slits` (bars matched to slits by position in `transfer_wavecal`, a bar keeps the better fit); calibration frames of another CSU mask left out on specphot nights; H monitor lines frozen; OH fluxes in the 0.7" bars of long2pos frames. **Current** |
+| 0.2.9 | `b8a6a19cc5e8a54899ea318065a41333c8ef7163` | pending | `sha256:PENDING_PUSH` (fill in after the push) | S24b H batch-1 sweep fixes: PypeIt `arc.fit_arcspec` skips a fit window under three pixels (a spurious slit's empty arc crashed `run_pypeit`, 2016-01-08); another mask's flats or arcs are left out only when the standard's mask has its own (19 nights: calibrations through plain `long2pos`); one slit per CSU bar carved from the trace by the mask geometry (`bar_slit_edits`; open-CSU flats, spurious slits); band-suffixed curve files. **Current** |
+| 0.2.8 | `5e92ff9416105763b1aae2ee39bde1fa8321c919` | `78e2058` | `sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef` | S24a H pilot fixes: PypeIt `long2pos_match_bars`/`long2pos_bar_slits` (bars matched to slits by position in `transfer_wavecal`, a bar keeps the better fit); calibration frames of another CSU mask left out on specphot nights; H monitor lines frozen; OH fluxes in the 0.7" bars of long2pos frames. Ran H batch 1 (16 of 35 indexes). |
 | 0.2.7 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `c5c8e53` | `sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2` | S24a: H sensfunc settings (`keck_mosfire_H.sens`, polyorder 4, tell_npca 2); A0V model scaled to the band's own 2MASS magnitude (D51, `--mag`, `HMAG_2MASS`/`KMAG_2MASS`); filter-edge mask and LSF `resln_guess` for Y/H/K sensfuncs; `nights_pilot_H.csv`; the H pilot ran on this push. Re-pushed 2026-10-31 at `bf0b499` with the same pin, `sha256:e6c69cb7ffd438aebffcd95069542a80c921075d63181cff438b538dbdb76a79` (no PypeIt change). |
 | 0.2.6 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `d34a000` | `sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92` | pin moved to `etc-fixes` `b0447b7`: read noise from `SAMPMODE`/`NUMREADS` (S17) and `SLITRANGE` from product headers for `pypeit_sensfunc` on short long slits (S23d); per-band layout `mosfire/<night>/<band>/`, `--band`, `GATES_REFERENCE=auto`; H/K reference reductions. |
 | 0.2.5 | `bc18a3ba46d1d331da0875424c63999e578a4937` | `10a469f` | `sha256:69591fcbdb595ca0b24438f9b4cf803d0ad48dedbe36141a8d211e3b3a4daed4` | `construct_basename` fix (`/` in KOA target names); long2pos bar split; S15b sweep. |
@@ -277,8 +278,11 @@ column upper-cased; an A0V standard's model is scaled to the band's own
 need that column. Pilots per band: `make_night_manifest.py pilot` (J,
 `nights_pilot.csv`) and `pilot --band H` (`nights_pilot_H.csv`, 4 nights:
 the H white dwarf, the brightest 2017-2025 A0V, a 2012-2016 A0V and a
-second 2017-2025 A0V; the K and Y docs reuse the rules). Push it to
-`s3://keck-etcs/manifests/`.
+second 2017-2025 A0V; the K and Y docs reuse the rules). A band's batch
+is the generic path with the band as a filter: `make_night_manifest.py
+batch1_H --band H --usable-wide` (S24b: the 35 reducible public wide-slit
+H nights of a usable class, one row per night, the pilot nights included
+since done nights skip). Push it to `s3://keck-etcs/manifests/`.
 
 **2. Download the raw frames** (`koa_download_job.yaml`, D37):
 
@@ -327,7 +331,7 @@ script block; `python nautilus/validate_manifests.py` checks the YAML,
 4. Runs, in order:
    - `reduce_standard.py <night> --scratch /scratch --s3-pull`: the pin
      check in image mode, `pypeit_setup`, patching the pypeit file (standard
-     typing, nod pairs, `long2pos_specphot` bar split, OH-arc cap),
+     typing, nod pairs, the `long2pos_specphot` bar carve, OH-arc cap),
      `run_pypeit` and QA;
    - `build_sensfunc.py`: per-frame and coadd sensfuncs with the packaged
      `.sens`;
@@ -411,6 +415,27 @@ fits. Fixed in PypeIt (bars matched to slits by position) and in
 nights then passed in image 0.2.8 (853 and 1535 s, 7.9 and 12.5 GiB
 peak); every H pilot night is `success` with passed gates.
 
+**H batch 1 (S24b, 2026-11-02, image 0.2.8):** 35 rows
+(`nights_batch1_H.csv`), 16 indexes `success` (4 pilot skips, 12 new
+nights, 9 to 36 minutes each, 6.2 to 14.9 GiB peak) and 19 failed in under
+a minute: 18 `no calibs` ("no lamp-on flats with filter H") and one
+`reduce failed`. On those nights every flat and Ne/Ar arc was taken through
+the plain `long2pos` mask while the standard sits on `long2pos_specphot`,
+and the S24a rule above dropped them all; the two masks have the same bar
+centres (`Mechanical_Slit_List`, only the 0.7"/4.0" widths differ), so
+`reduce_standard.py other_mask_calibs` now drops another mask's flats, or
+arcs, only when the standard's mask has its own. Those flats illuminate the
+whole CSU (every bar open), so the slit trace gives four slits for seven
+bars: `bar_slit_edits` carves one slit per bar from the trace with the mask
+geometry (`rm_slits`/`add_slits`; merged bars split, open CSU beyond the
+bars dropped, a spurious slit removed). The `reduce failed` night
+(2016-01-08) crashed PypeIt in `arc.fit_arcspec` on a spurious slit whose
+arc FWHM measured 0.3 px (a Gaussian fit of one pixel); fixed on
+`etc-fixes` (`b8a6a19`, fit windows under three pixels skipped). Both
+re-run locally with the fixes: 2014-11-23 and 2016-01-08 `success`, gates
+PASS, median throughput 0.33. The 19 nights are swept with image 0.2.9
+(`sweep_batch1_H.csv`).
+
 The gates read their windows from the instrument module
 (`keck_etcs.instruments.mosfire.gate_windows`): the band group's common
 window for the zero point, its middle third for the `OPT_COUNTS`
@@ -422,20 +447,39 @@ fidelity, and the throughput range 0.5-1.6x XTcalc's 2012 median (Y
 
 ```
 python nautilus/night_failures.py keck-etcs-nights        # per-night status + nautilus/manifests/sweep_<job>.csv
-python nautilus/status_table.py                            # per-night table from run_manifest.json (store-only)
+python nautilus/status_table.py                            # per-night/band table from run_manifest.json (store-only)
 ```
 
 - `night_failures.py` reads every status row of the Job and keeps each
   night's **latest** row, by `time`. Older rows under the same Job name,
-  such as a pilot's, do not count.
+  such as a pilot's, do not count. Rows are keyed by (night, band): a Job
+  name reused across bands (the H batch under `keck-etcs-nights` after the
+  J batches, S24b) keeps the other bands' rows.
 - It writes a sweep manifest of the nights whose latest status is not
-  `success`.
+  `success`. `--manifest nautilus/manifests/<batch>.csv` restricts the
+  sweep to that batch's (night, band) rows, in its order, and `--retry-data`
+  retries the data failures too (after a driver change; S24b batch 1:
+  `python nautilus/night_failures.py keck-etcs-nights --manifest
+  nautilus/manifests/nights_batch1_H.csv --retry-data --out
+  nautilus/manifests/sweep_batch1_H.csv`, 19 nights).
+- **Run the sweep** under a new Job name with the sweep manifest as its
+  ConfigMap and `completions` = its rows, without editing the tracked
+  `night_job.yaml`:
+
+  ```
+  kubectl -n pypeit create configmap keck-etcs-nights-sweep1 \
+    --from-file=nights.csv=nautilus/manifests/sweep_batch1_H.csv --dry-run=client -o yaml | kubectl apply -f -
+  sed 's/^  name: keck-etcs-nights$/  name: keck-etcs-nights-sweep1/; s/configMap: {name: keck-etcs-nights}/configMap: {name: keck-etcs-nights-sweep1}/; s/^  completions: 35 /  completions: 19 /' \
+    nautilus/night_job.yaml | kubectl apply -f -
+  ```
+
+  (`JOB_NAME` follows the Job's name, so the status rows land under
+  `runs/keck-etcs-nights-sweep1/status/`; the raw frames are already on
+  the bucket, so no download Job is needed.)
 - **Diagnose from the S3 artefacts:** `run.log`, `pod.log` and the
   `run_manifest.json` that a failed pod still pushes.
 - **Fix the cause:** code, a PypeIt fix on the pinned branch plus a new
   image, or a manifest note.
-- **Run the sweep:** `night_job.yaml` under a new Job name (e.g.
-  `keck-etcs-nights-sweep1`) with `sweep_<job>.csv` as its ConfigMap.
 - A night that fails twice for a data reason (`no calibs`, `no trace`) is
   recorded as such, not retried again.
 

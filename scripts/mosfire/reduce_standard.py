@@ -225,19 +225,61 @@ def filter_from_headers(raw_dir):
     return vals.pop() if len(vals) == 1 else None
 
 
-def split_merged_bars(pfile, redux, raw_file, log, env):
-    """Trace a long2pos_specphot night's slit edges once and split slits that hold several bars.
+def bar_slit_edits(edges, bar_centers, pitch, gap, row):
+    """Slit-edge edits that give a long2pos_specphot trace one slit per CSU bar.
 
-    On some nights the flats show no gap between the three bars of a position
-    (2015-09-04: three slits, 127 pixels wide, for seven bars), so PypeIt
-    traces one slit per position and the 4.0" bar cannot be told apart. This
-    runs ``pypeit_trace_edges`` on ``pfile``; if it finds fewer slits than the
-    mask has bars (``Mechanical_Slit_List``), every slit wider than one bar is
-    replaced, through PypeIt's ``rm_slits``/``add_slits`` (removed first, then
-    added), by ``k`` equal bars, ``k`` = the slit width plus one bar gap over
-    the CSU pitch (bar length plus gap, from the mask's plate scale). The two
-    lines are written into the ``[[slitedges]]`` block of ``pfile``. Returns a
-    record for ``run_manifest.json`` (``None`` when nothing is changed).
+    ``edges`` are the traced ``(left, right)`` slit edges at spectral ``row``; ``bar_centers`` maps bar number to
+    its nominal spatial centre (CRPIX2 + (23 - n) * pitch, as PypeIt's ``long2pos_match_bars``); ``pitch`` and
+    ``gap`` are the CSU bar pitch and bar gap in pixels. The trace is first shifted onto the mask: the median
+    offset of the traced edges that lie within ``gap`` + 3 pixels of a nominal bar edge. A traced slit that holds
+    exactly one bar centre and is at most 1.3 pitches wide is kept. Any other slit is removed (``rm_slits``) and
+    each bar centre it holds is added back as its nominal extent clipped to the slit (``add_slits``): a slit
+    holding several bars is split (2015-09-04: no gap between the three bars of a position), a slit holding
+    bars and open CSU beyond them keeps only the bars (2014-11-23: the plain ``long2pos`` flats illuminate the
+    whole CSU, so the trace gives [7, 1007] for bars 24-26), a slit holding no bar goes (2015-09-17, 2016-01-08:
+    a spurious slit over the open CSU, whose empty arc crashed PypeIt's line fitting). A bar whose centre lies in
+    no traced slit (2016-01-08: bar 26 shows no flat light) is listed as ``untraced_bars`` and left alone.
+    Returns a record for ``run_manifest.json``: ``action`` is ``carve`` with ``rm_slits``/``add_slits`` when
+    there is a slit to remove and every bar inside a removed slit can be added back, else ``none`` with a
+    ``reason`` (the trace is then used as is and the bar matcher copes).
+    """
+    L = pitch - gap
+    lefts, rights = [c - L / 2 for c in bar_centers.values()], [c + L / 2 for c in bar_centers.values()]
+    diffs = [min((a - x for x in lefts), key=abs) for a, b in edges] + [min((b - x for x in rights), key=abs)
+                                                                        for a, b in edges]
+    diffs = [d for d in diffs if abs(d) <= gap + 3]
+    off = float(np.median(diffs)) if diffs else 0.0
+    cen = {n: c + off for n, c in bar_centers.items()}
+    rm, add, kept, dropped = [], [], [], []
+    for a, b in edges:
+        inside = sorted(n for n, c in cen.items() if a < c < b)
+        if len(inside) == 1 and (b - a) <= 1.3 * pitch:
+            kept.append(inside[0])
+            continue
+        rm.append(f'1:{row}:{0.5 * (a + b):.0f}')
+        for n in inside:
+            lo, hi = max(a, cen[n] - L / 2), min(b, cen[n] + L / 2)
+            if hi - lo >= 0.5 * L:
+                add.append(f'1:{row}:{lo:.0f}:{hi:.0f}')
+            else:
+                dropped.append(n)
+    untraced = sorted(n for n in bar_centers if not any(a < cen[n] < b for a, b in edges))
+    rec = {'offset_pix': round(off, 1), 'kept_bars': kept, 'untraced_bars': untraced}
+    if dropped:
+        return dict(rec, action='none', reason=f'bars {dropped} barely inside a traced slit')
+    if not rm:
+        return dict(rec, action='none', reason='one slit per traced bar')
+    return dict(rec, action='carve', rm_slits=rm, add_slits=add)
+
+
+def split_merged_bars(pfile, redux, raw_file, log, env):
+    """Trace a long2pos_specphot night's slit edges once and carve one slit per CSU bar.
+
+    Runs ``pypeit_trace_edges`` on ``pfile`` and, when the traced slits are not one per bar of the standard
+    frame's ``Mechanical_Slit_List``, writes the ``rm_slits``/``add_slits`` lines of :func:`bar_slit_edits`
+    (removed first, then added) into the ``[[slitedges]]`` block of ``pfile``. Returns a record for
+    ``run_manifest.json`` (``traced`` edges at the reference row, ``nbars``, and the edits or the reason none
+    were made).
     """
     from pypeit.slittrace import SlitTraceSet
     from pypeit.spectrographs.keck_mosfire import KeckMOSFIRESpectrograph as K
@@ -249,32 +291,24 @@ def split_merged_bars(pfile, redux, raw_file, log, env):
     slits = SlitTraceSet.from_file(files[0])
     left, right, _ = slits.select_edges()
     with fits.open(raw_file) as hdul:
-        nbars = sum(1 for r in hdul['Mechanical_Slit_List'].data if str(r['Slit_Number']).strip())
+        bars = [int(r['Slit_Number']) for r in hdul['Mechanical_Slit_List'].data if str(r['Slit_Number']).strip()]
         ps = hdul[0].header['PSCALE']
+        crpix2 = float(hdul[0].header['CRPIX2'])
     shutil.rmtree(work, ignore_errors=True)
     row = left.shape[0] // 2
     edges = sorted((float(left[row, i]), float(right[row, i])) for i in range(slits.nslits))
-    rec = {'traced': [[round(a, 1), round(b, 1)] for a, b in edges], 'nbars': nbars, 'row': row}
-    if len(edges) >= nbars:
-        return dict(rec, action='none', reason=f'{len(edges)} slits for {nbars} bars')
     gap = K._slit_gap(ps)
     pitch = K._CSUlength(ps) + gap
-    rm, add, n = [], [], 0
-    for a, b in edges:
-        k = max(1, int(round((b - a + gap) / pitch)))
-        n += k
-        if k == 1:
-            continue
-        rm.append(f'1:{row}:{0.5 * (a + b):.0f}')
-        step = (b - a + gap) / k
-        add += [f'1:{row}:{a + i * step:.0f}:{a + i * step + step - gap:.0f}' for i in range(k)]
-    if n != nbars or not rm:
-        return dict(rec, action='none', reason=f'split gives {n} slits for {nbars} bars')
+    centers = {n: crpix2 + (K.LONG2POS_POSB_BAR - n) * pitch for n in bars}
+    rec = {'traced': [[round(a, 1), round(b, 1)] for a, b in edges], 'nbars': len(bars), 'row': row}
+    rec.update(bar_slit_edits(edges, centers, pitch, gap, row))
+    if rec['action'] != 'carve':
+        return rec
     text = Path(pfile).read_text()
-    block = f"    rm_slits = {'; '.join(rm)}\n    add_slits = {'; '.join(add)}\n"
+    block = f"    rm_slits = {'; '.join(rec['rm_slits'])}\n    add_slits = {'; '.join(rec['add_slits'])}\n"
     assert text.count('  [[slitedges]]\n') == 1
     Path(pfile).write_text(text.replace('  [[slitedges]]\n', '  [[slitedges]]\n' + block, 1))
-    return dict(rec, action='split', rm_slits=rm, add_slits=add)
+    return rec
 
 
 def specphot_wide_slits(raw_file, wave_rows):
@@ -498,6 +532,41 @@ def mask_of(decker):
     return str(decker).replace('(align)', '').strip()
 
 
+def other_mask_calibs(tbl):
+    """Calibration frames of a ``long2pos_specphot`` night taken through another CSU mask.
+
+    Returns ``(drop, notes)``: ``drop`` marks the flats and lamp arcs to leave out of the PypeIt file. A frame
+    type (flats; arcs) is left out only when the standard's own mask has frames of that type (S24a, 2015-09-17
+    H: two of the four Ne/Ar arcs were taken through the plain ``long2pos`` mask, whose bars 21 and 25 are 0.7"
+    wide, so the combined arc mixed narrow and wide lines in two 4.0" bars and their fits followed the narrow
+    lines of a slit 3 pixels away). When the standard's mask has no flats, or no arcs, the other mask's frames
+    are the night's only calibrations and are kept (S24b batch 1: on the 2014-2016 H specphot nights, e.g.
+    2014-11-23, every flat and arc is through plain ``long2pos``; its bars have the same centres as the
+    specphot mask's, ``Mechanical_Slit_List`` ``Position_of_Slit``, and only their widths differ, 0.7" for
+    4.0"). ``(align)`` names the same mask with its 4.0" bars as alignment boxes (:func:`mask_of`).
+    """
+    deckers, types = list(tbl['decker']), list(tbl['frametype'])
+    std_masks = {mask_of(d) for d, t in zip(deckers, types) if 'standard' in t}
+    drop, notes = np.zeros(len(tbl), bool), []
+    if not std_masks:
+        return drop, notes
+    kinds = {'flat': lambda t: 'flat' in t, 'arc': lambda t: ('arc' in t) and ('standard' not in t)}
+    for kind, is_kind in kinds.items():
+        own = any(is_kind(t) and mask_of(d) in std_masks for d, t in zip(deckers, types))
+        other = np.array([is_kind(t) and mask_of(d) not in std_masks for d, t in zip(deckers, types)])
+        if not other.any():
+            continue
+        listed = ', '.join(f'{fn} ({d})' for fn, d in zip(tbl['filename'][other], tbl['decker'][other]))
+        if own:
+            drop |= other
+            notes.append(f'{int(other.sum())} {kind} frame(s) of another mask left out (standard mask '
+                         f'{sorted(std_masks)} has its own): {listed}')
+        else:
+            notes.append(f'{int(other.sum())} {kind} frame(s) of another mask kept: the standard mask '
+                         f'{sorted(std_masks)} has none of its own (same bar centres, narrower bars): {listed}')
+    return drop, notes
+
+
 def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
     """Merge and patch the pypeit_setup output; return (path, table, notes)."""
     from pypeit.inputfiles import PypeItFile
@@ -562,17 +631,9 @@ def build_pypeit_file(setup_dir, out_file, filt, par_text, raw_dir, std=None):
             old = [o for o, k in zip(old, lamp) if not k]
             tbl = tbl[~lamp]
     if specphot:
-        # calibration frames of another CSU mask are left out (2015-09-17 H: two of the four Ne/Ar arcs
-        # were taken through the plain long2pos mask, whose bars 21 and 25 are 0.7" wide, so the combined
-        # arc mixed narrow and wide lines in two 4.0" bars and their fits followed the narrow lines of a
-        # slit 3 pixels away); "(align)" is the same mask with its 4.0" bars as alignment boxes
-        std_masks = {mask_of(d) for d, t in zip(tbl['decker'], tbl['frametype']) if 'standard' in t}
-        other = np.array([(('flat' in t) or ('arc' in t)) and ('standard' not in t) and mask_of(d) not in std_masks
-                          for d, t in zip(tbl['decker'], tbl['frametype'])]) if std_masks else np.zeros(len(tbl), bool)
+        other, mask_notes = other_mask_calibs(tbl)
+        notes += mask_notes
         if other.any():
-            notes.append(f'{int(other.sum())} calibration frame(s) of another mask left out (standard mask '
-                         f'{sorted(std_masks)}): ' + ', '.join(f'{fn} ({d})' for fn, d in
-                                                              zip(tbl['filename'][other], tbl['decker'][other])))
             old = [o for o, k in zip(old, other) if not k]
             tbl = tbl[~other]
     if long2pos and not specphot and lamp_wavecal:

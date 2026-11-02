@@ -41,7 +41,7 @@ metadata:
   labels: {app: keck-etcs, role: koa-download}
 spec:
   completionMode: Indexed
-  completions: 4             # = rows in the manifest CSV (4: nights_pilot_H.csv, plan S24a; 19 for nights_batch1.csv)
+  completions: 35            # = rows in the manifest CSV (35: nights_batch1_H.csv, plan S24b; 4 for nights_pilot_H.csv, 19 for nights_batch1.csv)
   parallelism: 2             # politeness to KOA
   backoffLimit: 4
   activeDeadlineSeconds: 14400
@@ -52,8 +52,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: download
-        # image 0.2.8, digest sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef (keck-etcs 78e2058, PypeIt pin 5e92ff9)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8
+        # image 0.2.9, digest sha256:PENDING_PUSH (fill in from `docker manifest inspect` after the push; PypeIt pin b8a6a19)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -61,8 +61,8 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:PENDING_PUSH"}
         - {name: MANIFEST, value: /opt/manifest/nights.csv}
         - name: JOB_NAME
           valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}

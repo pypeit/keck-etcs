@@ -34,13 +34,15 @@ import s3_sync  # noqa: E402
 def main(instrument='mosfire', out=None):
     client = s3_sync.make_client()
     keys = sorted(k for k in s3_sync.remote_sizes(client, paths.BUCKET, instrument)
-                  if re.fullmatch(rf'{instrument}/\d{{8}}(/[A-Za-z0-9]+)?/run_manifest\.json', k))   # <band>/ for Y, H, K (D55)
+                  if re.fullmatch(rf'{instrument}/\d{{8}}(/[A-Z0-9]{{1,3}})?/run_manifest\.json', k))   # <band>/ for Y, H, K (D55); not reference/
     rows = []
     for key in keys:
         m = json.loads(client.get_object(Bucket=paths.BUCKET, Key=key)['Body'].read())
         g = m.get('gates') or {}
         rows.append({
-            'night': m.get('night', key.split('/')[1]), 'status': m.get('status') or '',
+            'night': m.get('night', key.split('/')[1]),
+            'band': key.split('/')[2] if key.count('/') == 3 else '',    # '' for the single-band (J) era
+            'status': m.get('status') or '',
             'image': m.get('image') or '', 'image_digest': m.get('image_digest') or '',
             'pypeit_version': m.get('pypeit_version') or '',
             'pypeit_git_sha': m.get('pypeit_git_sha') or '', 'pypeit_pin': m.get('pypeit_pin') or '',
@@ -56,9 +58,9 @@ def main(instrument='mosfire', out=None):
     out = Path(out) if out else paths.data_root() / instrument / 'status_table.ecsv'
     out.parent.mkdir(parents=True, exist_ok=True)
     tbl.write(out, format='ascii.ecsv', overwrite=True)
-    tbl['night', 'status', 'image', 'pypeit_pin', 'keck_etcs_git_sha', 'gates_pass',
+    tbl['night', 'band', 'status', 'image', 'pypeit_pin', 'keck_etcs_git_sha', 'gates_pass',
         'gates_failed'].pprint(max_lines=-1, max_width=-1)
-    print(f'{len(tbl)} night(s) -> {out}')
+    print(f'{len(tbl)} night/band(s) -> {out}')
     return 0
 
 

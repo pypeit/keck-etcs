@@ -3,7 +3,7 @@
 
 Usage:
     python nautilus/night_failures.py JOB_NAME [--out nautilus/manifests/sweep_<JOB>.csv]
-        [--no-pull]
+        [--no-pull] [--manifest nautilus/manifests/<batch>.csv] [--retry-data]
 
 Pulls ``runs/<JOB_NAME>/status/`` from the bucket (``s3_sync.py``; skip with
 ``--no-pull``), concatenates the per-pod rows into
@@ -17,7 +17,14 @@ ready to be the ConfigMap of a sweep job.
 A night that has failed twice for a *data* reason (``no calibs``, ``no
 trace``) across all jobs under ``runs/`` is not retried. It is listed as
 ``data failure`` on stdout instead. Every other failure (setup, reduce, sens,
-gate, push, pull, pin check) is retried.
+gate, push, pull, pin check) is retried. ``--retry-data`` retries the data
+failures too (the driver changed since: S24b batch 1, where 19 nights failed
+``no calibs`` on calibrations through the plain ``long2pos`` mask).
+
+Nights are keyed by (night, band): a Job name reused across bands (S24b: the
+H batch under ``keck-etcs-nights`` after the J batches) keeps the other
+bands' rows, which ``--manifest`` leaves out by restricting the sweep to the
+(night, band) rows of that batch manifest.
 """
 import argparse
 import csv
@@ -44,12 +51,17 @@ def cell(r, c):
     return '' if (hasattr(v, 'mask') and v.mask) or str(v) in ('--', 'None') else v
 
 
+def key_of(r):
+    """(night, band) of a status or manifest row; '' band for the single-band (J) era."""
+    return str(r['night']), str(cell(r, 'band'))
+
+
 def read_rows(job):
     files = sorted((paths.data_root() / 'runs' / job / 'status').glob('*.ecsv'))
     return vstack([Table.read(f, format='ascii.ecsv') for f in files]) if files else None
 
 
-def main(job, out=None, no_pull=False):
+def main(job, out=None, no_pull=False, manifest=None, retry_data=False):
     sync = [sys.executable, str(REPO / 'scripts' / 'nautilus' / 's3_sync.py'), 'pull']
     if not no_pull:
         if subprocess.run(sync + [f'runs/{job}/status']).returncode != 0:
@@ -66,7 +78,7 @@ def main(job, out=None, no_pull=False):
         t = read_rows(d.parent.name)
         for r in t if t is not None else []:
             if r['status'] in DATA_REASONS:
-                history[str(r['night'])] += 1
+                history[key_of(r)] += 1
 
     counts = Counter(str(s) for s in tbl['status'])
     print(f'job {job}: {len(tbl)} rows; ' + ', '.join(f'{k} {v}' for k, v in sorted(counts.items())))
@@ -74,12 +86,19 @@ def main(job, out=None, no_pull=False):
     # earlier run's status rows, and a night that failed then and succeeded since must not be retried
     latest = {}
     for r in sorted(tbl, key=lambda r: str(r['time'])):
-        latest[str(r['night'])] = r
+        latest[key_of(r)] = r
+    if manifest:
+        with open(manifest, newline='') as f:
+            wanted = [(row['night'], row.get('band', '') or '') for row in csv.DictReader(f)]
+        missing = [k for k in wanted if k not in latest]
+        if missing:
+            print(f'  no status row for {len(missing)} manifest night(s): {missing}')
+        latest = {k: latest[k] for k in wanted if k in latest}
     retry, dead = [], []
     for r in latest.values():
         if r['status'] in ('success', 'skipped'):
             continue
-        if r['status'] in DATA_REASONS and history[str(r['night'])] >= 2:
+        if r['status'] in DATA_REASONS and history[key_of(r)] >= 2 and not retry_data:
             dead.append(r)
         else:
             retry.append(r)
@@ -102,4 +121,7 @@ if __name__ == '__main__':
     p.add_argument('job', help='Job name (runs/<job>/status on the bucket)')
     p.add_argument('--out', help='Sweep manifest CSV')
     p.add_argument('--no-pull', action='store_true', help='Use the local rows only')
+    p.add_argument('--manifest', help='Batch manifest: sweep only its (night, band) rows, in its order')
+    p.add_argument('--retry-data', action='store_true',
+                   help='Retry data failures (no calibs, no trace) too, e.g. after a driver change')
     sys.exit(main(**vars(p.parse_args())))

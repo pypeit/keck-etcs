@@ -10,6 +10,49 @@ fed it.
 
 ## Code (unreleased, after 0.2.5)
 
+- **H batch 1 and its sweep fixes (S24b; "Other bands" part H prompt 6,
+  batch 1):**
+  - `nautilus/manifests/nights_batch1_H.csv` (`make_night_manifest.py
+    batch1_H --band H --usable-wide`): the 35 reducible public wide-slit H
+    nights of usable class (Feige 110 and 34 A0V nights, all
+    `long2pos_specphot` with lamp arcs; the four pilot nights skip as done).
+    Ran in image 0.2.8: 12 new nights `success`, gates PASS (median
+    throughput 0.30-0.36 through the 4" bars), 19 failed.
+  - `scripts/mosfire/reduce_standard.py`: `other_mask_calibs` drops
+    another CSU mask's flats, or arcs, only when the standard's mask has
+    its own (18 nights `no calibs`: every flat and Ne/Ar arc through the
+    plain `long2pos` mask, whose bars have the specphot mask's centres and
+    0.7" widths); `bar_slit_edits` carves one slit per CSU bar from the
+    edge trace with the mask geometry (`rm_slits`/`add_slits`): merged
+    bars split, open CSU beyond the bars dropped (the plain-`long2pos`
+    flats illuminate every bar), spurious slits removed, untraced bars
+    left alone. 2014-11-23 and 2016-01-08 re-run locally: `success`, gates
+    PASS, 0.33.
+  - PypeIt `etc-fixes` `b8a6a19`: `arc.fit_arcspec` skips a fit window
+    under three pixels and catches `TypeError`/`ValueError` (2016-01-08: a
+    spurious slit's arc FWHM measured 0.3 px and `curve_fit` on one pixel
+    crashed `run_pypeit`); `test_fit_arcspec_tiny_fwhm`. Image 0.2.9 is
+    built on this pin for the sweep (`sweep_batch1_H.csv`, 19 nights).
+  - `keck_etcs.calib.harvest.curve_name`: a multi-band product's curve
+    file is `<standard>_<night>_<band>.ecsv` (D55). The J and H rows of
+    one night shared `<standard>_<night>.ecsv`, and the H merges of S24a
+    and this batch had overwritten three committed J curves (Feige 110
+    2014-06-01, HD 133772 2017-06-15 in the repository; *55 Dra 2014-10-05
+    and HD 74721 2016-04-17 in the work tree); restored from the J
+    harvests, the five pilot H curves renamed with `_H`, stale unreferenced
+    curves removed by `harvest_sens.py --merge`, which also keeps the table
+    row when the same harvest is merged again and fills missing band
+    metrics from the curve (`heal_band_metrics`; rows harvested before
+    S23a). The 20170615 J monitor rows (51), dropped by the night-keyed
+    monitor merge before S24a, restored.
+  - `nautilus/night_failures.py --manifest --retry-data`, rows keyed by
+    (night, band); `nautilus/status_table.py` `band` column;
+    `check_standards_table.py` keyed by (night, band), bands not yet
+    harvested (K reference) listed instead of failing, a locally harvested
+    row's empty `job_name` accepted.
+  - `standards.ecsv`: 37 rows (17 H: 11 usable wide-slit A0V/WD over the
+    two eras); `calib_monitor.ecsv` 5916 rows. Tests 138 passed (the bar
+    matcher test skips while the installed PypeIt is not on `etc-fixes`).
 - **H sensfunc parameters, the A0V model in H, the H pilot (S24a; D51,
   D53; "Other bands" part H prompt 5):**
   - `scripts/mosfire/sensfunc_perturbation_test.py --polyorders 4 5 6 8

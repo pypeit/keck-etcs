@@ -118,3 +118,11 @@ def test_shipped_standards_table_has_the_band_neutral_columns():
     assert {(str(f), str(w)) for f, w in zip(t['filter'], t['common_window_A'])} == \
         {('J', '11900-12450'), ('J2', '11900-12450'), ('H', '14900-17800')}
     assert not any(np.ma.is_masked(v) for v in t['thru_median_common'])
+
+
+def test_curve_name_carries_the_band_of_a_multi_band_product():
+    """S24b: J-era products keep <standard>_<night>; Y/H/K products (mosfire/<night>/<band>, D55) add _<band>."""
+    assert hv.curve_name('HD133772', '20170615', 'mosfire/20170615') == 'HD133772_20170615'
+    assert hv.curve_name('HD133772', '20170615', 'mosfire/20170615/H') == 'HD133772_20170615_H'
+    assert hv.curve_name('HIP17971', '20121128', None) == 'HIP17971_20121128'
+    assert hv.curve_name('GD153', '20250412', 'mosfire/20250412/') == 'GD153_20250412'

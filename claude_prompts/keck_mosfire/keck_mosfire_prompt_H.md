@@ -1335,3 +1335,118 @@ slit counts. A KOA night's lamp arcs can come from a different CSU mask
 than its standard (the plain `long2pos` beside `long2pos_specphot`), and
 PypeIt combines them into one arc. The monitor's OH fluxes never ran on a
 long2pos night before, because J has no frozen lines (`'J': ()`).
+
+### 2026-11-02 (Prompt #6 / S24b, batch 1: 35 H nights launched, 12 new successes merged, 19 failures diagnosed and fixed, sweep manifest and image 0.2.9 prepared)
+
+Session on Claude Fable 5.1 (the prompt asks for Opus 5.5).
+
+**Batch 1.** `make_night_manifest.py batch1_H --band H --usable-wide`
+wrote `nights_batch1_H.csv`: 35 nights, every reducible public wide-slit H
+night of usable class (census: 122 wide public H rows with flats, 42
+reducible rows on 35 nights, all `long2pos_specphot` with lamp arcs; the
+four pilot nights included and skipped as done). The user launched the
+download Job (35/35 in 47 min) and the night Job at parallelism 4 (image
+0.2.8); it ended `Failed` after 81 min with 16 completed indexes and 19
+failed. Outcomes (`nautilus/README.md` section 6):
+
+- 12 new `success`, gates PASS, verified (`verify_nights.py --band H`,
+  0.2.8 digest and pin, ALL OK): 20140606 HD128039 (1250 s), 20141005
+  *55Dra (502 s), 20160226 HD128039 (1113 s), 20160417 HD74721 (796 s),
+  20170418 HD99966 (601 s), 20180109 HD47944 (543 s), 20180602 BD+252478
+  (2177 s, 14.9 GiB peak), 20230410 HD74721 (1279 s), 20241226 HD44128
+  (760 s), 20241227/28/30 HD21875 (757/836/874 s). 1 to 4 frames with the
+  star in a 4" bar each. Median throughput 0.30-0.36; five rows
+  `excluded_nonlinear` (HD 128039 twice, HD 74721 2023, HD 21875 twice).
+- 18 `no calibs` ("no lamp-on flats with filter H") in 15-80 s each and
+  one `reduce failed` (20160108). Not a download problem: the flats are
+  there. On these nights every flat and Ne/Ar arc was taken through the
+  plain `long2pos` mask while the standard sits on `long2pos_specphot
+  (align)`, and the S24a rule that drops another CSU mask's calibration
+  frames discarded all of them (the pilot nights all had specphot flats).
+  The raw headers of 20141123 show the two masks have identical bar
+  centres (`Mechanical_Slit_List` `Position_of_Slit`), only the widths
+  differ (0.7" for 4.0"), so those frames are valid calibrations.
+
+**Fixes (uncommitted here; PypeIt committed by the user as `b8a6a19`).**
+
+1. `reduce_standard.py other_mask_calibs(tbl)`: another mask's flats, or
+   arcs, go only when the standard's mask has its own frames of that type
+   (2015-09-17 keeps its fix); otherwise they are kept with a note.
+   `test_driver_other_mask_calibs_per_type`.
+2. With the flats kept, 20141123 reached `no trace`: the plain-`long2pos`
+   flats illuminate the whole CSU (every bar open, 10^4 counts across the
+   detector), so the edge trace gives four slits for seven bars ([7,
+   1007], bar 23, bars 20-22 merged, [1186, 2033]) and `split_merged_bars`
+   refused ("46 slits for 7 bars"). Replaced by `bar_slit_edits(edges,
+   bar_centers, pitch, gap, row)`: the trace is shifted onto the mask by
+   the median offset of traced edges near nominal bar edges (-3.5 px
+   here), a slit holding one bar centre is kept, any other slit is removed
+   and each bar inside it added back as its nominal extent clipped to the
+   slit; untraced bars are listed and left alone. 20141123 then: seven
+   bars, 2 of 6 frames with the star in a 4" bar (the ±7" dither moves it
+   into the 0.7" neighbours, as on the pilot nights), gates PASS, 0.330,
+   zp_mid 19.82, 266 s. `test_driver_bar_slit_edits` (open-CSU flats,
+   clean trace, spurious slit beside an untraced bar, merged positions).
+3. 20160108 crashed inside `run_pypeit`: `autoid.full_template` on a
+   spurious eighth slit over the open CSU measured an arc FWHM of 0.3 px,
+   so `arc.fit_arcspec` called `curve_fit` on one pixel and scipy raised
+   `TypeError` (only `RuntimeError` was caught). PypeIt `etc-fixes`
+   `b8a6a19`: a fit window under three pixels is skipped and
+   `TypeError`/`ValueError` are caught; `test_fit_arcspec_tiny_fwhm`.
+   20160108 re-run locally: gates PASS, 0.337, 398 s (the carve left the
+   trace alone there: bar 26 untraced, six bars kept, and with that rule
+   the spurious slit now also goes).
+4. `night_failures.py`: the status prefix `runs/keck-etcs-nights/status/`
+   spans every Job of that name (61 rows, J batches included), so the
+   sweep had two J nights and lacked six H nights ("data failure, not
+   retried": their J runs had failed `no calibs` too). Rows are now keyed
+   by (night, band); `--manifest <batch>.csv` restricts the sweep to the
+   batch and `--retry-data` retries data failures after a driver change.
+   `sweep_batch1_H.csv`: the 19 nights. Test added.
+5. `status_table.py` gains a `band` column (and ignores `reference/`
+   copies); `check_standards_table.py` keys nights by (night, band), lists
+   success products of bands not yet harvested (the K reference) instead
+   of failing, and accepts the empty `job_name` of the locally harvested
+   HIP 17971 row. ALL CHECKS PASS.
+6. **Curve-file collision.** `harvest_sens.py --merge` of the 12 H nights
+   changed the committed J curves `*55Dra_20141005.ecsv` and
+   `HD74721_20160417.ecsv`: the J and H rows of a night both named their
+   curve `<standard>_<night>.ecsv`, so each merge overwrote the other
+   band's file. The S24a H merge had already overwritten the committed
+   `Feige110_20140601.ecsv` and `HD133772_20170615.ecsv` (HEAD holds H
+   curves under J names). `harvest.curve_name` now adds `_<band>` for a
+   multi-band product (D55); the merge renames on merge (pod rows need no
+   re-harvest), restores a kept row's curve when missing, removes stale
+   unreferenced curves, keeps the table row when the same harvest is
+   merged again (the J row files predate S23a; re-merging them had masked
+   the band metrics, now filled from the curve by `heal_band_metrics`).
+   The four J curves are restored from the local J harvests (two differ
+   from HEAD only in the curve `meta['row']`, which the S23b migration had
+   rewritten: `git checkout -- keck_etcs/data/mosfire/throughput/standards/{*55Dra_20141005,HD74721_20160417}.ecsv`
+   keeps the richer copies), the five pilot H curves carry `_H`, and
+   `*55Dra` J lost its `excluded_3mad` flag, which `combine_throughput.py`
+   sets (to be checked when the H era files are built). The 20170615 J
+   monitor rows (51) were likewise gone from `calib_monitor.ecsv` since
+   the S24a merge; re-merged.
+
+**Products.** `standards.ecsv` 37 rows (17 H, 11 usable wide-slit over
+both eras: era 1 Feige 110, *55 Dra, HD 159008, HD 74721; era 2 HD 99966,
+HD 133772, HD 47944, BD+25 2478, HD 79108, HD 44128, HD 21875),
+`calib_monitor.ecsv` 5916 rows, 17 `_H` curves. Backup
+(`backup_products.py --run`) and the sweep launch are the user's.
+
+**Image 0.2.9 prepared:** `__version__` 0.2.9, `pypeit_pin.txt`
+`b8a6a19cc5e8a54899ea318065a41333c8ef7163`, the three manifests at 0.2.9
+with `sha256:PENDING_PUSH` for the digest, README table row. `check_docs.py`
+fails until the digest is filled in after the push.
+
+**Learned.** The installed PypeIt is an editable checkout: while the user
+works on another branch (`speed_up_B` at the end of this session) the
+keck-etcs tests skip the bar-matcher test and local reductions must not be
+run; `etc-fixes` must be checked out for the next local run or test pass.
+`conda run` buffers a script's stdout, so a running reduction's launcher
+log is empty until exit (read the night's `run.log`). The KOA
+`long2pos` flats of 2014-2016 (and of seven 2017-2024 nights) are full-CSU
+flats; `pypeit_trace_edges` finds gaps only where neighbouring bars sit at
+different CSU positions. A J-era status row has no `band`; astropy writes
+an empty string as a masked `--`, so band keys must normalise it.

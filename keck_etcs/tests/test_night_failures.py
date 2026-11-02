@@ -37,3 +37,37 @@ def test_sweep_keeps_a0v_columns(tmp_path, monkeypatch):
     assert (a0v['std_class'], a0v['jmag_2mass'], a0v['std_ra'], a0v['std_dec']) == ('A0V', '7.1', '10.5', '-3.2')
     wd = [r for r in rows if r['night'] == '20150102'][0]
     assert wd['std_class'] == '' and wd['standard'] == 'GD71'
+
+
+def test_sweep_manifest_filter_and_retry_data(tmp_path, monkeypatch):
+    """S24b: rows are keyed by (night, band); --manifest restricts the sweep to a batch's rows and
+    --retry-data retries the data failures that the history rule would otherwise drop."""
+    monkeypatch.setenv('KECK_ETCS_DATA', str(tmp_path))
+    nf = load()
+    st = tmp_path / 'runs' / 'jobx' / 'status'
+    st.mkdir(parents=True)
+    base = {'job_name': 'jobx', 'instrument': 'mosfire', 'slit': 'long2pos_specphot', 'spec2d': '0', 'notes': '',
+            'exit_code': 10, 'error': 'no flats', 'pod': '', 'node': '', 'image': '', 'image_digest': '',
+            'standard': 'HD1', 'status': 'no calibs'}
+    rows = [{**base, 'index': 0, 'night': '20150101', 's3_prefix': 'mosfire/20150101', 'band': 'J', 'time': '1'},
+            {**base, 'index': 1, 'night': '20150101', 's3_prefix': 'mosfire/20150101/H', 'band': 'H', 'time': '2'},
+            {**base, 'index': 2, 'night': '20150102', 's3_prefix': 'mosfire/20150102/H', 'band': 'H', 'time': '3'},
+            {**base, 'index': 3, 'night': '20150103', 's3_prefix': 'mosfire/20150103/H', 'band': 'H', 'time': '4',
+             'status': 'success', 'exit_code': 0, 'error': ''}]
+    for i, r in enumerate(rows):
+        Table(rows=[r]).write(st / f'{i:04d}.ecsv', format='ascii.ecsv')
+    # an earlier data failure of 20150102 H under another job: two strikes
+    old = tmp_path / 'runs' / 'joby' / 'status'
+    old.mkdir(parents=True)
+    Table(rows=[{**rows[2], 'job_name': 'joby', 'time': '0'}]).write(old / '0000.ecsv', format='ascii.ecsv')
+    man = tmp_path / 'batch.csv'
+    man.write_text('night,band\n20150102,H\n20150101,H\n20150103,H\n20150104,H\n')
+    out = tmp_path / 'sweep.csv'
+    assert nf.main('jobx', out=str(out), no_pull=True, manifest=str(man)) == 0
+    got = [(r['night'], r['band']) for r in csv.DictReader(open(out))]
+    assert got == [('20150101', 'H')]            # 20150102 dead (two strikes), 20150103 success, no J row
+    assert nf.main('jobx', out=str(out), no_pull=True, manifest=str(man), retry_data=True) == 0
+    got = [(r['night'], r['band']) for r in csv.DictReader(open(out))]
+    assert got == [('20150102', 'H'), ('20150101', 'H')]     # manifest order
+    assert nf.main('jobx', out=str(out), no_pull=True) == 0
+    assert sorted((r['night'], r['band']) for r in csv.DictReader(open(out))) == [('20150101', 'H'), ('20150101', 'J')]

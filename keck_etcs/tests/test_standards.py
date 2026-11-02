@@ -197,6 +197,66 @@ def test_build_sensfunc_edge_mask_and_resolution_guess(builder):
     assert builder.slit_width_of(man, {'slit': 990, 'frame': 'c.fits', 'wide_slit': False}) is None
 
 
+def test_driver_other_mask_calibs_per_type(driver):
+    """S24a/S24b: on a long2pos_specphot night another mask's flats or arcs are left out only when the standard's
+    mask has its own (2015-09-17 H: two plain-long2pos arcs beside two specphot arcs); when the standard's mask
+    has none they are the night's calibrations (2014-11-23 H: all flats and arcs through plain long2pos)."""
+    import numpy as np
+    flat, arc = 'pixelflat,illumflat,trace', 'arc,tilt'
+    # 2015-09-17 like: specphot flats and arcs plus two long2pos arcs -> the two arcs go, the flats stay
+    t = Table({'filename': ['f1', 'f2', 'a1', 'a2', 'a3', 'a4', 's1'],
+               'frametype': [flat, flat, arc, arc, arc, arc, 'standard'],
+               'decker': ['long2pos_specphot'] * 2 + ['long2pos'] * 2 + ['long2pos_specphot'] * 2
+                         + ['long2pos_specphot (align)']})
+    drop, notes = driver.other_mask_calibs(t)
+    assert list(drop) == [False, False, True, True, False, False, False]
+    assert len(notes) == 1 and 'arc frame(s) of another mask left out' in notes[0] and 'a1 (long2pos)' in notes[0]
+    # 2014-11-23 like: every flat and arc through plain long2pos -> all kept, two notes
+    t = Table({'filename': ['f1', 'f2', 'a1', 's1', 's2'], 'frametype': [flat, flat, arc, 'standard', 'standard'],
+               'decker': ['long2pos'] * 3 + ['long2pos_specphot (align)'] * 2})
+    drop, notes = driver.other_mask_calibs(t)
+    assert not drop.any() and len(notes) == 2 and all('kept' in n for n in notes)
+    # mixed: own flats but no own arcs -> other flats go, other arcs stay
+    t = Table({'filename': ['f1', 'f2', 'a1', 's1'], 'frametype': [flat, flat, arc, 'arc,standard,tilt'],
+               'decker': ['long2pos', 'long2pos_specphot', 'long2pos', 'long2pos_specphot']})
+    drop, notes = driver.other_mask_calibs(t)
+    assert list(drop) == [True, False, False, False] and len(notes) == 2
+    # no standard frames: nothing dropped, no notes
+    drop, notes = driver.other_mask_calibs(Table({'filename': ['f1'], 'frametype': [flat], 'decker': ['long2pos']}))
+    assert not drop.any() and notes == []
+
+
+def test_driver_bar_slit_edits(driver):
+    """S24b: one slit per CSU bar is carved from the trace with the mask geometry (pitch 44, gap 4, bars 20-26
+    about CRPIX2 1035): open-CSU flats (2014-11-23), merged bars (2015-09-04), a spurious slit (2016-01-08), and
+    a clean trace are left alone."""
+    pitch, gap, row = 44.0, 4.0, 1020
+    centers = {n: 1035.0 + (23 - n) * pitch for n in range(20, 27)}
+    # 2014-11-23: plain long2pos flats, four slits; bar 23 traced 3.6 px below nominal
+    r = driver.bar_slit_edits([(6.6, 1007.0), (1010.9, 1051.9), (1055.6, 1183.4), (1186.3, 2033.2)],
+                              centers, pitch, gap, row)
+    assert r['action'] == 'carve' and r['kept_bars'] == [23] and abs(r['offset_pix'] + 3.6) < 0.6
+    assert len(r['rm_slits']) == 3 and len(r['add_slits']) == 6
+    assert r['rm_slits'][0] == '1:1020:507' and r['add_slits'][3].endswith(':1183')     # bar 20 ends at the trace
+    lo, hi = (int(v) for v in r['add_slits'][2].split(':')[2:])                         # bars 24, 25, 26 in order
+    assert abs(lo - (centers[26] - 3.6 - 20)) < 1.5 and hi - lo == 40                   # bar 26 nominal extent
+    # clean trace: nothing to do
+    clean = [(c - 20.5, c + 20.5) for c in sorted(centers.values())]
+    assert driver.bar_slit_edits(clean, centers, pitch, gap, row)['action'] == 'none'
+    # a spurious eighth slit over the open CSU is removed, the seven bars kept
+    r = driver.bar_slit_edits(clean + [(1186.3, 2033.2)], centers, pitch, gap, row)
+    assert r['action'] == 'carve' and r['rm_slits'] == ['1:1020:1610'] and r['add_slits'] == []
+    assert sorted(r['kept_bars']) == list(range(20, 27))
+    # merged positions (2015-09-04): split into bars
+    r = driver.bar_slit_edits([(878.0, 1007.0), (1011.0, 1052.0), (1055.0, 1183.0)], centers, pitch, gap, row)
+    assert r['action'] == 'carve' and len(r['add_slits']) == 6 and r['kept_bars'] == [23]
+    # an untraced bar (2016-01-08: bar 26 without flat light) is left alone; a spurious slit beside it still goes
+    r = driver.bar_slit_edits(clean[1:], centers, pitch, gap, row)
+    assert r['action'] == 'none' and r['untraced_bars'] == [26] and sorted(r['kept_bars']) == list(range(20, 26))
+    r = driver.bar_slit_edits(clean[1:] + [(1186.3, 2033.2)], centers, pitch, gap, row)
+    assert r['action'] == 'carve' and r['rm_slits'] == ['1:1020:1610'] and r['untraced_bars'] == [26]
+
+
 def test_driver_specphot_bars_by_position(driver, tmp_path):
     """S24a: the long2pos bars are matched to the traced slits by position (PypeIt's matcher), so an untraced bar
     (2014-06-01 H) or a spurious slit (2015-09-17 H) keeps the geometry; the ``(align)`` tag names the same mask."""

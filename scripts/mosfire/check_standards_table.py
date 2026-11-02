@@ -46,6 +46,13 @@ def filled(v):
     return v is not None and str(v).strip() not in ('', '--', 'None', 'unknown')
 
 
+def night_band(prefix):
+    """('YYYYMMDD', band) of a product prefix: 'mosfire/20140606/H' -> ('20140606', 'H'); the single-band (J) era's
+    'mosfire/20220409' -> ('20220409', '') (D55)."""
+    parts = str(prefix).rstrip('/').split('/')
+    return parts[1], (parts[2] if len(parts) > 2 else '')
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--status', default=str(paths.data_root() / 'mosfire' / 'status_table.ecsv'))
@@ -55,12 +62,19 @@ def main(argv=None):
     mon = Table.read(MONITOR, format='ascii.ecsv')
     bad = []
 
-    success = sorted(str(r['night']) for r in st if r['status'] == 'success')
-    row_nights = Counter(str(r['s3_prefix']).rstrip('/').split('/')[-1] for r in rows)
+    # nights are keyed by (night, band): a night reduced in J and H has one product prefix per band (D55)
+    def band_of(r):
+        return '' if 'band' not in st.colnames or not filled(r['band']) else str(r['band'])
+    row_nights = Counter(night_band(r['s3_prefix']) for r in rows)
+    harvested_bands = {b for _, b in row_nights}
+    success_all = sorted((str(r['night']), band_of(r)) for r in st if r['status'] == 'success')
+    success = [k for k in success_all if k[1] in harvested_bands]
+    other_bands = [k for k in success_all if k[1] not in harvested_bands]
     multi = [n for n, c in row_nights.items() if c > 1]
     no_row = [n for n in success if n not in row_nights]
     stray = [n for n in row_nights if n not in success]
-    print(f'success nights: {len(success)}; rows: {len(rows)} on {len(row_nights)} nights')
+    print(f'success night/bands: {len(success)} in the harvested bands {sorted(harvested_bands)}; rows: {len(rows)} '
+          f'on {len(row_nights)} night/bands' + (f'; not harvested yet (other bands): {other_bands}' if other_bands else ''))
     for label, lst in (('success nights without a row', no_row), ('nights with several rows', multi),
                        ('rows from a night that is not success', stray)):
         if lst:
@@ -69,7 +83,9 @@ def main(argv=None):
     others = [(str(r['night']), str(r['status'])) for r in st if r['status'] != 'success']
     print(f'  other nights in the status table (recorded failures): {others or "none"}')
 
-    unfilled = [(str(r['standard']), str(r['date']), c) for r in rows for c in PROVENANCE if not filled(r[c])]
+    # a locally harvested reference row (image 'local', S24a: HIP 17971 2012-11-28) has no Job name
+    unfilled = [(str(r['standard']), str(r['date']), c) for r in rows for c in PROVENANCE
+                if not filled(r[c]) and not (c == 'job_name' and str(r['image']) == 'local')]
     print(f'provenance: {len(rows) * len(PROVENANCE) - len(unfilled)}/{len(rows) * len(PROVENANCE)} cells filled')
     if unfilled:
         bad.append('provenance')
@@ -91,7 +107,8 @@ def main(argv=None):
     print(f'milestone (>= 10 standards over >= 2 eras): {n_std} standards over {n_eras} eras -> '
           f'{"MET" if n_std >= 10 and n_eras >= 2 else "NOT MET"}')
 
-    mon_nights = Counter(str(n) for n in mon['night'])
+    # monitor rows are keyed by (night, band): the J-era products (band '') carry J/J2 OH lines (D55)
+    mon_nights = Counter((str(n), '' if str(f) in ('J', 'J2') else str(f)) for n, f in zip(mon['night'], mon['filter']))
     no_mon = [n for n in success if mon_nights.get(n, 0) == 0]
     failed = Counter(str(n) for n, f in zip(mon['night'], mon['flag']) if 'monitor_failed' in str(f))
     print(f'monitor: {len(mon)} rows on {len(mon_nights)} nights; monitor_failed rows: {sum(failed.values())} '
