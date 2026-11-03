@@ -148,7 +148,7 @@ bash nautilus/build_image.sh --push     # build and push <version> and latest
 
 | tag | PypeIt pin (`etc-fixes`) | keck-etcs | digest | notes |
 |---|---|---|---|---|
-| 0.2.10 | `54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38` | pending | `sha256:PENDING_PUSH` (fill in after the push) | S24b H sweep-1 fixes: PypeIt `read_slit_list` reads the `*_Slit_List` ASCII tables of a frame whose table bytes are shifted into the FITS padding (2016-01-06); the driver leaves an empty `add_slits` key out of the `[[slitedges]]` block (an empty line crashed `run_pypeit`, 2016-01-08); `backup_products.py` covers the band directories. **Current** |
+| 0.2.10 | `54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38` | `6a51d43` | `sha256:672a59c4e70c30e9cf0f23adf4d6efdef67fc894ee5ea8e9be7dd7d806075a2f` | S24b H sweep-1 fixes: PypeIt `read_slit_list` reads the `*_Slit_List` ASCII tables of a frame whose table bytes are shifted into the FITS padding (2016-01-06); the driver leaves an empty `add_slits` key out of the `[[slitedges]]` block (an empty line crashed `run_pypeit`, 2016-01-08); `backup_products.py` covers the band directories. **Current** |
 | 0.2.9 | `b8a6a19cc5e8a54899ea318065a41333c8ef7163` | `c3e6df6` | `sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a` | S24b H batch-1 sweep fixes: PypeIt `arc.fit_arcspec` skips a fit window under three pixels (a spurious slit's empty arc crashed `run_pypeit`, 2016-01-08); another mask's flats or arcs are left out only when the standard's mask has its own (19 nights: calibrations through plain `long2pos`); one slit per CSU bar carved from the trace by the mask geometry (`bar_slit_edits`; open-CSU flats, spurious slits); band-suffixed curve files. Ran H sweep 1 (16 of 19). |
 | 0.2.8 | `5e92ff9416105763b1aae2ee39bde1fa8321c919` | `78e2058` | `sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef` | S24a H pilot fixes: PypeIt `long2pos_match_bars`/`long2pos_bar_slits` (bars matched to slits by position in `transfer_wavecal`, a bar keeps the better fit); calibration frames of another CSU mask left out on specphot nights; H monitor lines frozen; OH fluxes in the 0.7" bars of long2pos frames. Ran H batch 1 (16 of 35 indexes). |
 | 0.2.7 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `c5c8e53` | `sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2` | S24a: H sensfunc settings (`keck_mosfire_H.sens`, polyorder 4, tell_npca 2); A0V model scaled to the band's own 2MASS magnitude (D51, `--mag`, `HMAG_2MASS`/`KMAG_2MASS`); filter-edge mask and LSF `resln_guess` for Y/H/K sensfuncs; `nights_pilot_H.csv`; the H pilot ran on this push. Re-pushed 2026-10-31 at `bf0b499` with the same pin, `sha256:e6c69cb7ffd438aebffcd95069542a80c921075d63181cff438b538dbdb76a79` (no PypeIt change). |
@@ -499,6 +499,22 @@ python nautilus/status_table.py                            # per-night/band tabl
   the bucket, so no download Job is needed.) Sweep 2 (image 0.2.10,
   `sweep2_H.csv`) is the same with `sweep1` -> `sweep2` in both names and
   `completions: 1`.
+- **The H validation night (S24b, design 9.7):** `nautilus/manifests/nights_validation_H.csv`
+  (`make_night_manifest.py validation --band H`; 2022-01-11, GD153 through
+  the 1" long slit, `spec2d = 1`, the quasar J1532+2237 in the notes: 8 x
+  179 s). Its raw frames are not on the bucket yet, so it takes the two
+  Jobs: the download Job with this manifest as the ConfigMap
+  (`keck-etcs-koa-nights`, `completions: 1`; `spec2d = 1` makes the
+  downloader take the program's science frames, section 6), then a night
+  Job under its own name with the same manifest (`completions: 1`; the
+  row's `spec2d` sets `SPEC2D=1`, so the pod pushes `spec2d_*` too, about
+  25 min and 8 GB of scratch). Afterwards: `s3_sync.py pull mosfire/20220111`
+  (products and `raw`), `verify_nights.py --band H`, `harvest_sens.py
+  --merge` for the GD153 row, then `validate_j0841.py --band H --date
+  20220111 --target J1532+2237 --standard GD153` and
+  `measure_sky_excess.py --band H` (the night's long science frames are
+  what the D61 curve needs; the standards' 1-10 s frames cannot resolve
+  the inter-line floor).
 - **Diagnose from the S3 artefacts:** `run.log`, `pod.log` and the
   `run_manifest.json` that a failed pod still pushes.
 - **Fix the cause:** code, a PypeIt fix on the pinned branch plus a new

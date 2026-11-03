@@ -166,16 +166,20 @@ def test_etc_runs_without_pypeit_or_boto3():
 
 
 def test_other_bands_run_on_provisional_data():
-    """S23a: Y, H and K compute on placeholder throughput and the J LSF rule, each warned once (design 9.5)."""
+    """S23a: Y and K compute on placeholder throughput and the J LSF rule, each warned once (design 9.5);
+    H (S24b) on its own era curves, with no PROVISIONAL throughput warning."""
     for band in ('Y', 'H', 'K'):
         out = etc.compute({'band': band})
         lo, hi = MOSFIRE.band_window(band)
         wave = np.array(out['wave_A'])
         assert wave[0] == lo and wave[-1] <= hi and np.allclose(np.diff(wave), MOSFIRE.bands[band].dispersion_A_per_pix)
-        assert out['meta']['calib_version'] == 'provisional-xtcalc-2012' and out['meta']['inputs']['band'] == band
+        assert out['meta']['inputs']['band'] == band
         prov = [w for w in out['warnings'] if w.startswith('PROVISIONAL')]
         kinds = {w.split()[1] for w in prov}
-        assert 'throughput' in kinds
+        if band == 'H':
+            assert out['meta']['calib_version'].startswith('mosfire-') and 'throughput' not in kinds
+        else:
+            assert out['meta']['calib_version'] == 'provisional-xtcalc-2012' and 'throughput' in kinds
         # S23d: the 0.7" OH widths of H and K were measured on 2012-11-28, so at the default slit only Y's LSF
         # is still the provisional rule; the H and K footprints were measured too
         assert ('LSF' in kinds) == (band == 'Y')

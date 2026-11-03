@@ -80,6 +80,7 @@ extraction aperture, summed over all frames, unless the name says
 | `summary.exptime_s`, `summary.n_frames`, `summary.total_time_s` | s per frame (solved if `target_snr`); frames; s |
 | `saturation.peak_e_per_frame`, `saturation.peak_adu_per_frame`, `saturation.wave_A` | brightest pixel per frame in e- and ADU (gain 2.15) and its wavelength in A |
 | `saturation.flag` | `ok`, `nonlinear_1pct` (26k ADU), `nonlinear_5pct` (37k), `saturated` (43k) |
+| `saturation.frac_pix_nonlinear_1pct` | fraction of spectral pixels whose brightest spatial pixel exceeds 26k ADU in one frame (0 to 1): a few OH lines or the whole band (D62; in H the brightest OH lines reach 26k ADU in about 1.5-2 min through a 0.7" slit) |
 | `warnings` | list of strings |
 
 **Errors and warnings.** Only schema violations raise. Physics outside a

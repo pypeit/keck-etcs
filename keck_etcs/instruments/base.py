@@ -49,6 +49,8 @@ class Band:
     a0v_min_wave_A: float = None        # combine: keep A0V rows redward of this
     lsf: dict = None                    # LSF rule of the band (see above)
     footprint_provisional: bool = False
+    sky_excess_warn: bool = False       # D61: warn that the continuum between lines is underpredicted
+    #                                     while the band has no measured sky-excess curve (H and K)
 
     @property
     def group_name(self):
@@ -85,6 +87,7 @@ class Instrument:
     lsf_file: str = None
     throughput_pattern: str = None      # per-era, per-group curve: 'mosfire/throughput/mosfire_thru_{group}_{tag}.ecsv' (S10, S23)
     throughput_provisional_pattern: str = None   # a group's placeholder curve when no era has one (S23a)
+    sky_excess_pattern: str = None      # D61: 'sky/mosfire_sky_excess_{band}.ecsv', the additive continuum excess
     moffat_beta: float = 3.5
     gaps: tuple = ()                    # (start, end, warning) periods inside or between eras
     lsf_form: str = 'max'               # D25 rule: 'max' or 'quadrature' (keck_etcs.core.lsf.fwhm_pix)
@@ -105,6 +108,26 @@ class Instrument:
             return {'wave_A': np.asarray(t['wave_A'], float), 'transmission': np.asarray(t['transmission'], float),
                     'meta': dict(t.meta)}
         return self._load(('filter', band), load)
+
+    def sky_excess(self, band):
+        """The band's additive sky continuum excess over the Gemini model (D61), or None.
+
+        ``{'wave_A', 'excess', 'file', 'meta'}`` from
+        :attr:`sky_excess_pattern` (Gemini units, photons/s/arcsec^2/nm/m^2,
+        at the bin centres of the measurement); None when the instrument has
+        no pattern or the band's file does not exist yet.
+        """
+        def load():
+            if self.sky_excess_pattern is None:
+                return None
+            rel = self.sky_excess_pattern.format(band=band)
+            if not (DATA_DIR / rel).exists():
+                return None
+            from astropy.table import Table
+            t = Table.read(DATA_DIR / rel, format='ascii.ecsv')
+            return {'wave_A': np.asarray(t['wave_A'], float), 'excess': np.asarray(t['excess'], float),
+                    'file': rel, 'meta': dict(t.meta)}
+        return self._load(('sky_excess', band), load)
 
     def detector(self):
         """Detector table: ``n_reads``, ``read_noise_e`` arrays and ``meta`` (gain, dark, linearity...)."""

@@ -1577,3 +1577,139 @@ frames whose `OBJECT` starts with `MIRA`. The Job's `backoffLimitPerIndex:
 deterministic; the retry costs about 90 s per night. The user's PypeIt
 checkout moves between branches during a session; the pin check, not the
 checkout, is the reference for the image.
+
+### 2026-11-03 (Prompt #6 / S24b: image 0.2.10 pushed and pinned, sweep 2 ready to launch)
+
+Session on Claude Fable 5.1.
+
+The user committed the sweep-1 work (`6a51d43`) and built and pushed image
+0.2.10 (PypeIt pin `54e68d7`; digest
+`sha256:672a59c4e70c30e9cf0f23adf4d6efdef67fc894ee5ea8e9be7dd7d806075a2f`).
+Filled in: the three Job manifests (digest comment and
+`KECK_ETCS_IMAGE_DIGEST`), the README image table row (keck-etcs
+`6a51d43`). `validate_manifests.py` MANIFESTS OK; `check_docs.py` ALL
+CHECKS PASS after one false positive was removed: the 40-character path
+`mosfire/20140606/H/redux/Science/spec1d` (with its leading slash) in
+`test_backup_products.py` matched the AWS secret-like pattern (mixed case,
+digits and slashes, exactly 40 characters), so the assertion now uses
+`endswith` on the shorter tail. `check_pypeit_pin.py --image 0.2.10` FAILs
+only because the local PypeIt checkout is on `speed_up_arcfit` (138 files
+differ from the pin); the image was built from `etc-fixes` at the pin.
+Sweep 2 (`sweep2_H.csv`, 2016-01-08) is the user's to launch; the
+post-sweep steps are the sweep-1 ones with the 0.2.10 digest and the
+`54e68d7` pin.
+
+**Learned.** The secret scan in `check_docs.py` has no notion of paths:
+any 40-character run of mixed-case letters, digits and slashes trips it,
+and a MOSFIRE night path with a band directory is exactly that length when
+the mask-less pattern ends in `spec1d`. Keep long literal paths out of test
+assertions, or split them.
+
+**H product, trend, saturation fraction, sky-excess machinery, XTcalc,
+validation prepared (same day).**
+
+- `combine_throughput.py --group H --dev` (new flags: one group without
+  rewriting the released J files; `--dev` stamps `mosfire-2026.10-dev`,
+  the `check_docs.py` convention for a product pending the next release):
+  `mosfire_thru_H_2012-2016.ecsv` (8 standards; `excluded_3mad` HIP 17971
+  2012-11-28 on the 0.7" slit, HD 111744 2016-01-07, V* V836 Cyg
+  2016-05-01) and `mosfire_thru_H_2017-2025.ecsv` (13; excluded HD 74721
+  2017-11-05); band medians 0.326 and 0.329 over 14900-17800 A; nodes
+  15500/16500/17500 A: 0.336/0.353/0.284 (era 1), 0.336/0.352/0.277 (era 2).
+  No H standard after 2025-04, so `compute` uses 2017-2025 there with a
+  warning (`test_h_throughput_from_its_era_curves`); the provisional tests
+  now cover Y and K only. Milestone 9.8 item 1 met for H (21 standards over
+  2 eras, medians inside 0.17-0.54).
+- `plot_throughput_trend.py --group H` (figure
+  `docs/figures/mosfire_throughput_trend_H.png`): era medians of
+  `thru_common` 0.330 and 0.330, MAD 2.4 and 2.5 percent, slopes -2.8 +- 2.5
+  and +0.2 +- 0.5 percent per year; zp_mid 19.807 and 19.804; residuals
+  against PWV 2.1 sigma (r = +0.46, 21 rows; the H PWV comes from the band
+  edges only, `pwv_weak`), airmass 0.7 sigma. The J run is unchanged except
+  that the H rows no longer leak into its first block.
+- `saturation.frac_pix_nonlinear_1pct` (D62): `snr.saturation_peak`, the
+  output schema (required), `docs/wmko_api_note.md`, the generated field
+  reference (37 output leaves), design 5.3.11; `test_core_snr` extended.
+  The regression comparer treats a new key as a difference, so the four
+  fixtures were regenerated with a `CHANGES.md` note (J, J2, line numbers
+  unchanged) and `reference_H.json` added (`examples/H_point.json`; on the
+  H era curves, no sky excess yet).
+- Sky continuum excess (D61): `Instrument.sky_excess(band)` and
+  `sky_excess_pattern`, `Band.sky_excess_warn` (H, K),
+  `sky.sky_background(..., excess=)`, `compute` adds the curve inside the
+  `sky_scale` bracket and warns for H and K without one.
+  `scripts/mosfire/measure_sky_excess.py --band H` (new; the K and Y docs
+  reuse it): per frame, the raw-frame sky in the 0.7" bars of a long2pos
+  mask (or the one long slit), objects masked, the Sun and Moon by
+  ephemeris, the night's `pwv_fit`, T_sys from the band's era curve, the
+  Gemini model smoothed to the slit's LSF, 10th-percentile floors per
+  100 A. Two things learned on the way: (1) a short CDS frame carries an
+  electronic pedestal (about -100 e- per pixel in 1.45 s, the same value
+  in the closed bars, 13 ADU above the reference pixels in 1.45 s and in
+  2.9 s frames alike, so not light), which the script measures per
+  spectral row in the closed-bar columns next to each slit and subtracts;
+  (2) the inter-line H floor is about 1 Gemini unit (the Maihara
+  continuum; the Gemini model's own floor is 0.5), while a 1-5 s standard
+  frame measures it with a noise of several units per bin, and a
+  percentile of noise is biased low by 1.3 sigma per frame. The shipped
+  curve is therefore the floor of the exposure-weighted stack of all
+  frames (split-half error), with the D61 per-night statistic kept beside
+  it; the standards' frames alone (about 2000 s in 40 columns) cannot
+  resolve the floor, so **no H curve is shipped yet**: it comes from the
+  validation night's 8 x 179 s science frames through the 1" long slit.
+  The trial (`--no-write`) over the 37 local H nights: 20 nights have only
+  twilight frames (Sun above -18 deg; 172 frames), 3 have no products
+  (20160106, 20160108, 20160530), 20180718 has no slit width for its
+  long2pos decker. On the rest, the floor depends on the exposure time:
+  the 1.45-s frames sit at -110 units even after the pedestal subtraction
+  (their closed bars read -50 e-/s, the slit columns lower still), the
+  2.9-s frames at +10 to +15, the 3.6-s at +5, while frames of 7 s and
+  longer give 0.1-2.7 units (one Moon-lit night at 8.5). So the
+  closed-bar estimate does not remove the pedestal of the shortest
+  frames, and the script now skips frames shorter than `--min-texp`
+  (default 5 s; `min_exptime_s` in the meta). With the cut, 6 nights
+  (20140606, 20160417, 20180109, 20180602, 20241110, 20241226; 50 frames
+  of 7.3-24.7 s, 40000 column-seconds, pedestals +2.5 to +5 e-/s) give a
+  stacked floor excess of 1.90 +- 1.03 units (measured floor 2.37, model
+  0.46; night median 0.87; dark minus Moon-lit +0.78, the 20160417
+  outlier is the Moon at 72 deg and 79 % lit): consistent with the
+  Maihara continuum of about 1 unit, but the error is as large as the
+  signal, which is why the curve waits for the 8 x 179 s science frames.
+- `compare_xtcalc.py --band H` (`xtcalc_comparison_H.ecsv`,
+  `xtcalc_attribution_H.ecsv` under `external/xtcalc/comparison/`): H,
+  flat f_nu, 4 x 120 s MCDS-16, seeing 0.7": ours/XTcalc 0.70-0.72 through
+  the 0.7" slit and 0.81-0.86 through 1.0" (J was 0.6-0.8 in S12). The
+  attribution at H = 20, 0.7": sky x1.64 (XTcalc's May-2012 MOSFIRE sky is
+  brighter than Gemini between the lines, the very excess D61 will add
+  back), detector x0.88, extraction x0.83, slit and aperture loss x0.58,
+  sampling x1.05. XTcalc's IDL `interpol` extrapolates linearly, and in H
+  its efficiency file ends at 1.7991 um inside the band and the
+  transmission file short of the band edge, so both are clipped at zero
+  now (before, the plain band median was NaN for bright H sources). The J
+  tables were regenerated for the check: the XTcalc side is bit-identical
+  to the 2026-10-05 tables, the keck-etcs column is 0.5-1.8 % higher
+  because the J throughput product was rebuilt since (S22-S24), and the
+  regenerated tables replace the old ones under
+  `external/xtcalc/comparison/` (the old pair is in the session
+  scratchpad only).
+- Validation: `validate_j0841.py` takes `--band --date --target
+  --standard --frames` (`config()`: science frames from the band's run
+  manifest, `sens_<standard>_<date>.fits`, the band window as the D18
+  range, slit width and reads from the headers, outputs
+  `validation_<target>_*`); the S11 defaults are unchanged.
+  `make_night_manifest.py validation --band H` writes
+  `nautilus/manifests/nights_validation_H.csv` (2022-01-11, GD153
+  LONGSLIT-46x1, `spec2d = 1`, J1532+2237 8 x 179 s in the notes; the
+  frames are not on the bucket). The launch recipe (download Job, then a
+  night Job) is in `nautilus/README.md` section 7. The reduction, the
+  validation run and the sky-excess curve wait for it.
+- Checks: pytest 144 passed, 1 skipped (PypeIt checkout on
+  `speed_up_arcfit`); `check_docs.py` ALL CHECKS PASS (8 `-dev` products
+  pending the next release, 3 provisional placeholders); design 9.8 has an
+  "H as built" paragraph; `CHANGES.md` S24b bullets.
+
+**For the user.** Commit; launch sweep 2 (`sweep2_H.csv`) and the H
+validation night (`nights_validation_H.csv`, download Job then night Job);
+then I sync, verify (0.2.10 digest, pin `54e68d7`), merge, run
+`validate_j0841.py --band H ...` and `measure_sky_excess.py --band H`,
+regenerate `reference_H.json` (a `CHANGES.md` note) and close prompt 6.

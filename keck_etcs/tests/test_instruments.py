@@ -226,7 +226,7 @@ def test_lsf_per_band():
 
 
 def test_provisional_throughput_for_groups_without_standards():
-    for group in ('Y', 'H', 'K'):
+    for group in ('Y', 'K'):
         t = MOSFIRE.throughput(MOSFIRE.eras[1], group)
         assert t['provisional'] and t['era'] is None and t['calib_version'] == 'provisional-xtcalc-2012'
         assert t['file'] == f'mosfire/throughput/mosfire_thru_{group}_provisional.ecsv'
@@ -241,3 +241,15 @@ def test_provisional_throughput_for_groups_without_standards():
         assert th['spliced'] == [] and th['covered_A'] == t['valid_range_A']
     j = MOSFIRE.throughput(MOSFIRE.eras[1], 'J')
     assert not j['provisional'] and j['era'] is MOSFIRE.eras[1]
+
+
+def test_h_throughput_from_its_era_curves():
+    """S24b: H has measured curves for the first two eras; the 2025-04.. era falls back to 2017-2025 with a warning."""
+    for era in MOSFIRE.eras[:2]:
+        h = MOSFIRE.throughput(era, 'H')
+        assert not h['provisional'] and h['era'] is era and h['warnings'] == []
+        assert h['file'] == f'mosfire/throughput/mosfire_thru_H_{era.tag}.ecsv'
+        assert 0.25 < np.median(h['thru']) < 0.40
+    h3 = MOSFIRE.throughput(MOSFIRE.eras[2], 'H')
+    assert not h3['provisional'] and h3['era'] is MOSFIRE.eras[1]
+    assert any('no throughput curve yet for era 2025-04..' in w for w in h3['warnings'])

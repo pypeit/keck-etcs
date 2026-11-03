@@ -186,8 +186,13 @@ def compute(inputs):
     sel = (g['wave_A'] >= lo - MARGIN_FWHM * fwhm_A) & (g['wave_A'] <= hi + MARGIN_FWHM * fwhm_A)
     fw = g['wave_A'][sel]
     t_atm, w1 = atmosphere.transmission(g['trans'][:, sel], g['airmass'], g['pwv_mm'], p['airmass'], p['pwv_mm'])
+    ex = inst.sky_excess(band)                       # D61: additive continuum excess inside the sky_scale bracket
+    excess = None if ex is None else np.interp(fw, ex['wave_A'], ex['excess'])
+    if ex is None and inst.bands[band].sky_excess_warn:
+        warnings.append(f'no measured sky continuum excess for {band} yet (D61): the sky between the OH lines '
+                        'is underpredicted')
     b_sky, _ = sky.sky_background(g['skybg'][:, sel], g['airmass'], g['pwv_mm'], p['airmass'], p['pwv_mm'],
-                                  p['sky_scale'])
+                                  p['sky_scale'], excess=excess)
     warnings += w1
     filt = inst.filter_curve(band)
     f_filt = np.interp(fw, filt['wave_A'], filt['transmission'], left=0.0, right=0.0)

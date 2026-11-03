@@ -129,6 +129,9 @@ def saturation_peak(wave_A, N0, T_atm, T_sys, f_peak, dlam, exptime, b, dark_rat
     """Brightest pixel of one frame, sky lines included (5.3.11).
 
     ``peak_e(lam) = N0 T_atm T_sys f_peak dlam t + b t + D t``, maximized over lam.
+    ``frac_pix_nonlinear_1pct`` (D62) is the fraction of spectral pixels whose
+    ``peak_e(lam)`` is beyond the 1 percent limit, so a flag can be read as a
+    few OH lines or the whole band.
 
     Args:
         b (array): Sky rate per (spatial pix, spectral pix) [e-/s].
@@ -137,7 +140,8 @@ def saturation_peak(wave_A, N0, T_atm, T_sys, f_peak, dlam, exptime, b, dark_rat
         limits (sequence): ADU limits (1 percent, 5 percent, saturation).
 
     Returns:
-        dict: ``peak_e_per_frame``, ``peak_adu_per_frame``, ``wave_A``, ``flag``.
+        dict: ``peak_e_per_frame``, ``peak_adu_per_frame``, ``wave_A``, ``flag``,
+        ``frac_pix_nonlinear_1pct``.
     """
     from keck_etcs.core.detector import linearity_flag
     peak = np.asarray(N0, float) * T_atm * T_sys * f_peak * dlam * exptime \
@@ -145,4 +149,5 @@ def saturation_peak(wave_A, N0, T_atm, T_sys, f_peak, dlam, exptime, b, dark_rat
     i = int(np.argmax(peak))
     adu = float(peak[i] / gain)
     return {'peak_e_per_frame': float(peak[i]), 'peak_adu_per_frame': adu,
-            'wave_A': float(np.asarray(wave_A)[i]), 'flag': linearity_flag(adu, limits)}
+            'wave_A': float(np.asarray(wave_A)[i]), 'flag': linearity_flag(adu, limits),
+            'frac_pix_nonlinear_1pct': float(np.mean(peak / gain > limits[0]))}

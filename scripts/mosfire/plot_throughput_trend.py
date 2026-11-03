@@ -2,11 +2,13 @@
 """MOSFIRE throughput trend: zero point and filter-free throughput against date (design 4.6; plan S16).
 
 Usage:
-    conda run -n pypeit14b python scripts/mosfire/plot_throughput_trend.py [--png docs/figures/mosfire_throughput_trend.png]
+    conda run -n pypeit14b python scripts/mosfire/plot_throughput_trend.py [--group J] [--png docs/figures/mosfire_throughput_trend.png]
 
 Reads ``keck_etcs/data/mosfire/throughput/standards.ecsv`` and the curves it
-points to. For every row, ``thru_common`` (``keck_etcs.calib.trend``: the
-median filter-free throughput over the common window, comparable across J
+points to, for the rows of one band group (``--group``, default J; S24b:
+``--group H`` writes ``docs/figures/mosfire_throughput_trend_H.png``). For
+every row, ``thru_common`` (``keck_etcs.calib.trend``: the median
+filter-free throughput over the group's common window, comparable across J
 and J2) is computed from its curve. Prints, per era of
 ``keck_etcs.instruments.mosfire``:
 
@@ -37,12 +39,13 @@ REPO = Path(__file__).resolve().parents[2]
 THRU = DATA_DIR / 'mosfire' / 'throughput'
 
 
-def load():
+def load(group='J'):
     rows = Table.read(THRU / 'standards.ecsv', format='ascii.ecsv')
+    rows = rows[[MOSFIRE.group_of(str(f)) == group for f in rows['filter']]]
     common = []
     for r in rows:
         c = Table.read(THRU / str(r['thru_curve_file']), format='ascii.ecsv')
-        common.append(trend.curve_common_median(c['wave'], c['thru']))
+        common.append(trend.curve_common_median(c['wave'], c['thru'], trend.common_window(r['filter'], MOSFIRE.bands)))
     rows['thru_common'] = common
     return rows
 
@@ -57,12 +60,18 @@ def fmt(s):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--png', default=str(REPO / 'docs' / 'figures' / 'mosfire_throughput_trend.png'))
+    ap.add_argument('--group', default='J', help='band group (J, Y, H, K); default J')
+    ap.add_argument('--png', default=None,
+                    help='figure path (default docs/figures/mosfire_throughput_trend.png for J, _<group>.png otherwise)')
     a = ap.parse_args(argv)
-    rows = load()
+    group = a.group
+    if a.png is None:
+        a.png = str(REPO / 'docs' / 'figures' / f'mosfire_throughput_trend{"" if group == "J" else "_" + group}.png')
+    rows = load(group)
     use = np.array(['excluded' not in str(f) for f in rows['flag']])
     eras = MOSFIRE.eras
-    print(f'{len(rows)} rows, {int(use.sum())} usable (not excluded); common window {trend.COMMON_WINDOW} A')
+    window = MOSFIRE.common_window(group)
+    print(f'group {group}: {len(rows)} rows, {int(use.sum())} usable (not excluded); common window {window} A')
     print('thru_common (filter-free), usable rows:')
     for s in trend.era_stats(list(rows['date'][use]), list(rows['thru_common'][use]), eras):
         print('  ' + fmt(s))
@@ -95,7 +104,7 @@ def main(argv=None):
     import matplotlib.pyplot as plt
     yr = np.array([trend.decimal_year(d) for d in rows['date']])
     fig, axs = plt.subplots(2, 1, figsize=(9, 6.5), sharex=True)
-    marks = {'J': ('o', 'C0'), 'J2': ('s', 'C1')}
+    marks = {b: (m, f'C{i}') for i, (b, m) in enumerate(zip(MOSFIRE.group_bands(group), 'os^Dv'))}
     for band, (m, col) in marks.items():
         sel = np.asarray(rows['filter']) == band
         for u, face in ((use, col), (~use, 'none')):
@@ -116,9 +125,9 @@ def main(argv=None):
     axs[0].set_ylabel('zp_mid [mag] (band middle node; filter included)')
     axs[0].invert_yaxis()
     axs[0].legend(fontsize=8, ncol=2)
-    axs[1].set_ylabel(f'filter-free throughput\n{trend.COMMON_WINDOW[0]:.0f}-{trend.COMMON_WINDOW[1]:.0f} A')
+    axs[1].set_ylabel(f'filter-free throughput\n{window[0]:.0f}-{window[1]:.0f} A')
     axs[1].set_xlabel('year')
-    fig.suptitle('Keck/MOSFIRE J throughput from standard stars (era boundaries dashed)', fontsize=10)
+    fig.suptitle(f'Keck/MOSFIRE {group} throughput from standard stars (era boundaries dashed)', fontsize=10)
     fig.tight_layout()
     Path(a.png).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(a.png, dpi=120)

@@ -67,12 +67,14 @@
     "saturation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["peak_e_per_frame", "peak_adu_per_frame", "wave_A", "flag"],
+      "required": ["peak_e_per_frame", "peak_adu_per_frame", "wave_A", "flag", "frac_pix_nonlinear_1pct"],
       "properties": {
         "peak_e_per_frame": {"type": "number", "x-unit": "electron"},
         "peak_adu_per_frame": {"type": "number", "x-unit": "ADU"},
         "wave_A": {"type": "number", "x-unit": "Angstrom"},
-        "flag": {"type": "string", "enum": ["ok", "nonlinear_1pct", "nonlinear_5pct", "saturated"]}
+        "flag": {"type": "string", "enum": ["ok", "nonlinear_1pct", "nonlinear_5pct", "saturated"]},
+        "frac_pix_nonlinear_1pct": {"type": "number", "minimum": 0, "maximum": 1,
+                                    "description": "Fraction of spectral pixels whose brightest spatial pixel exceeds the 1 percent linearity limit (26k ADU) in one frame (D62): a few OH lines or the whole band."}
       }
     },
     "warnings": {"type": "array", "items": {"type": "string"}}
@@ -88,7 +90,8 @@
      "noise_e": [60.0, 105.0, 59.0], "snr_pixel": [6.7, 3.9, 6.9], "snr_resel": [10.6, 6.2, 10.9],
      "summary": {"snr_pixel_median": 6.7, "snr_resel_median": 10.6, "snr_line": null, "line_window_A": null,
                  "exptime_s": 120, "n_frames": 4, "total_time_s": 480},
-     "saturation": {"peak_e_per_frame": 1500.0, "peak_adu_per_frame": 697.7, "wave_A": 12001.3, "flag": "ok"},
+     "saturation": {"peak_e_per_frame": 1500.0, "peak_adu_per_frame": 697.7, "wave_A": 12001.3, "flag": "ok",
+                    "frac_pix_nonlinear_1pct": 0.0},
      "warnings": []}
   ]
 }

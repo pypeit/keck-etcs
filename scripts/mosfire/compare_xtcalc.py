@@ -137,7 +137,9 @@ def xtcalc_inputs(band, slit, wvcol='16', airmass='10'):
     grid, flt = mosfire_resolution(fw, ft, st['lam'], R, st['disp'])
     band_idx = np.flatnonzero(flt > 0.1)
     _, tran = mosfire_resolution(np.asarray(t['tran_lam'], float), np.asarray(t['trans'], float), st['lam'], R, st['disp'])
+    tran = np.clip(tran, 0.0, 1.0)      # IDL interpol extrapolates linearly: negative beyond the H file's edges (S24b)
     _, tpo = mosfire_resolution(tw / 1e4, tp, st['lam'], R, st['disp'])
+    tpo = np.clip(tpo, 0.0, None)       # Heff.sm.dat ends at 1.7991 um, inside the H band: no negative extrapolation
     _, bk = mosfire_resolution(lam, mksky, st['lam'], R, st['disp'])
     nonzero = np.flatnonzero((bk >= 0) & (bk != 0))
     bk = np.clip(bk, 0, None)
@@ -192,11 +194,11 @@ def xtcalc_line(band, slit, theta, nreads, nexp, time, lineF, line_um, fwhm_kms)
             'throughput': float(np.mean(inp['tp'][idx])), 'resolution_A': res * 1e4, 'n_pix_line': int(idx.size)}
 
 
-def ours_raw():
-    """Our raw ingredients: filter-free era throughput x Keck J filter; Gemini T_atm and sky at X 1.2, PWV 1.6."""
+def ours_raw(band='J'):
+    """Our raw ingredients: filter-free era throughput x the band's filter; Gemini T_atm and sky at X 1.2, PWV 1.6."""
     era = MOSFIRE.era_for_date('2022-04-09')[0]
-    th = MOSFIRE.throughput(era)
-    f = MOSFIRE.filter_curve('J')
+    th = MOSFIRE.throughput(era, MOSFIRE.group_of(band))
+    f = MOSFIRE.filter_curve(band)
     tp = np.interp(f['wave_A'], th['wave_A'], th['thru']) * f['transmission']
     g = MOSFIRE.sky_grid()
     tr, _ = atmosphere.interp_grid(g['trans'], g['airmass'], g['pwv_mm'], 1.2, 1.6)
@@ -205,17 +207,17 @@ def ours_raw():
             'sky': (g['wave_A'] / 1e4, np.clip(sky, 0, None))}
 
 
-def ours_inputs(slit, mag):
-    inp = {'band': 'J', 'slit_width_arcsec': slit, 'source': {'type': 'point', 'mag': float(mag), 'mag_system': 'AB'},
+def ours_inputs(slit, mag, band='J'):
+    inp = {'band': band, 'slit_width_arcsec': slit, 'source': {'type': 'point', 'mag': float(mag), 'mag_system': 'AB'},
            'seeing_fwhm_arcsec': SEEING, 'exptime_s': TFRAME, 'n_frames': NEXP,
            'readout': {'mode': 'MCDS', 'n_reads': NREADS}, 'nod': 'ABBA', 'airmass': 1.2, 'pwv_mm': 1.6,
            'throughput': {'date': '2022-04-09'}}
     return inp
 
 
-def chain(slit, mags, ours):
+def chain(slit, mags, ours, band='J'):
     """The cumulative attribution chain for one slit; one dict per magnitude."""
-    xi = xtcalc_inputs('J', slit)
+    xi = xtcalc_inputs(band, slit)
     R, disp, center = xi['R'], xi['disp'], xi['center']
     wave_A = xi['grid_um'] * 1e4
     conv = lambda raw: mosfire_resolution(raw[0], raw[1], center, R, disp)[1][np.flatnonzero(
@@ -229,7 +231,7 @@ def chain(slit, mags, ours):
     q = quirk_index(xi)
     rows = []
     for mag in mags:
-        o = etc.compute(ours_inputs(slit, mag))
+        o = etc.compute(ours_inputs(slit, mag, band))
         f_ap = o['slit_fraction'] * o['aperture_fraction']
         n_o, p_o = o['n_spatial_pix'], MOSFIRE.platescale
         rn_o = MOSFIRE.read_noise('MCDS', NREADS)[0]
@@ -246,7 +248,7 @@ def chain(slit, mags, ours):
         run('XTcalc as coded (band-median quirk)', q)
         run('band median without the quirk', plain)
         run('area 75 -> 72.37 m^2, AB zp 48.59 -> 48.6', plain, area_m2=MOSFIRE.area_m2, ab_zp=48.6)
-        run('throughput: XTcalc 2012 -> our era curve x J filter', plain, T_tot=tp_o)
+        run(f'throughput: XTcalc 2012 -> our era curve x {band} filter', plain, T_tot=tp_o)
         run('atmosphere: XTcalc airmass 1.0 -> Gemini grid at 1.0', plain, T_atm=tr_o1)
         run('atmosphere: airmass 1.0 -> 1.2', plain, T_atm=tr_o)
         run('sky: MOSFIRE 2012 -> Gemini (X 1.2, PWV 1.6)', plain, B=sky_o)
@@ -260,7 +262,7 @@ def chain(slit, mags, ours):
         B = np.where(T_tot > 0, 10.0 * b / (MOSFIRE.area_m2 * np.where(T_tot > 0, T_tot, 1) * slit * p_o *
                                               o['dispersion_A_per_pix']), 0.0)
         steps.append((f'sampling: {disp} A, R {R:.0f} (velocity), XTcalc band -> {o["dispersion_A_per_pix"]:.4f} A, '
-                      f'LSF {o["lsf_fwhm_A"]:.2f} A, J half-power window',
+                      f'LSF {o["lsf_fwhm_A"]:.2f} A, {band} half-power window',
                       engine(w, o['dispersion_A_per_pix'], T_tot, T_atm, B, np.arange(w.size), mag, MOSFIRE.area_m2,
                              slit, n_o, p_o, rn_o, d_o, f_ap, NEXP, TFRAME, ab_zp=48.6)))
         steps.append(('keck_etcs compute (convolves N0 T_atm T_sys)', o['summary']['snr_pixel_median']))
@@ -268,9 +270,10 @@ def chain(slit, mags, ours):
     return rows
 
 
-def main(out=None):
+def main(out=None, band='J'):
     out = Path(out) if out else paths.data_root() / 'external' / 'xtcalc' / 'comparison'
     out.mkdir(parents=True, exist_ok=True)
+    suffix = '' if band == 'J' else f'_{band}'               # the J files keep their S12 names
     # 2. the PDF example
     ex = xtcalc_line('K', 0.7, 0.7, 16, 1, 1000.0, 9.0, 0.6563 * 3.3, 30.0)
     print('PDF example (K, 0.7" slit, theta 0.7", 1 x 1000 s, 16 reads, 9e-18 at 6563 A, z 2.3, 30 km/s):')
@@ -281,10 +284,10 @@ def main(out=None):
     print(f"  S/N within 10 percent of the PDF: {'PASS' if ok_pdf else 'FAIL'}")
 
     # 3-4. table and attribution
-    ours = ours_raw()
+    ours = ours_raw(band)
     tab, att = [], []
     for slit in SLITS:
-        for r in chain(slit, MAGS, ours):
+        for r in chain(slit, MAGS, ours, band):
             st = r['steps']
             tab.append({'slit_arcsec': slit, 'mag_ab': r['mag'], 'snr_xtcalc': st[0][1], 'snr_xtcalc_plain_median': st[1][1],
                         'snr_keck_etcs': st[-1][1], 'ratio_ours_over_xtcalc': st[-1][1] / st[0][1]})
@@ -293,8 +296,8 @@ def main(out=None):
                             'factor': v / st[i - 1][1] if i else 1.0})
     t, a = Table(rows=tab), Table(rows=att)
     meta = {'script': 'scripts/mosfire/compare_xtcalc.py', 'keck_etcs_version': keck_etcs.__version__,
-            'calib_version': MOSFIRE.throughput(MOSFIRE.eras[1])['calib_version'],
-            'case': f'flat f_nu J, {NEXP} x {TFRAME:.0f} s MCDS-{NREADS} ABBA, seeing {SEEING}"; XTcalc theta {SEEING}", '
+            'calib_version': MOSFIRE.throughput(MOSFIRE.eras[1], MOSFIRE.group_of(band))['calib_version'], 'band': band,
+            'case': f'flat f_nu {band}, {NEXP} x {TFRAME:.0f} s MCDS-{NREADS} ABBA, seeing {SEEING}"; XTcalc theta {SEEING}", '
                     'airmass 1.0 (its default); ours airmass 1.2, PWV 1.6',
             'xtcalc': 'XTcalc v2.0 (Keck XTcalc.tar) data files, ported to Python',
             'pdf_example': {'port': ex, 'pdf': PDF_EXAMPLE, 'within_10pct': bool(ok_pdf)}}
@@ -302,14 +305,14 @@ def main(out=None):
     for c in ('snr_xtcalc', 'snr_xtcalc_plain_median', 'snr_keck_etcs', 'ratio_ours_over_xtcalc'):
         t[c].format = '.3f'
     a['snr'].format = a['factor'].format = '.3f'
-    t.write(out / 'xtcalc_comparison.ecsv', format='ascii.ecsv', overwrite=True)
-    a.write(out / 'xtcalc_attribution.ecsv', format='ascii.ecsv', overwrite=True)
+    t.write(out / f'xtcalc_comparison{suffix}.ecsv', format='ascii.ecsv', overwrite=True)
+    a.write(out / f'xtcalc_attribution{suffix}.ecsv', format='ascii.ecsv', overwrite=True)
     print('\nS/N per pixel, band median (XTcalc mode vs keck_etcs):')
     t.pprint(max_lines=-1, max_width=-1)
     for slit in SLITS:
         print(f'\nattribution, {slit}" slit (cumulative S/N; factor = this step / previous):')
         labels = [x['change'] for x in att if x['slit_arcsec'] == slit and x['mag_ab'] == MAGS[0]]
-        hdr = ''.join(f'  J={m:.0f}: S/N  factor' for m in MAGS[::3])
+        hdr = ''.join(f'  {band}={m:.0f}: S/N  factor' for m in MAGS[::3])
         print(f"{'step':66s}{hdr}")
         for i, lab in enumerate(labels):
             cells = ''
@@ -317,12 +320,14 @@ def main(out=None):
                 r = [x for x in att if x['slit_arcsec'] == slit and x['mag_ab'] == m and x['step'] == i][0]
                 cells += f"  {r['snr']:9.3f} {r['factor']:6.3f}"
             print(f'{i:2d} {lab[:63]:63s}{cells}')
-    print(f'\nwrote {out}/xtcalc_comparison.ecsv and xtcalc_attribution.ecsv')
+    print(f'\nwrote {out}/xtcalc_comparison{suffix}.ecsv and xtcalc_attribution{suffix}.ecsv')
     return t, a, ex
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--out', help='output directory')
-    main(p.parse_args().out)
+    p.add_argument('--band', default='J', help='band (J, Y, H, K; XTcalc has data files for all four); default J')
+    args = p.parse_args()
+    main(args.out, args.band)
     sys.exit(0)

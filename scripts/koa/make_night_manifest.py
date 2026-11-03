@@ -278,6 +278,22 @@ def main(batch, nights=None, era=None, usable_wide=False, band=None):
     elif batch == 'batch1':
         picked, why = select_batch1(t)
         rows = [manifest_row(r) for r in picked]
+    elif batch == 'validation':
+        # the validation nights of one band (S24b; find_validation_targets.py writes the J-group file): the
+        # night's reducible standard in the band, spec2d = 1, the science targets in the notes
+        if not band:
+            print('validation needs --band')
+            return 2
+        val = Table.read(REPO / 'keck_etcs' / 'data' / 'mosfire' / 'koa_validation_targets.ecsv', format='ascii.ecsv')
+        val = val[val['validation'] & (val['filter'] == band)]
+        rows = []
+        for n in sorted({str(x) for x in val['night']}):
+            st = [r for r in t if str(r['night']) == n and str(r['filter']) == band and bool(r['reducible'])]
+            targets = ','.join(sorted({str(r['target']) for r in val if str(r['night']) == n}))
+            row = manifest_row(best(st), spec2d=1)
+            row['notes'] = f'validation: {targets}; ' + row['notes']
+            rows.append(row)
+        batch = f'validation_{band}'
     else:
         sub = t
         if nights:

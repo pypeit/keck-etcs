@@ -87,3 +87,4 @@ def test_linearity_flags_and_saturation_peak():
     assert out['peak_e_per_frame'] == pytest.approx(1e3 * 0.3 * 0.14 * 1.3 * 120 + 500 * 120 + 0.008 * 120)
     assert out['peak_adu_per_frame'] == pytest.approx(out['peak_e_per_frame'] / 2.15)
     assert out['flag'] == 'nonlinear_1pct'
+    assert out['frac_pix_nonlinear_1pct'] == pytest.approx(1 / 3)        # D62: one of the three pixels

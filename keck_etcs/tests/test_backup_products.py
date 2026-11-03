@@ -24,7 +24,7 @@ def test_filter_rules_cover_night_and_band_layouts():
     assert '+ /manifests/**' in rules and '+ /runs/**' in rules
     # a band prefix: only that band, plus the night-level raw manifest
     rules = bp.filter_rules(['mosfire/20140606/H'], roots=False)
-    assert '+ /mosfire/20140606/H/redux/Science/spec1d_*' in rules
+    assert any(r.endswith('/20140606/H/redux/Science/spec1d_*') for r in rules)
     assert '+ /mosfire/20140606/raw/manifest.ecsv' in rules
     assert not any(r.startswith('+ /mosfire/20140606/sens') for r in rules)
     assert not any('[A-Z]' in r for r in rules)

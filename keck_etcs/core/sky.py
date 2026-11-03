@@ -9,14 +9,21 @@ import numpy as np
 from keck_etcs.core.atmosphere import interp_grid
 
 
-def sky_background(sky_grid, grid_airmass, grid_pwv, airmass, pwv_mm, sky_scale=1.0):
-    """Sky background ``sky_scale * B(lam; X, PWV)`` on the grid's wavelengths.
+def sky_background(sky_grid, grid_airmass, grid_pwv, airmass, pwv_mm, sky_scale=1.0, excess=None):
+    """Sky background ``sky_scale * [B(lam; X, PWV) + E(lam)]`` on the grid's wavelengths.
+
+    ``excess`` (D61, 5.3.8) is the band's additive continuum excess over the
+    Gemini model, already on the grid's wavelengths and in the same units;
+    None or zero without a measured curve.
 
     Returns:
         tuple: ``(B, warnings)``, B in photons/s/arcsec^2/nm/m^2.
     """
     b, warnings = interp_grid(sky_grid, grid_airmass, grid_pwv, airmass, pwv_mm)
-    return sky_scale * np.clip(b, 0.0, None), warnings
+    b = np.clip(b, 0.0, None)
+    if excess is not None:
+        b = b + np.clip(np.asarray(excess, float), 0.0, None)
+    return sky_scale * b, warnings
 
 
 def sky_rate_per_pixel(B_nm, area_m2, T_sys, slit_width_arcsec, platescale, dlam):

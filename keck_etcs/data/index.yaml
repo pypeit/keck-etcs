@@ -13,7 +13,7 @@ files:
   mosfire/throughput/standards.ecsv:
     calib_version: mosfire-2026.10-dev
     created: '2026-11-02T23:51:04Z'
-    sha256: 3e04a762d1c076986e82e8362ce01ea904e4903f2f4b1172fcbd67765430d567
+    sha256: 1c9abfac3115cba3c324618203017141db64dba73d3c97e6d39c46875db80300
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 53 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
       in mosfire/throughput/standards/
@@ -181,3 +181,29 @@ files:
     pypeit_version: 2.0.2.dev1219+gfb4790520
     provenance: 'J group, era 2025-04..: median of 1 standard(s) (GD153 2025-07-23); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.2;
       PypeIt fb4790520e4ccd49d39d42ed8438a614f307030b'
+  mosfire/throughput/mosfire_thru_H_2012-2016.ecsv:
+    calib_version: mosfire-2026.10-dev
+    bands:
+    - H
+    created: '2026-11-03T16:37:22Z'
+    sha256: 8023149080b804ceed31ba301aa44f2b1e3f0cd89362502d70bec30fed8575a3
+    script: scripts/mosfire/combine_throughput.py
+    pypeit_version: 2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc
+    provenance: 'H group, era 2012-04..2016-09: median of 8 standard(s) (Feige110 2014-06-01, *55Dra 2014-10-05,
+      HD95126 2014-11-23, HD18571 2015-09-04, HD159008 2015-09-17, HD54601 2015-10-22, HD149595 2016-04-15,
+      HD74721 2016-04-17); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9;
+      PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
+  mosfire/throughput/mosfire_thru_H_2017-2025.ecsv:
+    calib_version: mosfire-2026.10-dev
+    bands:
+    - H
+    created: '2026-11-03T16:37:22Z'
+    sha256: 01a40cc73a9808a830cfb0b4a960a7888001b801aef178b92c59f3ae20d7ba8b
+    script: scripts/mosfire/combine_throughput.py
+    pypeit_version: 2.0.2.dev1223+gb0447b74e,2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc
+    provenance: 'H group, era 2017-02..2025-02: median of 13 standard(s) (HD99966 2017-04-18, HD160512
+      2017-05-04, HD133772 2017-06-15, HD18571 2017-09-08, HD74721 2017-11-06, HD47944 2018-01-09, BD+252478
+      2018-06-02, HD65158 2020-11-26, HD21379 2021-09-30, HD98884 2023-02-05, HD79108 2024-12-24, HD44128
+      2024-12-26, HD21875 2024-12-30); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.7, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9; PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919,
+      b0447b74ea01ac0ba8496817afaa336e573791c0, b8a6a19cc5e8a54899ea318065a41333c8ef7163'

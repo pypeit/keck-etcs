@@ -1,7 +1,7 @@
 """Helpers shared by test_regression.py and scripts/regen_regression_fixtures.py (design 6.2)."""
 import math
 
-FIXTURES = {'J': 'J_point', 'J2': 'J2_point', 'line': 'J_line'}
+FIXTURES = {'J': 'J_point', 'J2': 'J2_point', 'line': 'J_line', 'H': 'H_point'}
 """Fixture name (``tests/data/reference_<name>.json``) -> example (``examples/<example>.json``)."""
 
 RTOL = 1e-6

@@ -52,7 +52,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: download
-        # image 0.2.10, digest sha256:PENDING_PUSH (fill in from `docker manifest inspect` after the push; PypeIt pin 54e68d7)
+        # image 0.2.10, digest sha256:672a59c4e70c30e9cf0f23adf4d6efdef67fc894ee5ea8e9be7dd7d806075a2f (PypeIt pin 54e68d7)
         image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10
         imagePullPolicy: Always
         env:
@@ -62,7 +62,7 @@ spec:
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
         - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:PENDING_PUSH"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:672a59c4e70c30e9cf0f23adf4d6efdef67fc894ee5ea8e9be7dd7d806075a2f"}
         - {name: MANIFEST, value: /opt/manifest/nights.csv}
         - name: JOB_NAME
           valueFrom: {fieldRef: {fieldPath: "metadata.labels['job-name']"}}

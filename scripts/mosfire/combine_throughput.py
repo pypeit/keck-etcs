@@ -2,7 +2,14 @@
 """Write the per-era MOSFIRE throughput products from the harvested standards (plan S10, design 4.5).
 
 Usage:
-    conda run -n pypeit14b python scripts/mosfire/combine_throughput.py
+    conda run -n pypeit14b python scripts/mosfire/combine_throughput.py [--group H ...] [--dev]
+
+``--group`` restricts the run to the named band group(s) (default: every
+group with rows), so a new band's products can be built without rewriting
+the released ones (S24b: H built with the J files untouched). ``--dev``
+stamps the files ``<CALIB_VERSION>-dev``, the convention of
+``scripts/check_docs.py`` for a product rebuilt after the release and
+pending the next tag (which ``stamp_release.py`` then sets).
 
 Reads ``keck_etcs/data/mosfire/throughput/standards.ecsv`` and its curves,
 combines, for every band group that has rows (design D49: J = J/J2 today),
@@ -20,6 +27,7 @@ placeholder when no era has one (S23a).
 Set ``CALIB_VERSION`` to the release tag (``mosfire-YYYY.MM``) before a
 release (``nautilus/README.md`` section 10).
 """
+import argparse
 import datetime
 import hashlib
 import sys
@@ -50,7 +58,12 @@ def write_index(entries):
     INDEX.write_text(header + yaml.safe_dump(index, sort_keys=False, width=100))
 
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('--group', action='append', default=None, help='band group(s) to build (default: all with rows)')
+    ap.add_argument('--dev', action='store_true', help=f'stamp calib_version {CALIB_VERSION}-dev (pending the next release)')
+    a = ap.parse_args(argv)
+    calib_version = f'{CALIB_VERSION}-dev' if a.dev else CALIB_VERSION
     rows = Table.read(THRU / 'standards.ecsv', format='ascii.ecsv')
     curves = {str(r['thru_curve_file']): Table.read(THRU / str(r['thru_curve_file']), format='ascii.ecsv')
               for r in rows}
@@ -61,6 +74,12 @@ def main():
     now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     entries, excluded = {}, []
     groups = sorted({MOSFIRE.group_of(str(b)) for b in rows['filter']})
+    if a.group:
+        missing = sorted(set(a.group) - set(groups))
+        if missing:
+            print(f'no rows for group(s) {missing}; groups with rows: {groups}')
+            return 2
+        groups = [g for g in groups if g in a.group]
     for group in groups:
         group_bands = MOSFIRE.group_bands(group)
         window = MOSFIRE.common_window(group)
@@ -79,14 +98,14 @@ def main():
                 'band': f'{group} grating order, filter-free ({", ".join(group_bands)})',
                 'common_window_A': [float(window[0]), float(window[1])],
                 **t.meta,
-                'n_standards': len(info['used']), 'calib_version': CALIB_VERSION,
+                'n_standards': len(info['used']), 'calib_version': calib_version,
                 'keck_etcs_version': keck_etcs.__version__, 'created': now, 'script': SCRIPT,
                 'source_table': 'mosfire/throughput/standards.ecsv',
             }
             rel = MOSFIRE.throughput_file(era, group)
             t.write(DATA_DIR / rel, format='ascii.ecsv', overwrite=True)
             entries[rel] = {
-                'calib_version': CALIB_VERSION, 'bands': list(group_bands), 'created': now,
+                'calib_version': calib_version, 'bands': list(group_bands), 'created': now,
                 'sha256': hashlib.sha256((DATA_DIR / rel).read_bytes()).hexdigest(), 'script': SCRIPT,
                 'pypeit_version': ','.join(t.meta['pypeit_versions']),
                 'provenance': f"{group} group, era {era.name}: median of {len(info['used'])} standard(s) "

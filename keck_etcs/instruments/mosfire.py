@@ -127,14 +127,14 @@ BANDS = {
                     'detector-limited: the filter is wider than the detector; PWV only at the band edges (pwv_weak)',
               group='H', order=4, zp_nodes_A=(15500.0, 16500.0, 17500.0), common_window_A=(14900.0, 17800.0),
               pwv_window_A=((14661.0, 14800.0), (17900.0, 18076.0)), pwv_weak=True, edge_trim_frac=0.9,
-              lsf=LSF_PROVISIONAL),
+              lsf=LSF_PROVISIONAL, sky_excess_warn=True),
     'K': Band('K', 'mosfire/filters/mosfire_K.ecsv', K_DISPERSION, K_FOOTPRINT_A,
               notes='footprint measured on the dev-suite longslit_3x0.7_K (HIP 17971, 2012-11-28; S23d; K_long '
                     '2019-10-13 agrees to 35 A); detector-limited; PWV from the water at both edges (the CO2 '
                     'bands at 2.01 and 2.06 um are not water); thermal background term to come (D60, part K)',
               group='K', order=3, zp_nodes_A=(20500.0, 21500.0, 23000.0), common_window_A=(19800.0, 23700.0),
               pwv_window_A=((19500.0, 20000.0), (23800.0, 24000.0)), edge_trim_frac=0.9,
-              lsf=LSF_PROVISIONAL),
+              lsf=LSF_PROVISIONAL, sky_excess_warn=True),
 }
 
 # S11 validation (design 6.1, D14, D16, D18): J0841+3814_OFF on 2022-04-09, four
@@ -289,6 +289,10 @@ MOSFIRE = Instrument(
     # with the shipped filter divided out (scripts/mosfire/build_provisional_throughput.py); used
     # with a PROVISIONAL warning until the group's first era file exists
     throughput_provisional_pattern='mosfire/throughput/mosfire_thru_{group}_provisional.ecsv',
+    # D61 (S24b): the additive sky continuum excess over the Gemini model, per band, measured from our own
+    # frames (scripts/mosfire/measure_sky_excess.py --band); a band without a file gets no excess (and the
+    # H and K bands a warning, Band.sky_excess_warn)
+    sky_excess_pattern='sky/mosfire_sky_excess_{band}.ecsv',
     moffat_beta=MOFFAT_BETA,
     monitor=MONITOR,
 )

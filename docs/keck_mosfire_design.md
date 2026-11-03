@@ -1243,6 +1243,9 @@ peak_e(lam) = N0 T_atm T_sys f_peak dlam t + b(lam) t + D t
 maximized over `lam` (sky lines included) and reported with its wavelength;
 `peak_adu = peak_e / 2.15`; flags at 26k, 37k and 43k ADU. Persistence is not
 modeled; the output carries a fixed warning when the flag is not `ok`.
+`saturation.frac_pix_nonlinear_1pct` (D62, S24b) is the fraction of spectral
+pixels whose `peak_e(lam)` is beyond 26k ADU, so the flag can be read as a
+few OH lines or the whole band.
 
 ### 5.4 Data files, formats and provenance
 
@@ -1987,6 +1990,28 @@ K.
 5. The sky-excess curves measured where the data allow (at least H), or the
    warning in place.
 6. This document updated to "as built" for the bands delivered.
+
+*H as built (S24b, 2026-11-03):* item 1: 33 H rows, 21 standards in the
+era curves (8 in 2012-2016, 13 in 2017-2025; `excluded_3mad`: HIP 17971
+2012-11-28 on the 0.7" slit, HD 111744 2016-01-07, V* V836 Cyg 2016-05-01,
+HD 74721 2017-11-05; 8 `excluded_nonlinear`), band medians 0.326 and 0.329
+over 14900-17800 A, trend medians 0.330 and 0.330 with MAD 2.4 and 2.5
+percent and no slope beyond 1.1 sigma; no H standard after 2025-04 yet, so
+`compute` uses the 2017-2025 curve there with a warning; the files carry
+`mosfire-2026.10-dev` until the Y/H/K tag. Item 2: `reference_H.json`,
+`compare_xtcalc.py --band H` (ours/XTcalc 0.70 through 0.7", 0.81-0.86
+through 1.0"; the sky and the slit loss are the large steps) and
+`saturation.frac_pix_nonlinear_1pct` (5.3.11) in place. Item 3: the H
+validation night 2022-01-11 (J1532+2237, GD153 1") is manifested
+(`nights_validation_H.csv`) and `validate_j0841.py --band H` ready; the
+reduction is pending. Item 5: `measure_sky_excess.py --band H`, the
+`sky_excess` lookup and the H and K warning are in place; the H curve
+itself waits for the validation night's long frames: the standards' 7-25 s
+frames (6 nights, 50 frames, 40000 column-seconds) give a stacked floor
+excess of 1.9 +- 1.0 Gemini units over 14900-17800 A, consistent with the
+Maihara continuum of about 1 unit but not resolved; frames shorter than
+5 s are skipped (the CDS pedestal measured in the closed bars does not
+remove theirs).
 
 ### 9.9 Items still to verify
 
