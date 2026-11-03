@@ -1,0 +1,2 @@
+night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,hmag_2mass,kmag_2mass,std_ra,std_dec,filter,band
+20220111,mosfire,mosfire/20220111/H,GD153,LONGSLIT-46x1,1,validation: J1532+2237; WD xshooter DA1; H; 4 frames; flats 27; lamp arcs 0; prog U031 Hennawi; era 2017-02..2025-02,WD,,,,194.259750,22.031306,H,H

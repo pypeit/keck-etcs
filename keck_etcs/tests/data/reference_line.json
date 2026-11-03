@@ -30,7 +30,7 @@
  },
  "output": {
   "meta": {
-   "keck_etcs_version": "0.2.5",
+   "keck_etcs_version": "0.2.10",
    "pypeit_version": "2.0.2.dev1219+gfb4790520",
    "calib_version": "mosfire-2026.10",
    "era": "2025-04..",
@@ -15513,7 +15513,8 @@
    "peak_e_per_frame": 9690.523325,
    "peak_adu_per_frame": 4507.220151,
    "wave_A": 12905.7242,
-   "flag": "ok"
+   "flag": "ok",
+   "frac_pix_nonlinear_1pct": 0.0
   },
   "warnings": [
    "LSF for a 0.7\" slit from the interim rule sqrt((w / 0.292)^2 + 1.08^2) (D25); only measured slit widths are exact",

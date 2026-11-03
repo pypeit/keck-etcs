@@ -28,7 +28,7 @@
  },
  "output": {
   "meta": {
-   "keck_etcs_version": "0.2.5",
+   "keck_etcs_version": "0.2.10",
    "pypeit_version": "2.0.2.dev1218+g8017f4799,2.0.2.dev1220+gfb6fb62c4,2.0.2.dev1221+gbc18a3ba4",
    "calib_version": "mosfire-2026.10",
    "era": "2017-02..2025-02",
@@ -10122,7 +10122,8 @@
    "peak_e_per_frame": 7015.29742,
    "peak_adu_per_frame": 3262.929032,
    "wave_A": 12123.1436,
-   "flag": "ok"
+   "flag": "ok",
+   "frac_pix_nonlinear_1pct": 0.0
   },
   "warnings": []
  }
