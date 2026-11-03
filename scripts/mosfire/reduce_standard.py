@@ -291,7 +291,11 @@ def split_merged_bars(pfile, redux, raw_file, log, env):
     slits = SlitTraceSet.from_file(files[0])
     left, right, _ = slits.select_edges()
     with fits.open(raw_file) as hdul:
-        bars = [int(r['Slit_Number']) for r in hdul['Mechanical_Slit_List'].data if str(r['Slit_Number']).strip()]
+        if hasattr(K, 'read_slit_list'):
+            # tolerant of the shifted KOA tables (2016-01-06 H: every bar number read blank or '0'; PypeIt etc-fixes)
+            bars = [int(r['Slit_Number']) for r in K.read_slit_list(hdul, 'Mechanical_Slit_List') if r['Slit_Number']]
+        else:
+            bars = [int(r['Slit_Number']) for r in hdul['Mechanical_Slit_List'].data if str(r['Slit_Number']).strip()]
         ps = hdul[0].header['PSCALE']
         crpix2 = float(hdul[0].header['CRPIX2'])
     shutil.rmtree(work, ignore_errors=True)
@@ -305,10 +309,18 @@ def split_merged_bars(pfile, redux, raw_file, log, env):
     if rec['action'] != 'carve':
         return rec
     text = Path(pfile).read_text()
-    block = f"    rm_slits = {'; '.join(rec['rm_slits'])}\n    add_slits = {'; '.join(rec['add_slits'])}\n"
     assert text.count('  [[slitedges]]\n') == 1
-    Path(pfile).write_text(text.replace('  [[slitedges]]\n', '  [[slitedges]]\n' + block, 1))
+    Path(pfile).write_text(text.replace('  [[slitedges]]\n', '  [[slitedges]]\n' + slitedges_block(rec), 1))
     return rec
+
+
+def slitedges_block(rec):
+    """The ``rm_slits``/``add_slits`` lines of a ``carve`` record for the ``[[slitedges]]`` block.
+
+    A key with no entries is left out: PypeIt parses ``add_slits =`` (empty) as one empty item and
+    ``int('')`` crashes ``run_pypeit`` (sweep 1 of S24b, 2016-01-08: the spurious slit removed, nothing to add).
+    """
+    return ''.join(f"    {key} = {'; '.join(rec[key])}\n" for key in ('rm_slits', 'add_slits') if rec.get(key))
 
 
 def specphot_wide_slits(raw_file, wave_rows):

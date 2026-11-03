@@ -33,6 +33,27 @@ fed it.
     spurious slit's arc FWHM measured 0.3 px and `curve_fit` on one pixel
     crashed `run_pypeit`); `test_fit_arcspec_tiny_fwhm`. Image 0.2.9 is
     built on this pin for the sweep (`sweep_batch1_H.csv`, 19 nights).
+  - Sweep 1 (image 0.2.9, 19 nights, 79 min): 16 `success` merged (gates
+    PASS; H rows 33, 24 usable wide-slit over 2 eras, era medians 0.326 and
+    0.329), 3 failed: 2016-01-08 and 2016-01-06 `reduce failed` (below),
+    2016-05-30 `gate failed` (throughput 0.04, clouds). 2016-01-07 (0.245,
+    weather) and 2016-05-01 (V* V836 Cyg, variable, 0.248) are 3-MAD
+    outliers of era 1, 2017-11-05 (HD74721, 0.289) of era 2. Image 0.2.10
+    (pin `54e68d7`) is prepared for sweep 2 (`sweep2_H.csv`: 2016-01-08).
+  - Sweep 1 fixes: `scripts/mosfire/reduce_standard.py`
+    `slitedges_block` leaves an empty `rm_slits`/`add_slits` key out of the
+    `[[slitedges]]` block (an empty `add_slits =` line is parsed by PypeIt
+    as one empty item and `int('')` crashed `run_pypeit`; 2016-01-08: the
+    spurious slit removed, nothing to add). PypeIt `etc-fixes`
+    `read_slit_list` (`keck_mosfire.py`, used by `long2pos_bar_widths` and
+    `get_slitmask`) reads the `*_Slit_List` ASCII tables tolerantly: in
+    every frame of 2016-01-06 the table bytes sit one 80-byte card into the
+    data block, so the parsed bar numbers were blank or `0`; the rows are
+    re-read from the raw block at the shift where the most rows parse
+    (`test_read_slit_list_shifted`). `scripts/mosfire/dump_csu_bars.py`
+    prints the lists and, with `--raw`, the raw bytes. 2016-01-06 itself has
+    no standard: its six "standard" frames are `MIRA PMFM 350` defocused
+    mirror-alignment exposures (`no trace`).
   - `scripts/nautilus/backup_products.py` backs up the band directories
     too (`mosfire/<night>/<band>/`, D55): before S24b its filters only
     knew the night level, so no H product had reached the backup; adds

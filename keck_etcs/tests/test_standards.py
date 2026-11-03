@@ -290,3 +290,13 @@ def test_driver_specphot_bars_by_position(driver, tmp_path):
     sp = driver.specphot_wide_slits(raw, rows)
     assert sp['wide'] == [1031, 1120] and sp['bars_without_slit'] == [26, 25] and sp['fwhm_check'] is True
     assert sp['bars'][0]['spat_id'] is None
+
+
+def test_driver_slitedges_block_omits_empty_keys(driver):
+    slitedges_block = driver.slitedges_block
+    # 2016-01-08 H: the spurious slit removed, every bar already traced -> no add_slits line at all
+    assert slitedges_block({'rm_slits': ['1:1020:1610'], 'add_slits': []}) == '    rm_slits = 1:1020:1610\n'
+    # 2014-11-23 H: open-CSU slits removed, bars added back
+    assert slitedges_block({'rm_slits': ['1:1020:507', '1:1020:1119'], 'add_slits': ['1:1020:881:920', '1:1020:925:964']}) \
+        == '    rm_slits = 1:1020:507; 1:1020:1119\n    add_slits = 1:1020:881:920; 1:1020:925:964\n'
+    assert slitedges_block({'rm_slits': [], 'add_slits': []}) == ''

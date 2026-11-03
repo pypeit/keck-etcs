@@ -1478,3 +1478,102 @@ log is empty until exit (read the night's `run.log`). The KOA
 flats; `pypeit_trace_edges` finds gaps only where neighbouring bars sit at
 different CSU positions. A J-era status row has no `band`; astropy writes
 an empty string as a masked `--`, so band keys must normalise it.
+
+### 2026-11-02 (Prompt #6 / S24b, sweep 1: 19 nights on image 0.2.9, 16 successes merged, 3 failures diagnosed, two fixes, image 0.2.10 prepared)
+
+Session on Claude Fable 5.1 (the prompt asks for Opus 5.5).
+
+**Image 0.2.9 and sweep 1.** The user built and pushed 0.2.9 (keck-etcs
+`c3e6df6`, PypeIt `b8a6a19`; digest
+`sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a`,
+filled in; `check_docs.py` ALL CHECKS PASS, `check_pypeit_pin.py --image
+0.2.9` PASS) and launched the sweep from the README section 7 recipe (Job
+`keck-etcs-nights-sweep1`, ConfigMap from `sweep_batch1_H.csv`, 19
+completions, parallelism 4). Monitored read-only every 15 min (cron,
+progress in the scratchpad `p6/sweep1_progress.txt`). Job `Failed` after
+79 min: 16 completed, 3 indexes exhausted (`backoffLimitPerIndex: 1`).
+
+| outcome | nights |
+|---|---|
+| success, gates PASS | 20141123 HD95126 0.334, 20150428 HD159008 0.351 (excluded_nonlinear), 20150904 HD18571 0.339, 20151022 HD54601 0.326, 20160107 HD111744 0.245, 20160415 HD149595 0.338, 20160501 V*V836Cyg 0.248, 20170504 HD160512 0.354, 20170908 HD18571 0.329, 20171105 HD74721 0.289, 20171106 HD74721 0.345, 20190319 HD121880 0.349 (excluded_nonlinear), 20201126 HD65158 0.351, 20210930 HD21379 0.335, 20230205 HD98884 0.356, 20241110 HD24000 0.331 (excluded_nonlinear) |
+| reduce failed (x2) | 20160106 HD9485, 20160108 HD111744 |
+| gate failed (thru_median 0.043) | 20160530 HD111744 |
+
+Wall clocks 8-33 min (20170908: 1991 s). The carve was applied on every
+night: the full-CSU `long2pos` flats (`rm 3, add 6`) on ten nights, bars
+merged in a position (`rm 2, add 6`) on the others.
+
+**Failures.**
+- 2016-01-08 (`reduce failed`, `run_pypeit` exit 1 in 30 s): the carve
+  removed the spurious slit at 1610 and had nothing to add back, and the
+  driver wrote `add_slits = ` (empty). PypeIt's parser turns that into one
+  empty item and `int('')` raises (`parse.py:466`). Fixed:
+  `slitedges_block(rec)` writes only the non-empty keys
+  (`test_driver_slitedges_block_omits_empty_keys`). The local re-run of
+  batch 1 had not caught it because the final carve rule (remove a slit
+  with no bar) came after that run.
+- 2016-01-06 (`reduce failed`, the same error): the carve removed all four
+  traced slits and added none, because the standard frame's
+  `Mechanical_Slit_List` read as bars `['', '0', '0', '0', '0']`. The FITS
+  ASCII tables of every frame of that night (flats, arcs, standards) have
+  their bytes one 80-byte card further into the data block than the header
+  says (`scripts/mosfire/dump_csu_bars.py --raw`: two blank rows, then
+  `   20 posA ...` shifted by 2 characters, the last row in the padding).
+  PypeIt's `long2pos_bar_widths` reads the same table, so the bar matcher
+  would have failed too. Fixed in PypeIt on `etc-fixes`
+  (`54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38`, committed by the user):
+  `read_slit_list(hdu, extname)` in `keck_mosfire.py` returns the table as
+  stripped strings and, when the parsed `Slit_Number`/`Slit_width` columns
+  are not integers/floats, re-reads the rows from the raw data block
+  (padding included, `_get_raw_data`) at the byte shift where the most rows
+  parse (ties broken by the characters read, so `20` beats `2`); used by
+  `long2pos_bar_widths` and `get_slitmask`; binary tables (a test's) pass
+  through. `test_read_slit_list_shifted[0|80]`. The driver's
+  `split_merged_bars` uses it when present. With the recovered bars the
+  local re-run reduced the night but found no star in a 4" bar: the six
+  "standard" frames have `OBJECT = 'MIRA PMFM 350'`, defocused
+  mirror-alignment exposures. Data failure; the night stays out.
+- 2016-05-30 (`gate failed`): the star in a 4" bar in 1 of 16 frames (FWHM
+  0.58", S/N 68), 12 frames with no object at all: clouds. Excluded by the
+  gate; no retry.
+
+**Low nights.** 2016-01-07 HD111744 0.245 (the same star at the same
+airmass gives 0.333 on 2016-01-08: transparency; 12 frames of 2.9 and
+14.5 s) and 2016-05-01 V* V836 Cyg 0.248 (a variable star; its 2MASS H is
+not a stable reference). Both are below median - 3 MAD of era 1 (median
+0.326, MAD 0.013), as is 2017-11-05 HD74721 0.289 in era 2 (0.329, 0.010);
+`combine_throughput.py` will flag them `excluded_3mad`.
+
+**Products.** Synced (`s3_sync.py pull mosfire/<night>/H`, `--calibs`),
+`verify_nights.py --band H --digest sha256:6e0c58... --pin b8a6a19...` ALL
+OK (16 nights), `status_table.py` 57 night/bands (H: 16 `success` on 0.2.9,
+2 `reduce failed`, 1 `gate failed`), `harvest_sens.py --merge` of the 16
+harvests: `standards.ecsv` 53 rows (33 H; 24 usable wide-slit H over 2
+eras: 10 in 2012-04..2016-09, 14 in 2017-02..2025-02; 8
+`excluded_nonlinear`), 16 new `<standard>_<night>_H.ecsv` curves,
+`calib_monitor.ecsv` 8721 rows (monitor_failed 0), `index.yaml` updated;
+`check_standards_table.py` ALL CHECKS PASS; pytest 141 passed, 1 skipped
+(the PypeIt checkout is on `speed_up_arcfit`, so the bar-matcher test
+skips), 3 deselected.
+
+**Image 0.2.10 prepared** for sweep 2 (`nautilus/manifests/sweep2_H.csv`:
+2016-01-08 only; 2016-01-06 and 2016-05-30 are data failures):
+`__version__`/`CITATION.cff`/README 0.2.10, `pypeit_pin.txt` `54e68d7...`,
+the three manifests at 0.2.10 with `sha256:PENDING_PUSH`, README image
+table row (0.2.9: "Ran H sweep 1"), design 9.6 as-built list.
+`validate_manifests.py` MANIFESTS OK; `check_docs.py` has the four expected
+FAILs until the digest is filled in. Sweep 2 recipe: README section 7
+(`sweep1` -> `sweep2`, `completions: 1`). The build/push, the launch and
+`backup_products.py --run` are the user's. `backup_products.py` was also
+fixed this session (band directories; see the batch-1 entry).
+
+**Learned.** KOA MOSFIRE frames can carry FITS ASCII tables whose data
+block starts one card late; astropy parses them silently into shifted
+columns, so a bar list of blanks and zeros is a data defect, not a mask
+without bars. `MIRA PMFM` frames are mirror-alignment exposures that KOA
+lists under the standard's name: a future manifest builder should drop
+frames whose `OBJECT` starts with `MIRA`. The Job's `backoffLimitPerIndex:
+1` retries a `reduce failed` night once, uselessly when the failure is
+deterministic; the retry costs about 90 s per night. The user's PypeIt
+checkout moves between branches during a session; the pin check, not the
+checkout, is the reference for the image.

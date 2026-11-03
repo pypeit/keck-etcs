@@ -636,9 +636,14 @@ MOSFIRE fix found in reduction:
 - `b8a6a19` (0.2.9, S24b): `arc.fit_arcspec` skips a fit window
   narrower than three pixels and survives a failed Gaussian fit (a
   spurious slit's empty arc, FWHM 0.3 pixels, crashed `run_pypeit` on
-  2016-01-08 H).
+  2016-01-08 H);
+- `54e68d7` (0.2.10, S24b): `read_slit_list` reads the `*_Slit_List`
+  ASCII tables tolerantly (every frame of 2016-01-06 has the table bytes
+  shifted one 80-byte card into the data block, so `long2pos_bar_widths`
+  and the bar carve saw blank or zero bar numbers); used by
+  `long2pos_bar_widths` and `get_slitmask`.
 
-Image 0.2.9 is current. `nautilus/README.md` has every tag
+Image 0.2.10 is current. `nautilus/README.md` has every tag
 with its digest, keck-etcs commit and pin. The `--allow-branch` flag
 anticipated in plan S17 does not exist: `PIN_BRANCHES` serves the purpose.
 

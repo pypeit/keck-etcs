@@ -1,0 +1,2 @@
+night,instrument,s3_prefix,standard,slit,spec2d,notes,std_class,jmag_2mass,hmag_2mass,kmag_2mass,std_ra,std_dec,filter,band
+20160108,mosfire,mosfire/20160108/H,HD111744,long2pos_specphot (align),0,A0V simbad A0V; H; 6 frames; flats 39; lamp arcs 18; prog W182M Glazebrook; era 2012-04..2016-09,A0V,8.730,8.787,8.760,192.847196,12.372778,H,H

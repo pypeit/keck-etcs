@@ -79,8 +79,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: night
-        # image 0.2.9, digest sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a (PypeIt pin b8a6a19)
-        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9
+        # image 0.2.10, digest sha256:PENDING_PUSH (fill in from `docker manifest inspect` after the push; PypeIt pin 54e68d7)
+        image: gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10
         imagePullPolicy: Always
         env:
         - {name: HOME, value: /root}
@@ -88,8 +88,8 @@ spec:
         - {name: KECK_ETCS_BUCKET, value: keck-etcs}
         - {name: ENDPOINT_URL, value: "http://rook-ceph-rgw-nautiluss3.rook"}
         - {name: KECK_ETCS_DATA, value: /scratch}
-        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9"}
-        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a"}
+        - {name: KECK_ETCS_IMAGE, value: "gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10"}
+        - {name: KECK_ETCS_IMAGE_DIGEST, value: "sha256:PENDING_PUSH"}
         - {name: OMP_NUM_THREADS, value: "4"}
         - {name: SPEC2D, value: "0"}
         - {name: REPLACE, value: "0"}

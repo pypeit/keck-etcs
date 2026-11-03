@@ -148,7 +148,8 @@ bash nautilus/build_image.sh --push     # build and push <version> and latest
 
 | tag | PypeIt pin (`etc-fixes`) | keck-etcs | digest | notes |
 |---|---|---|---|---|
-| 0.2.9 | `b8a6a19cc5e8a54899ea318065a41333c8ef7163` | `c3e6df6` | `sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a` | S24b H batch-1 sweep fixes: PypeIt `arc.fit_arcspec` skips a fit window under three pixels (a spurious slit's empty arc crashed `run_pypeit`, 2016-01-08); another mask's flats or arcs are left out only when the standard's mask has its own (19 nights: calibrations through plain `long2pos`); one slit per CSU bar carved from the trace by the mask geometry (`bar_slit_edits`; open-CSU flats, spurious slits); band-suffixed curve files. **Current** |
+| 0.2.10 | `54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38` | pending | `sha256:PENDING_PUSH` (fill in after the push) | S24b H sweep-1 fixes: PypeIt `read_slit_list` reads the `*_Slit_List` ASCII tables of a frame whose table bytes are shifted into the FITS padding (2016-01-06); the driver leaves an empty `add_slits` key out of the `[[slitedges]]` block (an empty line crashed `run_pypeit`, 2016-01-08); `backup_products.py` covers the band directories. **Current** |
+| 0.2.9 | `b8a6a19cc5e8a54899ea318065a41333c8ef7163` | `c3e6df6` | `sha256:6e0c5801a3c83f20adddcc407a779a3a46db8521c6f529b063e0eea52b28f34a` | S24b H batch-1 sweep fixes: PypeIt `arc.fit_arcspec` skips a fit window under three pixels (a spurious slit's empty arc crashed `run_pypeit`, 2016-01-08); another mask's flats or arcs are left out only when the standard's mask has its own (19 nights: calibrations through plain `long2pos`); one slit per CSU bar carved from the trace by the mask geometry (`bar_slit_edits`; open-CSU flats, spurious slits); band-suffixed curve files. Ran H sweep 1 (16 of 19). |
 | 0.2.8 | `5e92ff9416105763b1aae2ee39bde1fa8321c919` | `78e2058` | `sha256:780dbaf68d96c8b650599a00932750abb26511fdf9031c1d2b1a6fbcefdd51ef` | S24a H pilot fixes: PypeIt `long2pos_match_bars`/`long2pos_bar_slits` (bars matched to slits by position in `transfer_wavecal`, a bar keeps the better fit); calibration frames of another CSU mask left out on specphot nights; H monitor lines frozen; OH fluxes in the 0.7" bars of long2pos frames. Ran H batch 1 (16 of 35 indexes). |
 | 0.2.7 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `c5c8e53` | `sha256:46e80edaf6eef0469530dae0d57fd756a8d6de64d221bbf873e2e07a16509dc2` | S24a: H sensfunc settings (`keck_mosfire_H.sens`, polyorder 4, tell_npca 2); A0V model scaled to the band's own 2MASS magnitude (D51, `--mag`, `HMAG_2MASS`/`KMAG_2MASS`); filter-edge mask and LSF `resln_guess` for Y/H/K sensfuncs; `nights_pilot_H.csv`; the H pilot ran on this push. Re-pushed 2026-10-31 at `bf0b499` with the same pin, `sha256:e6c69cb7ffd438aebffcd95069542a80c921075d63181cff438b538dbdb76a79` (no PypeIt change). |
 | 0.2.6 | `b0447b74ea01ac0ba8496817afaa336e573791c0` | `d34a000` | `sha256:c9e01c3415afe8d5b5739e022c90600ebc7aa809275a9d89a4120dca49cc3f92` | pin moved to `etc-fixes` `b0447b7`: read noise from `SAMPMODE`/`NUMREADS` (S17) and `SLITRANGE` from product headers for `pypeit_sensfunc` on short long slits (S23d); per-band layout `mosfire/<night>/<band>/`, `--band`, `GATES_REFERENCE=auto`; H/K reference reductions. |
@@ -436,6 +437,26 @@ re-run locally with the fixes: 2014-11-23 and 2016-01-08 `success`, gates
 PASS, median throughput 0.33. The 19 nights are swept with image 0.2.9
 (`sweep_batch1_H.csv`).
 
+**H sweep 1 (S24b, image 0.2.9, Job `keck-etcs-nights-sweep1`, 79 min):**
+16 of 19 `success` (gates PASS, median throughput 0.25-0.36; the carve
+applied on every night), 3 exhausted. 2016-01-08 (`reduce failed`): the
+carve removed the spurious slit with nothing to add back and the driver
+wrote an empty `add_slits =` line, which PypeIt parses as one empty item
+(`int('')`); `slitedges_block` now leaves an empty key out. 2016-01-06
+(`reduce failed`): every frame of the night has its `*_Slit_List` ASCII
+tables shifted one 80-byte card into the FITS data block, so the bar numbers
+read blank or `0` and the carve found no bar; PypeIt `etc-fixes` `54e68d7`
+(`read_slit_list`) re-reads the rows from the raw block. The night is still
+unusable: its "standard" frames are `MIRA PMFM 350` defocused
+mirror-alignment exposures (`no trace` locally). 2016-05-30 (`gate failed`,
+throughput 0.04): the star in a 4" bar in 1 of 16 frames, 12 frames with no
+object (clouds). Two low nights are weather or the star: 2016-01-07
+(HD111744, 0.245; the same star and airmass give 0.33 the next night) and
+2016-05-01 (V* V836 Cyg, a variable star, 0.248); both lie below
+median - 3 MAD of their era and `combine_throughput.py` flags them
+`excluded_3mad`. Image 0.2.10 (pin `54e68d7`, the driver fix) re-runs
+2016-01-08 as sweep 2 (`sweep2_H.csv`, 1 night).
+
 The gates read their windows from the instrument module
 (`keck_etcs.instruments.mosfire.gate_windows`): the band group's common
 window for the zero point, its middle third for the `OPT_COUNTS`
@@ -475,7 +496,9 @@ python nautilus/status_table.py                            # per-night/band tabl
 
   (`JOB_NAME` follows the Job's name, so the status rows land under
   `runs/keck-etcs-nights-sweep1/status/`; the raw frames are already on
-  the bucket, so no download Job is needed.)
+  the bucket, so no download Job is needed.) Sweep 2 (image 0.2.10,
+  `sweep2_H.csv`) is the same with `sweep1` -> `sweep2` in both names and
+  `completions: 1`.
 - **Diagnose from the S3 artefacts:** `run.log`, `pod.log` and the
   `run_manifest.json` that a failed pod still pushes.
 - **Fix the cause:** code, a PypeIt fix on the pinned branch plus a new
