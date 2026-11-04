@@ -499,22 +499,34 @@ python nautilus/status_table.py                            # per-night/band tabl
   the bucket, so no download Job is needed.) Sweep 2 (image 0.2.10,
   `sweep2_H.csv`) is the same with `sweep1` -> `sweep2` in both names and
   `completions: 1`.
-- **The H validation night (S24b, design 9.7):** `nautilus/manifests/nights_validation_H.csv`
-  (`make_night_manifest.py validation --band H`; 2022-01-11, GD153 through
-  the 1" long slit, `spec2d = 1`, the quasar J1532+2237 in the notes: 8 x
-  179 s). Its raw frames are not on the bucket yet, so it takes the two
-  Jobs: the download Job with this manifest as the ConfigMap
-  (`keck-etcs-koa-nights`, `completions: 1`; `spec2d = 1` makes the
-  downloader take the program's science frames, section 6), then a night
-  Job under its own name with the same manifest (`completions: 1`; the
-  row's `spec2d` sets `SPEC2D=1`, so the pod pushes `spec2d_*` too, about
-  25 min and 8 GB of scratch). Afterwards: `s3_sync.py pull mosfire/20220111`
-  (products and `raw`), `verify_nights.py --band H`, `harvest_sens.py
-  --merge` for the GD153 row, then `validate_j0841.py --band H --date
-  20220111 --target J1532+2237 --standard GD153` and
-  `measure_sky_excess.py --band H` (the night's long science frames are
-  what the D61 curve needs; the standards' 1-10 s frames cannot resolve
-  the inter-line floor).
+- **A validation night (S24b, design 9.7; H: 2022-01-11, GD153 through the
+  1" long slit, J1532+2237 8 x 179 s, `nights_validation_H.csv` from
+  `make_night_manifest.py validation --band H`).** Its raw frames are not on
+  the bucket, so it takes the two Jobs: the download Job with the manifest
+  as the ConfigMap (`keck-etcs-koa-nights`, `completions: 1`; `spec2d = 1`
+  makes the downloader take the program's science frames, section 6), then
+  a night Job under its own name with the same manifest (`completions: 1`;
+  the row's `spec2d` sets `SPEC2D=1`, so the pod pushes `spec2d_*` too,
+  about 25 min and 8 GB of scratch, and passes `--findobj-snr 10` to
+  `reduce_standard.py`: PypeIt's default object-finding threshold, since the
+  standards' `snr_thresh = 80` finds no quasar in a 179 s frame). A
+  narrow-slit standard measures slit loss, not throughput: `gates.py` makes
+  `thru_median` advisory for it and the harvest flags its row `narrow`
+  (`combine` and the trend skip it). Afterwards: `s3_sync.py pull
+  mosfire/<night>/<band>` (section 8) and `mosfire/<night>/raw`,
+  `verify_nights.py --band H`, `harvest_sens.py harvest <night> --band H
+  --standard <name>` and `--merge`, then `validate_j0841.py --band H --date
+  <night> --target <target> --standard <name> --sens-scale era` (the night's
+  sensfunc raised to the era curve: GD153 sat 0.4" off the slit centre,
+  end-to-end 0.17 against the era's 0.33) and `measure_sky_excess.py --band
+  H` (the long science frames are what the D61 curve needs; frames under
+  60 s are skipped). The 2022-01-11 pod ran on image 0.2.10 before these
+  changes: its gate failed on `thru_median` (status row `gate failed`, no
+  harvest in the pod), the quasar was re-extracted locally under the
+  night's `H_local_sci` directory (the pod's PypeIt file minus its standard
+  rows and `[[findobj]]` block, with a copy of the pod's Calibrations) and
+  passed to the validation with `--science-dir H_local_sci`; the harvest row
+  was made locally from the pod's sensfunc.
 - **Diagnose from the S3 artefacts:** `run.log`, `pod.log` and the
   `run_manifest.json` that a failed pod still pushes.
 - **Fix the cause:** code, a PypeIt fix on the pinned branch plus a new

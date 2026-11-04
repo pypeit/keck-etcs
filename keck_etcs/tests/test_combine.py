@@ -125,3 +125,18 @@ def test_prior_excluded_3mad_rows_are_reported_not_used():
     rows['flag'][-1] = 'excluded_nonlinear'
     t2, info2 = combine.combine_era(rows, curves, ERA, FILTERS)
     assert info2['excluded'] == [] and len(info2['used']) == 3 and t2.meta['excluded'] == []
+
+
+def test_narrow_slit_rows_take_no_part():
+    # a narrow-slit standard measures slit loss, not throughput (harvest flag ``narrow``; S24b, GD153 2022-01-11
+    # through the 1" slit at 0.17 against the era's 0.33): skipped silently, like excluded_nonlinear, and a
+    # stale excluded_3mad on such a row does not make it a reported exclusion either
+    rows, curves = make(4, 0.25, outlier=0.10)
+    rows['flag'] = rows['flag'].astype('U32')
+    rows['flag'][-1] = 'narrow'
+    t, info = combine.combine_era(rows, curves, ERA, FILTERS)
+    assert [p['row']['standard'] for p in info['used']] == ['S0', 'S1', 'S2']
+    assert info['excluded'] == [] and t.meta['excluded'] == [] and np.all(t['n_std'] == 3)
+    rows['flag'][-1] = 'pwv_weak,narrow,excluded_3mad'
+    t2, info2 = combine.combine_era(rows, curves, ERA, FILTERS)
+    assert info2['excluded'] == [] and len(info2['used']) == 3

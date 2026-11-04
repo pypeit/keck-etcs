@@ -1971,6 +1971,16 @@ standard, so the H and K validation nights flux with a narrow-slit
 standard (slit loss enters, as for the Y fallback) or use Per-emb 25 in
 K.
 
+*H outcome (S24b, 2026-11-03):* the narrow-slit standard is worse than slit
+loss: GD153 sat about 0.4" off the centre of the 1" slit in all four frames
+(end-to-end 0.17 against 0.33, telluric shift -2 pixels), which no model
+corrects. The fluxing therefore uses the night's sensfunc raised to the era
+curve (`--sens-scale era`), the harvest row is flagged `narrow`, the
+`thru_median` gate is advisory for such a standard, and the night Job runs
+PypeIt's default object-finding threshold for a `spec2d = 1` row (the
+quasar escaped the standards' `snr_thresh = 80`). The K validation nights
+(GD153 and P330E on 1" slits) take the same path.
+
 ### 9.8 Definition of done, Y/H/K milestone
 
 0. *(v0.7, Q68)* The band-neutral refactor released as a J-only tag
@@ -1991,27 +2001,36 @@ K.
    warning in place.
 6. This document updated to "as built" for the bands delivered.
 
-*H as built (S24b, 2026-11-03):* item 1: 33 H rows, 21 standards in the
-era curves (8 in 2012-2016, 13 in 2017-2025; `excluded_3mad`: HIP 17971
-2012-11-28 on the 0.7" slit, HD 111744 2016-01-07, V* V836 Cyg 2016-05-01,
-HD 74721 2017-11-05; 8 `excluded_nonlinear`), band medians 0.326 and 0.329
-over 14900-17800 A, trend medians 0.330 and 0.330 with MAD 2.4 and 2.5
-percent and no slope beyond 1.1 sigma; no H standard after 2025-04 yet, so
+*H as built (S24b, 2026-11-03):* item 1: 35 H rows, 17 standards in the
+era curves (7 in 2012-2016, 10 in 2017-2025; `excluded_3mad`: HD 111744
+2016-01-07, V* V836 Cyg 2016-05-01, *55 Dra 2014-10-05, HD 159008
+2015-09-17, HD 74721 2017-11-05, HD 160512 2017-05-04, HD 47944 2018-01-09,
+HD 98884 2023-02-05, i.e. 8 of 25 wide-slit rows with MAD 1.6-1.9 percent;
+`narrow`, no part in the curves: HIP 17971 2012-11-28 on the 0.7" slit,
+GD153 2022-01-11 on the 1" slit; 8 `excluded_nonlinear`), band medians
+0.334 and 0.329 over 14900-17800 A, trend MAD 1.6 and 1.9 percent and no
+slope beyond 0.2 sigma; no H standard after 2025-04 yet, so
 `compute` uses the 2017-2025 curve there with a warning; the files carry
 `mosfire-2026.10-dev` until the Y/H/K tag. Item 2: `reference_H.json`,
 `compare_xtcalc.py --band H` (ours/XTcalc 0.70 through 0.7", 0.81-0.86
 through 1.0"; the sky and the slit loss are the large steps) and
-`saturation.frac_pix_nonlinear_1pct` (5.3.11) in place. Item 3: the H
-validation night 2022-01-11 (J1532+2237, GD153 1") is manifested
-(`nights_validation_H.csv`) and `validate_j0841.py --band H` ready; the
-reduction is pending. Item 5: `measure_sky_excess.py --band H`, the
-`sky_excess` lookup and the H and K warning are in place; the H curve
-itself waits for the validation night's long frames: the standards' 7-25 s
-frames (6 nights, 50 frames, 40000 column-seconds) give a stacked floor
-excess of 1.9 +- 1.0 Gemini units over 14900-17800 A, consistent with the
-Maihara continuum of about 1 unit but not resolved; frames shorter than
-5 s are skipped (the CDS pedestal measured in the closed bars does not
-remove theirs).
+`saturation.frac_pix_nonlinear_1pct` (5.3.11) in place. Item 3: done. The H
+validation night 2022-01-11 (J1532+2237, 8 x 179 s ABBA through the 1"
+long slit, seeing 0.93", H = 18.22 AB intrinsic): ETC/measured S/N per
+pixel 0.81 over the band and 0.91 between the OH lines, signal 1.02; the
+night's OH lines are at 0.29 of the Gemini mean (frames at 05:00-05:30
+HST) and the inter-line sky at 0.81, and with that sky scale the ratios
+are 0.88 and 0.97. The standard GD153 sat off the slit centre (end-to-end
+0.17 against the era's 0.33, every frame), so the night's sensfunc is
+raised to the era curve for the fluxing (`validate_j0841.py --sens-scale
+era`, factor 1.90): the signal side of this test rests on the standards'
+throughput, the noise side is independent (6.1). Item 5: done. The H
+sky continuum excess is 1.00 +- 0.01 Gemini units over 14660-17970 A
+(measured floor 1.51 against Gemini's 0.46; the Maihara continuum) from
+those 8 long frames, stacked, with the CDS pedestal from the raw
+reference pixels (a 13 ADU offset would lower it by 0.2); the standards'
+7-25 s long2pos frames are not used (percentile noise bias, and the 0.7"
+bars beside a bright A0V read +4 units of scattered starlight).
 
 ### 9.9 Items still to verify
 

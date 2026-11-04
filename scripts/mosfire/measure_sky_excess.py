@@ -39,12 +39,19 @@ with the band's end-to-end throughput for the night's era (the instrument
 module's filter-free curve times the filter curve; the night's ``T_sys``)
 and the Gemini model at the frame's airmass and the night's fitted PWV
 (``pwv_fit`` of ``standards.ecsv``, else ``--pwv-default``), smoothed to the
-slit's LSF, is the model. A short CDS frame carries an additive electronic
-pedestal (about -100 e- per pixel in a 1.5 s frame, the same in the closed
-bars and, 13 ADU lower, in the reference pixels; it does not scale with the
-exposure), which is measured per spectral row in the closed-bar columns
-next to each slit and subtracted (a 46-bar long slit has none to measure,
-and its frames are long).
+slit's LSF, is the model. A CDS frame carries an additive electronic pedestal
+(the reset level), read in the raw frame's 4-pixel reference border: about
+-43 ADU (-92 e-) in a 1.45 s frame, near 0 ADU from 2.9 s on. It is
+subtracted per frame as the reference-pixel median times the gain
+(``ref_pedestal``). The closed-bar columns next to a slit are not the
+pedestal: they read the reference level in a 1.45 s frame but about 2 e-/s
+above it afterwards (leak or scattered light; +7 ADU at 2.9 s, +21 ADU at
+22 s, 2015-09-17 and 2014-06-01), and subtracting them put every long2pos
+floor 3-6 units below zero (2026-11-03). Their level is kept per frame as
+``closed_bar_e_per_s`` for diagnosis. The offset between the reference
+pixels and the open pixels is taken as zero (``REF_OFFSET_ADU``); 13 ADU
+(28 e-) would lower a 179 s frame's floor by 0.2 Gemini units, the
+systematic quoted in the meta.
 
 The between-line floor is the 10th percentile in 100 A bins over the band
 window. The inter-line H sky is about 1 Gemini unit (the Maihara
@@ -91,12 +98,15 @@ CALIB_VERSION = 'mosfire-2026.10'
 SCRIPT = 'scripts/mosfire/measure_sky_excess.py'
 BIN_A = 100.0
 PERCENTILE = 10.0
-MIN_EXPTIME_S = 5.0      # shorter frames: CDS pedestal not removed by the closed-bar estimate (measure_night)
+MIN_EXPTIME_S = 60.0     # shorter frames: the percentile noise bias, and the long2pos bars beside a bright A0V
+                         # standard carry scattered starlight (+4 units in 7-25 s frames); see measure_night
 MIN_SAMPLES = 10
 TWILIGHT_SUN_ALT = MOSFIRE.monitor['twilight_sun_alt_deg']
 MOON_ILLUM_DARK = 0.30
 MOON_MIN_DARK_FRAMES, MOON_MIN_DARK_NIGHTS = 20, 3
 PEDESTAL_MARGIN, PEDESTAL_REACH = 8, 48
+REF_OFFSET_ADU = 0.0     # open pixels relative to the reference pixels (module docstring)
+REF_PEDESTAL_UNC_ADU = 13.0  # the alternative offset (closed bars at 2.9 s): 28 e-, 0.2 units in a 179 s frame
 """Pedestal columns: at least 8 pixels from any slit edge, within 48 pixels of the measured slit (its own
 readout channel, as far as possible). A short CDS frame carries an additive pedestal (the reset anomaly:
 about -100 e- per pixel in a 1.5 s frame, comparable to the sky), which the closed CSU bars of a
@@ -203,6 +213,16 @@ def pedestal(img, left, right, i, margin=PEDESTAL_MARGIN, reach=PEDESTAL_REACH):
     return np.nanmedian(np.where(dark, img, np.nan), axis=1)
 
 
+def ref_pedestal(rawf):
+    """The frame's electronic pedestal [e-/pixel]: the median of the raw frame's 4-pixel reference border
+    plus ``REF_OFFSET_ADU``, times the detector gain (module docstring)."""
+    from pypeit.spectrographs.util import load_spectrograph
+    d = fits.getdata(rawf).astype(float)
+    ref = np.concatenate([d[:4].ravel(), d[-4:].ravel(), d[:, :4].ravel(), d[:, -4:].ravel()])
+    gain = float(np.atleast_1d(load_spectrograph('keck_mosfire').get_detector_par(1)['gain'])[0])
+    return (float(np.median(ref)) + REF_OFFSET_ADU) * gain
+
+
 def slits_to_measure(manifest, decker):
     """``[(spat_id or None, width_arcsec), ...]``: the narrowest bars of a long2pos mask, else the one long slit."""
     sp = manifest.get('specphot') or {}
@@ -217,10 +237,12 @@ def slits_to_measure(manifest, decker):
 def measure_night(date, band, std, pwv_default, grid, site, min_texp=0.0):
     """Per-frame excess records of one night; ``None`` when the night has no usable products.
 
-    Frames shorter than ``min_texp`` seconds are skipped before any processing: the
-    1.45-s and 2.9-s standard frames carry a CDS pedestal that the closed-bar
-    estimate does not remove (floors of -100 and +10 units in the H trial of
-    2026-11-03) and cannot resolve a floor of ~1 unit anyway.
+    Frames shorter than ``min_texp`` seconds are skipped before any processing: a
+    percentile of a short frame's noise is biased low, and the 0.7" bars of a
+    long2pos mask next to a bright A0V standard read about +4 Gemini units in
+    7-25 s frames (scattered starlight; the closed bars beside them carry
+    2 e-/s), against 1.0 in the 179 s long-slit science frames of 2022-01-11
+    (2026-11-03). The shipped curve rests on long science frames.
     """
     night = paths.night_dir('mosfire', date, band=band)
     raw_dir = paths.night_dir('mosfire', date, 'raw', band=band)
@@ -278,7 +300,8 @@ def measure_night(date, band, std, pwv_default, grid, site, min_texp=0.0):
         for s1 in sorted(sci.glob(f'spec1d_{Path(f["filename"]).stem}-*.fits')):
             for so in SpecObjs.from_fitsfile(str(s1), chk_version=False):
                 objs.append((float(so['SPAT_PIXPOS']), float(so['FWHM'] or 5.0)))
-        sb_stack, model_stack, widths, peds, n_cols = [], [], [], [], 0
+        sb_stack, model_stack, widths, peds, cbars, n_cols = [], [], [], [], [], 0
+        ref_ped = ref_pedestal(rawf)
         for spat_id, width in slits:
             mask = mo.central_rows_mask(slits_files[0], norm.shape, spat_ids=None if spat_id is None else [spat_id])
             cols_ok = mask.any(axis=0)
@@ -288,9 +311,10 @@ def measure_night(date, band, std, pwv_default, grid, site, min_texp=0.0):
             if cols.size < 3:
                 continue
             i_slit = int(np.argmin(np.abs(spat_ids - (spat_id if spat_id is not None else np.median(cols)))))
-            ped = pedestal(img_e, left, right, i_slit)
-            peds.append(np.nan if ped is None else float(np.nanmedian(ped)) / texp)
-            img = img_e - (0.0 if ped is None else ped[:, None])
+            cb = pedestal(img_e, left, right, i_slit)          # closed-bar level, diagnostic only (docstring)
+            cbars.append(np.nan if cb is None else float(np.nanmedian(cb)) / texp)
+            peds.append(ref_ped / texp)
+            img = img_e - ref_ped
             img = np.where(norm > 0, img / texp / np.where(norm > 0, norm, 1.0), np.nan)
             sky_e = np.nanmedian(np.where(mask[:, cols], img[:, cols], np.nan), axis=1)
             wave = np.nanmedian(np.where(mask[:, cols], waveimg[:, cols], np.nan), axis=1)
@@ -321,6 +345,7 @@ def measure_night(date, band, std, pwv_default, grid, site, min_texp=0.0):
                      'moonlit': (m_alt > 0) and (m_illum >= MOON_ILLUM_DARK),
                      'slit_width_arcsec': float(np.median(widths)), 'n_slits': len(sb_stack),
                      'pedestal_e_per_s': float(np.nanmedian(peds)) if np.isfinite(peds).any() else np.nan,
+                     'closed_bar_e_per_s': float(np.nanmedian(cbars)) if np.isfinite(cbars).any() else np.nan,
                      'n_columns': int(n_cols), 'weight': texp * n_cols, 'sb': sb_med, 'model_sb': model_med,
                      'bin_A': cen, 'measured': meas_floor, 'model': model_floor, 'excess': meas_floor - model_floor})
     return {'night': date, 'era': era.name, 'pwv_mm': pwv, 'pwv_source': pwv_src, 'throughput_file': th['file'],
@@ -381,6 +406,7 @@ def main(argv=None):
                                    'moon_sep_deg': np.nan if f['moon_sep_deg'] is None else f['moon_sep_deg'],
                                    'moonlit': f['moonlit'], 'slit_width_arcsec': f['slit_width_arcsec'],
                                    'n_slits': f['n_slits'], 'pedestal_e_per_s': f['pedestal_e_per_s'],
+                                   'closed_bar_e_per_s': f['closed_bar_e_per_s'],
                                    'wave_A': float(c), 'measured': me, 'model': mo_, 'excess': ex})
         r['used'], r['twilight_excluded'], r['skipped'] = used, twi, skipped
         per_night.append(r)
@@ -468,6 +494,9 @@ def main(argv=None):
         'frames': f'all non-twilight on-sky frames (Sun below -18 deg at mid-exposure) of >= {a.min_texp:g} s; objects masked to +-3 FWHM; '
                   'long2pos masks measured in their narrowest bars',
         'min_exptime_s': a.min_texp,
+        'pedestal': f'per frame, the raw reference pixels + {REF_OFFSET_ADU:g} ADU times the gain (module docstring); '
+                    f'an offset of {REF_PEDESTAL_UNC_ADU:g} ADU instead would lower the floor of a 179 s frame by '
+                    f'about 0.2 units',
         'moon_included': moon_included, 'moon_rule': 'none (H and K use all frames)' if not a.moon_cut else
         f'dark frames (Moon below the horizon or illuminated < {MOON_ILLUM_DARK:.0%}) when >= {MOON_MIN_DARK_FRAMES} '
         f'over >= {MOON_MIN_DARK_NIGHTS} nights, else all frames',

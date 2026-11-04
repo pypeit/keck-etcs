@@ -76,6 +76,7 @@ import inspect_sensfunc  # noqa: E402
 
 from keck_etcs import paths, provenance  # noqa: E402
 from keck_etcs.instruments import mosfire as mosfire_module  # noqa: E402
+from keck_etcs.calib.harvest import slit_of_night, WIDE_SLIT_ARCSEC  # noqa: E402
 
 INSTRUMENT = 'mosfire'
 THRU_RANGE = inspect_sensfunc.THRU_RANGE          # the J range (S4b); per band from gate_windows() since S23d
@@ -218,9 +219,17 @@ def main(date, standard=None, reference=None, json_out=None, update_manifest=Fal
         results.append(gate('zp_finite', pod['zp_finite_in_window'],
                             f"zero point finite over {pod['zp_range_A']} A (window {zp_window[0]:.0f}-{zp_window[1]:.0f} A)"))
         t = pod['thru_median_window']
-        results.append(gate('thru_median', t is not None and thru_range[0] <= t <= thru_range[1],
+        in_range = t is not None and thru_range[0] <= t <= thru_range[1]
+        # a narrow-slit standard (a validation night's, design 9.7) measures slit loss, not throughput: the
+        # harvest flags its row narrow and combine skips it, so the range is advisory there (S24b: GD153
+        # 2022-01-11 through the 1" slit at 0.17 against the era's 0.33, the star off the slit centre)
+        width, _ = slit_of_night(m, std)
+        narrow = width is not None and width < WIDE_SLIT_ARCSEC and t is not None
+        results.append(gate('thru_median', in_range or narrow,
                             f'median throughput over {zp_window[0]:.0f}-{zp_window[1]:.0f} A = '
-                            f'{t if t is None else round(t, 4)} (allowed {thru_range})'))
+                            f'{t if t is None else round(t, 4)} (allowed {thru_range})'
+                            + (f'; advisory: {width:.1f}" slit measures slit loss, not throughput (row flagged narrow)'
+                               if narrow and not in_range else '')))
 
     # 5-7. reference
     ref_info = None

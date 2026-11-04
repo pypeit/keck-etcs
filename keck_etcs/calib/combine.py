@@ -130,8 +130,12 @@ def combine_era(rows, curves, era, filters, bands=None, group=None):
     """
     in_group = (lambda r: True) if group is None else (
         lambda r: bool(bands) and str(r['filter']) in bands and bands[str(r['filter'])].group_name == group)
-    sel = [r for r in rows if in_era(r['date'], era) and 'excluded' not in str(r['flag']) and in_group(r)]
-    prior = [r for r in rows if in_era(r['date'], era) and 'excluded_3mad' in str(r['flag']) and in_group(r)]
+    # rows flagged excluded_* (nonlinear, 3mad) or narrow (a narrow-slit standard measures slit loss, not
+    # throughput: harvest; S24b, GD153 2022-01-11 through the 1" slit at 0.17) take no part
+    sel = [r for r in rows if in_era(r['date'], era) and 'excluded' not in str(r['flag'])
+           and 'narrow' not in str(r['flag']) and in_group(r)]
+    prior = [r for r in rows if in_era(r['date'], era) and 'excluded_3mad' in str(r['flag'])
+             and 'narrow' not in str(r['flag']) and in_group(r)]
     per_row = []
     for r in sel + prior:
         fw, ft, hp = filters[str(r['filter'])]

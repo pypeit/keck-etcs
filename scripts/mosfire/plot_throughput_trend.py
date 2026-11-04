@@ -68,10 +68,10 @@ def main(argv=None):
     if a.png is None:
         a.png = str(REPO / 'docs' / 'figures' / f'mosfire_throughput_trend{"" if group == "J" else "_" + group}.png')
     rows = load(group)
-    use = np.array(['excluded' not in str(f) for f in rows['flag']])
+    use = np.array([('excluded' not in str(f)) and ('narrow' not in str(f)) for f in rows['flag']])   # narrow: slit loss, not throughput
     eras = MOSFIRE.eras
     window = MOSFIRE.common_window(group)
-    print(f'group {group}: {len(rows)} rows, {int(use.sum())} usable (not excluded); common window {window} A')
+    print(f'group {group}: {len(rows)} rows, {int(use.sum())} usable (not excluded, not narrow); common window {window} A')
     print('thru_common (filter-free), usable rows:')
     for s in trend.era_stats(list(rows['date'][use]), list(rows['thru_common'][use]), eras):
         print('  ' + fmt(s))

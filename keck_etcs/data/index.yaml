@@ -12,10 +12,10 @@ files:
       XTcalc v2.3; 12 (airmass, PWV) grids, flux-conserving rebin to 0.05 nm over 950-2450 nm
   mosfire/throughput/standards.ecsv:
     calib_version: mosfire-2026.10-dev
-    created: '2026-11-02T23:51:04Z'
-    sha256: 1c9abfac3115cba3c324618203017141db64dba73d3c97e6d39c46875db80300
+    created: '2026-11-04T00:16:26Z'
+    sha256: 18d1546f1d3a23e619b67df927759631260c9cab4c89107eb2cfe71e5c286970
     script: scripts/mosfire/harvest_sens.py --merge
-    provenance: 53 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
+    provenance: 55 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
       in mosfire/throughput/standards/
   mosfire/lsf_measurements.ecsv:
     calib_version: mosfire-2026.10-dev
@@ -31,10 +31,10 @@ files:
     provenance: J2 OH monitor-line ranking (design 4.9.4); 4 lines frozen into MONITOR (S15a)
   mosfire/monitor/calib_monitor.ecsv:
     calib_version: mosfire-2026.10-dev
-    created: '2026-11-02T23:51:00Z'
-    sha256: 0ad3e6cce2465be5194d1170b1816bf3a6943df11231025c1ccf0c1fa6bb1e8d
+    created: '2026-11-04T00:16:25Z'
+    sha256: 9f954415c4652f7c25526281a3ee37d0cb0723cc266388abbe4c7a50ae58fb97
     script: scripts/mosfire/harvest_sens.py --merge
-    provenance: 8721 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
+    provenance: 8858 calibration-monitor rows (keck_etcs.calib.monitor, design 4.9)
   mosfire/filters/mosfire_Y.ecsv:
     calib_version: mosfire-2026.10
     created: '2026-10-05T01:36:11Z'
@@ -185,25 +185,35 @@ files:
     calib_version: mosfire-2026.10-dev
     bands:
     - H
-    created: '2026-11-03T16:37:22Z'
-    sha256: 8023149080b804ceed31ba301aa44f2b1e3f0cd89362502d70bec30fed8575a3
+    created: '2026-11-04T00:22:01Z'
+    sha256: 7bd18d163a64b4a256c0d92ddff09e5de00be3b011290ed4a024bf5fee3298e2
     script: scripts/mosfire/combine_throughput.py
-    pypeit_version: 2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc
-    provenance: 'H group, era 2012-04..2016-09: median of 8 standard(s) (Feige110 2014-06-01, *55Dra 2014-10-05,
-      HD95126 2014-11-23, HD18571 2015-09-04, HD159008 2015-09-17, HD54601 2015-10-22, HD149595 2016-04-15,
-      HD74721 2016-04-17); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9;
-      PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
+    pypeit_version: 2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc,2.0.2.dev1226+g54e68d776
+    provenance: 'H group, era 2012-04..2016-09: median of 7 standard(s) (Feige110 2014-06-01, HD95126
+      2014-11-23, HD18571 2015-09-04, HD54601 2015-10-22, HD111744 2016-01-08, HD149595 2016-04-15, HD74721
+      2016-04-17); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9; PypeIt 54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38,
+      5e92ff9416105763b1aae2ee39bde1fa8321c919, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
   mosfire/throughput/mosfire_thru_H_2017-2025.ecsv:
     calib_version: mosfire-2026.10-dev
     bands:
     - H
-    created: '2026-11-03T16:37:22Z'
-    sha256: 01a40cc73a9808a830cfb0b4a960a7888001b801aef178b92c59f3ae20d7ba8b
+    created: '2026-11-04T00:22:01Z'
+    sha256: 10e2d49bd80ce50123a3ce4e60f137d2d82cc6a277f937af341d4f69f8dda4f3
     script: scripts/mosfire/combine_throughput.py
     pypeit_version: 2.0.2.dev1223+gb0447b74e,2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc
-    provenance: 'H group, era 2017-02..2025-02: median of 13 standard(s) (HD99966 2017-04-18, HD160512
-      2017-05-04, HD133772 2017-06-15, HD18571 2017-09-08, HD74721 2017-11-06, HD47944 2018-01-09, BD+252478
-      2018-06-02, HD65158 2020-11-26, HD21379 2021-09-30, HD98884 2023-02-05, HD79108 2024-12-24, HD44128
-      2024-12-26, HD21875 2024-12-30); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.7, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8,
-      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9; PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919,
-      b0447b74ea01ac0ba8496817afaa336e573791c0, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
+    provenance: 'H group, era 2017-02..2025-02: median of 10 standard(s) (HD99966 2017-04-18, HD133772
+      2017-06-15, HD18571 2017-09-08, HD74721 2017-11-06, BD+252478 2018-06-02, HD65158 2020-11-26, HD21379
+      2021-09-30, HD79108 2024-12-24, HD44128 2024-12-26, HD21875 2024-12-30); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.7,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9;
+      PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919, b0447b74ea01ac0ba8496817afaa336e573791c0, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
+  sky/mosfire_sky_excess_H.ecsv:
+    calib_version: mosfire-2026.10-dev
+    bands:
+    - H
+    created: '2026-11-04T00:32:56Z'
+    sha256: ce3b288c7c993af8d4d34974d6d3b396f6cc3e6cd8066da783d8a1b9e1abed59
+    script: scripts/mosfire/measure_sky_excess.py
+    pypeit_version: 2.0.2.dev1226+g54e68d776
+    provenance: 'H sky continuum excess over the Gemini model (D61): median over 1 night(s), 8 frame(s);
+      T_sys from mosfire/throughput/mosfire_thru_H_2017-2025.ecsv; images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10'

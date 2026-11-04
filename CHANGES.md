@@ -86,9 +86,10 @@ fed it.
   - `plot_throughput_trend.py --group H`: the trend of one band group
     (per-band common window, markers per band, `mosfire_throughput_trend_H.png`);
     the J output is unchanged (before, the H rows leaked into the J
-    statistics). H: era medians 0.330 and 0.330, MAD 2.4 and 2.5 percent,
-    slopes -2.8 +- 2.5 and +0.2 +- 0.5 percent per year; residuals against
-    PWV 2.1 sigma (21 rows), airmass 0.7 sigma.
+    statistics). H after the sweep-2 merge: era medians 0.334 and 0.329,
+    MAD 1.6 and 1.9 percent, slopes -0.3 +- 1.7 and -0.0 +- 0.3 percent per
+    year (7 and 10 standards); residuals against PWV 1.5 sigma, airmass
+    0.5 sigma.
   - `saturation.frac_pix_nonlinear_1pct` (D62): the fraction of spectral
     pixels whose brightest spatial pixel exceeds 26k ADU in one frame, in
     `snr.saturation_peak`, the output schema, the field reference and the
@@ -101,16 +102,20 @@ fed it.
     bracket; `compute` warns for H and K (`Band.sky_excess_warn`) while the
     band has no curve. `scripts/mosfire/measure_sky_excess.py --band`
     measures the curve from our frames: raw-frame sky per slit (the 0.7"
-    bars of a long2pos mask), the CDS pedestal subtracted from the closed
-    bars next to each slit, 10th-percentile floors per 100 A of the
-    exposure-weighted stack of all non-twilight frames against the stacked
-    Gemini model, Moon altitude, illumination and separation recorded per
-    frame (`--moon-cut` is the Y rule); frames shorter than `--min-texp`
-    (5 s) are skipped, their CDS pedestal is not removed by the closed-bar
-    estimate. No H curve is shipped yet: the
-    inter-line H floor is about 1 Gemini unit and the standards' 1-10 s
-    frames cannot resolve it; the curve waits for the long science frames
-    of the H validation night.
+    bars of a long2pos mask, or the one long slit), the frame's CDS
+    pedestal from the raw reference pixels (the closed bars beside a slit
+    carry about 2 e-/s of light and are not the pedestal; kept as
+    `closed_bar_e_per_s`), 10th-percentile floors per 100 A of the
+    exposure-weighted stack against the stacked Gemini model, Moon altitude,
+    illumination and separation per frame (`--moon-cut` is the Y rule);
+    frames shorter than `--min-texp` (60 s) are skipped (percentile noise
+    bias; the long2pos bars beside a bright A0V read +4 units of scattered
+    starlight in 7-25 s frames). **H curve shipped**
+    (`sky/mosfire_sky_excess_H.ecsv`, `mosfire-2026.10-dev`): 1.00 +- 0.01
+    Gemini units over 14660-17970 A (measured floor 1.51, Gemini 0.46) from
+    the 8 x 179 s long-slit frames of 2022-01-11; a 13 ADU pedestal offset
+    would lower it by 0.2 (meta). `compute` for H adds it; the D61 warning
+    is gone for H.
   - `compare_xtcalc.py --band H`: the XTcalc comparison per band
     (`xtcalc_comparison_H.ecsv`); XTcalc's extrapolated transmission is
     clipped at zero (negative beyond the H file's edges; the J tables
@@ -127,6 +132,30 @@ fed it.
     `make_night_manifest.py validation --band H` writes
     `nights_validation_H.csv` (2022-01-11, GD153 1", J1532+2237, `spec2d
     = 1`) for the download and night Jobs (nautilus README section 7).
+  - **H validation night done** (design 9.7, 9.8 item 3): J1532+2237,
+    2022-01-11, 8 x 179 s ABBA MCDS-16 through the 1" long slit, seeing
+    0.93", intrinsic H 18.22 AB. ETC/measured S/N per pixel 0.81 over
+    14660-17970 A and 0.91 between the OH lines (PASS 20 and 10 percent);
+    signal 1.02. The night's OH lines are at 0.29 of the Gemini mean
+    (pre-dawn frames) and the inter-line sky at 0.81; with that sky scale
+    the ratios are 0.88 and 0.97. The standard GD153 sat off the centre of
+    the 1" slit (every frame: telluric shift -2 pixels, end-to-end
+    throughput 0.17 against the era's 0.33, model and CALSPEC agree to
+    0.3 percent), so `validate_j0841.py --sens-scale era` raises the
+    night's sensfunc to the era curve (factor 1.90, rms 4 percent over the
+    window; `scaled_sens`), and `--science-dir H_local_sci` takes the
+    quasar spec1d from a local re-extraction with PypeIt's default
+    `snr_thresh` (the pod's 80 found no object in the 179 s frames).
+  - Pipeline changes from that night: `combine_era` skips rows flagged
+    `narrow` (a narrow-slit standard measures slit loss; a stale
+    `excluded_3mad` on such a row is dropped by `combine_throughput.py`);
+    `plot_throughput_trend.py` skips them too; `gates.py` makes
+    `thru_median` advisory for a narrow-slit standard; `reduce_standard.py
+    --findobj-snr` and the night Job passes `--findobj-snr 10` for a
+    `spec2d = 1` row; `harvest_sens.py --merge` of 2016-01-08 (sweep 2,
+    HD111744 4" bar) and 2022-01-11 (GD153, flagged `pwv_weak,narrow`).
+    The 3-MAD rule (D22) now excludes 8 of the 25 wide-slit H rows (MAD
+    1.6-1.9 percent, so 3 MAD is 5-6 percent): worth a look.
   - `nautilus/night_failures.py --manifest --retry-data`, rows keyed by
     (night, band); `nautilus/status_table.py` `band` column;
     `check_standards_table.py` keyed by (night, band), bands not yet
@@ -543,6 +572,7 @@ All images are under `gitlab-registry.nrp-nautilus.io/profx/`. Checks:
 
 ## Regression fixtures
 
+- 2026-11-03: regression fixtures regenerated (keck_etcs 0.2.10, throughput mosfire-2026.10, mosfire-2026.10-dev): S24b: H era curves rebuilt with the merged 2016-01-08 row (7 and 10 standards) and the H sky continuum excess (D61, 1.0 Gemini units from the 2022-01-11 long frames) now in compute; J, J2 and line fixtures unchanged
 - 2026-11-03: regression fixtures regenerated (keck_etcs 0.2.10, throughput mosfire-2026.10, mosfire-2026.10-dev): S24b: saturation.frac_pix_nonlinear_1pct added to every output (D62; the J, J2 and line numbers are unchanged, only the new key) and the H fixture reference_H.json frozen from examples/H_point.json on the H era curves (no sky-excess curve yet)
 - 2026-10-27: regression fixtures regenerated (keck_etcs 0.2.5, throughput mosfire-2026.10): S23b release mosfire-2026.10 (J-only, D49): same numbers; calib_version tag and the throughput file name in one warning changed (mosfire_thru_2025-on.ecsv -> mosfire_thru_J_2025-on.ecsv); compare_release_outputs.py against mosfire-J-2026.10: largest relative difference 0
 - 2026-10-08: regression fixtures regenerated (keck_etcs 0.2.5, throughput mosfire-J-2026.10): S16 first calibration release mosfire-J-2026.10: era curves for 2012-04..2016-09, 2017-02..2025-02 and 2025-04.. from 14 standards (combine cuts S16-1(b): J rows T >= 0.9 peak, A0V rows >= 11900 A; 3-MAD on 11900-12450 A); the default (latest) era is now 2025-04.., completed over J from 2017-2025 (Instrument.throughput_for_window); D25 LSF quadrature refit sqrt((w/0.292)^2 + 1.08^2) pix (+3.9 percent at 0.7 arcsec)

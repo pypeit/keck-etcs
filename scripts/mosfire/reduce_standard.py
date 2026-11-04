@@ -126,6 +126,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
@@ -895,6 +896,10 @@ def main(args):
         specphot = any('long2pos_specphot' in m for m in masks)
         long2pos_only = any('long2pos' in m for m in masks) and not specphot
         par_text = Path(args.par).read_text() if args.par else (LONG2POS_PAR if long2pos_only else DEFAULT_PAR)
+        if args.findobj_snr is not None and 'snr_thresh' in par_text:
+            # a validation night (S24b): the science target is faint (J1532+2237 at H, 179 s frames, no
+            # object at the standards' snr_thresh 80); PypeIt's default 10 finds it and the standard alike
+            par_text = re.sub(r'snr_thresh = [0-9.]+', f'snr_thresh = {args.findobj_snr:g}', par_text)
         if specphot and 'use_maskdesign' not in par_text:
             par_text = with_slitedges(par_text, SPECPHOT_SLITEDGES)
         manifest['par_block'] = par_text
@@ -1076,6 +1081,9 @@ if __name__ == '__main__':
                              'in the raw headers); Y, H and K products go under mosfire/<night>/<band>/ (D55)')
     parser.add_argument('--par', help='File with the PypeIt parameter block (default: built-in, '
                                       'from the dev-suite J2 template)')
+    parser.add_argument('--findobj-snr', type=float, default=None,
+                        help='[[findobj]] snr_thresh in place of the built-in 80 (validation nights with a faint '
+                             'science target: 10, PypeIt\'s default; the night Job passes it for spec2d = 1 rows)')
     parser.add_argument('--sens', help='.sens file; run pypeit_sensfunc on each standard')
     parser.add_argument('--scratch', metavar='DIR', help='Use DIR as the data root for this run')
     parser.add_argument('--link-raw-from', metavar='DIR',

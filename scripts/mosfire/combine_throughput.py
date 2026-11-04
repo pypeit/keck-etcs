@@ -118,7 +118,14 @@ def main(argv=None):
             for lam in sorted(set(nodes) | {window[0], window[1]}):
                 if t['wave'][0] <= lam <= t['wave'][-1]:
                     print(f'    {lam:.0f} A: thru {np.interp(lam, t["wave"], t["thru_median"]):.4f}')
-    if excluded:
+    # a narrow-slit row takes no part in combine_era (S24b); an excluded_3mad flag an earlier combine gave it
+    # is stale and dropped
+    stale = [r for r in rows if 'narrow' in str(r['flag']) and 'excluded_3mad' in str(r['flag'])]
+    for r in stale:
+        r['flag'] = ','.join(f for f in str(r['flag']).split(',') if f != 'excluded_3mad') or 'ok'
+    if stale:
+        print(f"dropped a stale excluded_3mad from narrow-slit row(s): {[(str(r['standard']), str(r['date'])) for r in stale]}")
+    if excluded or stale:
         for r in rows:
             if (str(r['standard']), str(r['date'])) in excluded and 'excluded_3mad' not in str(r['flag']):
                 r['flag'] = 'excluded_3mad' if str(r['flag']) in ('ok', '') else f"{r['flag']},excluded_3mad"

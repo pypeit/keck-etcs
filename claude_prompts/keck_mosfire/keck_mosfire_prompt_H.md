@@ -1713,3 +1713,111 @@ validation night (`nights_validation_H.csv`, download Job then night Job);
 then I sync, verify (0.2.10 digest, pin `54e68d7`), merge, run
 `validate_j0841.py --band H ...` and `measure_sky_excess.py --band H`,
 regenerate `reference_H.json` (a `CHANGES.md` note) and close prompt 6.
+
+### 2026-11-03 (Prompt #6 / S24b: sweep 2 merged, H validation night reduced and validated, H sky-excess curve shipped)
+
+Session on Claude Fable 5.1. The user launched sweep 2 (`keck-etcs-nights-sweep2`,
+20160108, Complete in 28 min), the KOA download of 2022-01-11 (Complete,
+10 min) and the night Job `keck-etcs-nights-validation-h` (Failed after
+130 min: the reduction itself succeeded in 1553 s and pushed 127 files,
+the gates failed on `thru_median` 0.1683 against the allowed 0.17-0.54).
+
+- **Why GD153 gave half the throughput.** Not the exposure time (COADDS 1,
+  TRUITIME 59.6 s, MCDS-16 as the J nights), not the model (PypeIt's
+  xshooter `fGD153.dat`, the file the J nights used, agrees with CALSPEC
+  `gd153_stiswfcnic_004` to 0.3 percent over 15000-17500 A), not one frame
+  (the four frames at both nod positions give 0.159-0.178; counts against
+  the model directly give end-to-end 0.18). The star sat off the centre of
+  the 1" slit: every frame's telluric fit carries a wavelength shift of
+  -1.7 to -2.7 pixels while the OH solution is anchored to the slit
+  centre (the 0.7"-slit standard HIP 17971 shows +0.3 and -0.1; the 4"
+  bars wander to the +-5 bound, so the shift is qualitative only), and a
+  0.4" offset at 0.78" seeing passes 0.6 of the light that a centred star
+  would, times the 0.87 of a centred 1" slit: 0.17 / 0.33 = 0.52. Design
+  9.7 had accepted a narrow-slit standard for H; it is worse than slit
+  loss, and no model corrects it. Diagnostics in the session scratchpad
+  (`p6/diag_gd153.py`, `p6/tell_shift_scan.py`).
+- **Pipeline changes for a narrow-slit validation night.** `harvest.py`
+  already flags such a row `narrow`, but `combine_era` only skipped
+  `excluded*` rows, so GD153 entered the 3-MAD statistics (and was clipped
+  by luck at 0.17); now `narrow` rows take no part, a stale `excluded_3mad`
+  on one is dropped by `combine_throughput.py`, the trend skips them, and
+  `test_combine.py` covers it. `gates.py`: `thru_median` is advisory when
+  the standard's slit is narrower than `WIDE_SLIT_ARCSEC` (the night now
+  gates PASS locally). `reduce_standard.py --findobj-snr` replaces the
+  built-in `snr_thresh = 80`; `night_job.yaml` and `validate_job.yaml` pass
+  `--findobj-snr 10` for a `spec2d = 1` row (the quasar escaped 80 in every
+  179 s frame; `validate_manifests.py` MANIFESTS OK). The harvest row of
+  GD153 was made locally (`harvest_sens.py harvest 20220111 --band H
+  --standard GD153`: thru 0.1705, pwv_fit 3.02, flag `pwv_weak,narrow`) and
+  merged with the sweep-2 row (HD111744 2016-01-08, 4" bar, `pwv_weak`).
+- **Quasar re-extraction and validation.** The 8 science frames were
+  re-reduced locally under the night's `H_local_sci` directory (the pod's
+  PypeIt file minus its 4 standard rows and its `[[findobj]]` block, a copy
+  of the pod's Calibrations reused, 12 min): one object per frame at both
+  nod signs. `validate_j0841.py` gained `--science-dir` (sibling products
+  directory for the science spec1d) and `--sens-scale era`
+  (`scaled_sens`: the night's zero point raised by 2.5 log10 k, k the
+  median of era curve / night curve over the band window, here 1.904 with
+  4 percent rms; the copy keeps the night's telluric model; the factor,
+  rms, era file and sha in `provenance.sens_scale`). Result
+  (`validation_j1532p2237_summary.json`, figure, bins): seeing 0.93",
+  intrinsic H 18.22 AB, measured S/N per pixel 25.8 (frames in quadrature
+  26.2), ETC 22.6: ETC/measured 0.812 over 14660-17970 A and 0.909 between
+  the OH lines, PASS 20 and 10 percent; signal 1.017. The night's OH lines
+  are at 0.288 of the Gemini mean (frames at 04:56-05:21 HST) and the
+  inter-line sky at 0.81; with `sky_scale` 0.81 the ratios are 0.88 and
+  0.97. D16 effective aperture 1.34 FWHM (band 0.82). The J case: 0.98 and
+  0.99 with OH lines at 0.89 (S11). Milestone 9.8 item 3 is met for H; the
+  sky brightness of the night, not the noise model, is what the 19 percent
+  is made of.
+- **H sky-excess curve (D61) shipped.** `measure_sky_excess.py --band H`:
+  three things learned. (1) The closed bars beside a slit are not the CDS
+  pedestal: they read the reference-pixel level in a 1.45 s frame but 2
+  e-/s above it afterwards (+7 ADU at 2.9 s, +21 ADU at 22 s; leak or
+  scattered light), and subtracting them put every long2pos floor 3-6
+  units below zero; the pedestal is now the raw frame's reference-pixel
+  median times the gain, per frame (-92 e- at 1.45 s, about 0 from 2.9 s
+  on), the closed-bar level kept as `closed_bar_e_per_s`. (2) The 0.7" bars
+  of a long2pos mask beside a bright A0V read +4 units in 7-25 s frames
+  (scattered starlight), against 1.0 in the long-slit science frames, so
+  `--min-texp` defaults to 60 s and the shipped curve rests on the 8 x 179
+  s frames of 2022-01-11 (1.45e6 column-seconds): excess 1.00 +- 0.01
+  Gemini units band-median (per 100 A bin 0.2-2.5, the measured floor 1.51
+  against Gemini's 0.46; the Maihara continuum), a 13 ADU pedestal offset
+  would lower it by 0.2 (in the meta). (3) The quasar's trace (5 of 125
+  columns) is not masked there and does not move a column median.
+  `sky/mosfire_sky_excess_H.ecsv` (`mosfire-2026.10-dev`), the frames
+  table under `$KECK_ETCS_DATA/mosfire/sky_excess/`; `compute` for H adds
+  it and no longer warns.
+- **Era curves after the merge.** `combine_throughput.py --group H --dev`
+  was run from the committed flags (today's intermediate runs had ratcheted
+  the sticky `excluded_3mad` flags; `p6/restore_flags.py` reset them before
+  the one canonical run): 2012-2016 7 used (0.334), 2017-2025 10 used
+  (0.329); 8 of the 25 wide-slit rows are now `excluded_3mad` (MAD 1.6-1.9
+  percent, so 3 MAD is 5-6 percent: *55 Dra, HD 159008 2015-09-17, HD
+  160512, HD 47944, HD 98884 joined the earlier four). D22's rule with a
+  tight MAD and sticky flags is aggressive and order-dependent; for the
+  user to weigh. Trend: MAD 1.6 and 1.9 percent, slopes -0.3 +- 1.7 and
+  -0.0 +- 0.3 percent per year, PWV residual 1.5 sigma;
+  `mosfire_throughput_trend_H.png` redrawn. `reference_H.json` regenerated
+  (CHANGES note); `test_backup_products.py` repointed (2014-10-05 is
+  excluded now; the narrow 2022-01-11 night stays in the release set).
+- **Checks.** pytest 145 passed, 1 skipped; `check_docs.py` ALL CHECKS
+  PASS (9 `-dev` products); `validate_manifests.py` OK;
+  `verify_nights.py 20160108 20220111 --band H`: 20160108 OK (6 products,
+  harvest row), 20220111 reports the pod's `gate failed` status and no pod
+  harvest row (expected; the products match their sha256). The sweep-2
+  night's products and the validation night's products, raw frames and
+  Calibrations are local.
+
+**For the user.** Commit (new: `keck_etcs/data/sky/mosfire_sky_excess_H.ecsv`;
+the H era files, `standards.ecsv`, `index.yaml`, `reference_H.json`, the
+trend figure and the scripts/docs above changed). The data directory holds
+the validation outputs, the `H_local_sci` re-extraction and the sky-excess
+frames table: `backup_products.py --run` when convenient (the night-level
+`validation/` and `H_local_sci/` are outside the backup set). Two things to
+weigh: the 3-MAD exclusion rate in H, and whether a K validation night
+should be launched now that the narrow-slit path is in place (the next
+image build carries `--findobj-snr`, the advisory gate and the combine
+fix). Prompt 6 is complete.

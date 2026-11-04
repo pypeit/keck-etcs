@@ -164,7 +164,9 @@ spec:
               rm -f "$NIGHT_DIR/run_manifest.json"
             fi
             log REDUCE
-            python $SRC/scripts/mosfire/reduce_standard.py "$NIGHT" --scratch "$KECK_ETCS_DATA" --s3-pull
+            # a validation row (spec2d = 1) carries a faint science target: PypeIt's default object-finding
+            # threshold (10) in place of the standards' 80 (S24b, 2022-01-11)
+            python $SRC/scripts/mosfire/reduce_standard.py "$NIGHT" --scratch "$KECK_ETCS_DATA" --s3-pull $([ "$SPEC2D" = 1 ] && echo "--findobj-snr 10")
             RC=$?
             if [ $RC -ne 0 ]; then
               case $RC in 10) S="no calibs";; 11) S="setup failed";; 13) S="no trace";; 14) S="sens failed";; 15) S="pin check failed";; 16) S="pull failed";; *) S="reduce failed";; esac

@@ -74,18 +74,21 @@ SENS = 'sens_LDS749B_20220409.fits'
 BIN_A = 50.0
 CRIT_RANGE = (11170.0, 12600.0)
 J0841 = {'band': 'J2', 'date': DATE, 'target': 'J0841+3814', 'standard': 'LDS749B', 'frames': FRAMES,
-         'sens': SENS, 'crit': CRIT_RANGE, 'slug': 'j0841'}
+         'sens': SENS, 'crit': CRIT_RANGE, 'slug': 'j0841', 'sci_dir': None, 'sens_scale': None}
 """The S11 case (design 6.1): the defaults of :func:`config`; ``crit`` is the J2 half-power band."""
 
 
-def config(band=None, date=None, target=None, standard=None, frames=None):
+def config(band=None, date=None, target=None, standard=None, frames=None, sci_dir=None, sens_scale=None):
     """The validation case: the S11 J0841 night by default, else another (band, night, target, standard) (S24b).
 
     ``frames`` default to the night's science frames of ``target`` in the band's run manifest; ``sens`` is
     ``sens_<standard>_<date>.fits`` of the band's products; ``crit`` (the criterion range of D18) is the band's
-    window (``MOSFIRE.band_window``; J2's half-power band for the S11 case)."""
+    window (``MOSFIRE.band_window``; J2's half-power band for the S11 case). ``sci_dir`` names a sibling
+    products directory holding the science ``redux/Science/spec1d_*`` when they were re-extracted locally
+    (the pod's ``snr_thresh = 80`` is for standards; e.g. ``H_local_sci``); ``sens_scale = 'era'`` raises a
+    narrow-slit standard's sensfunc to the era curve (:func:`scaled_sens`)."""
     if band is None and date is None and target is None:
-        return dict(J0841)
+        return {**J0841, 'sci_dir': sci_dir, 'sens_scale': sens_scale}
     band, date = band or J0841['band'], date or J0841['date']
     target, standard = target or J0841['target'], standard or J0841['standard']
     if frames is None:
@@ -98,7 +101,8 @@ def config(band=None, date=None, target=None, standard=None, frames=None):
     return {'band': band, 'date': date, 'target': target, 'standard': standard, 'frames': tuple(frames),
             'sens': f'sens_{standard}_{date}.fits',
             'crit': tuple(float(x) for x in MOSFIRE.band_window(band)) if band != 'J2' else CRIT_RANGE,
-            'slug': target.lower().replace('+', 'p').replace('-', 'm').replace(' ', '')}
+            'slug': target.lower().replace('+', 'p').replace('-', 'm').replace(' ', ''),
+            'sci_dir': sci_dir, 'sens_scale': sens_scale}
 LINE_FACTOR, INTER_FACTOR = 3.0, 1.25          # OH-line / interline masks on the model sky
 SMOOTH = 51
 LENGTHS = np.round(np.arange(0.6, 3.001, 0.02), 2)
@@ -114,23 +118,72 @@ def run(cmd, cwd):
         raise RuntimeError(f'{cmd[0]} failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}')
 
 
+def scaled_sens(night, work, cfg):
+    """The night's sensfunc, or (``sens_scale = 'era'``) a copy whose zero point is raised to the era curve (S24b).
+
+    A narrow-slit standard measures slit loss, not throughput (harvest flag ``narrow``; design 9.7 accepts such
+    a standard for the H and K validation nights): its zero point is ``2.5 log10(k)`` too faint, ``k`` the median
+    over the band window of the era curve over the night's filter-free curve. The copy
+    ``work/<sens>_erascaled.fits`` keeps the night's telluric model and spectral shape. The signal side of the
+    validation then rests on the era throughput (the standards' measurement); the noise side is independent.
+
+    Returns:
+        tuple: ``(path, info)``; ``info`` is None without scaling.
+    """
+    sens = night / 'sens' / cfg['sens']
+    if cfg.get('sens_scale') != 'era':
+        return sens, None
+    from pypeit.sensfunc import SensFunc
+    from keck_etcs.calib import harvest
+    band, date = cfg['band'], cfg['date']
+    era, _ = MOSFIRE.era_for_date(f'{date[:4]}-{date[4:6]}-{date[6:]}')
+    th = MOSFIRE.throughput(era, MOSFIRE.group_of(band))
+    fc = MOSFIRE.filter_curve(band)
+    s = SensFunc.from_file(str(sens), chk_version=False)
+    t = harvest.throughput_curve(np.asarray(s.wave).ravel(), np.asarray(s.zeropoint).ravel(),
+                                 fc['wave_A'], fc['transmission'])
+    lo, hi = MOSFIRE.band_window(band)
+    w, night_thru = np.asarray(t['wave'], float), np.asarray(t['thru'].filled(np.nan), float)
+    sel = (w >= lo) & (w <= hi) & np.isfinite(night_thru) & (night_thru > 0)
+    ratio = np.interp(w[sel], th['wave_A'], th['thru']) / night_thru[sel]
+    k = float(np.median(ratio))
+    dzp = 2.5 * np.log10(k)
+    s.zeropoint = s.zeropoint + dzp
+    for c in ('SENS_ZEROPOINT', 'SENS_ZEROPOINT_FIT'):
+        if s.sens is not None and c in s.sens.colnames:
+            s.sens[c] = s.sens[c] + dzp
+    out = work / sens.name.replace('.fits', '_erascaled.fits')
+    s.to_file(str(out), overwrite=True)
+    info = {'mode': 'era', 'factor': k, 'zeropoint_offset_mag': dzp, 'factor_rms_over_window': float(np.std(ratio / k)),
+            'window_A': [float(lo), float(hi)], 'night_thru_median': float(np.median(night_thru[sel])),
+            'era': era.name, 'era_file': th['file'], 'era_calib_version': th['calib_version'],
+            'era_thru_median': float(np.median(np.interp(w[sel], th['wave_A'], th['thru']))),
+            'scaled_sens': out.name, 'scaled_sens_sha256': sha(out)}
+    return out, info
+
+
 def flux_and_coadd(night, out, redo=False, cfg=None):
-    """(a): copy, flux and coadd the science frames in ``out/work``."""
+    """(a): copy, flux and coadd the science frames in ``out/work``.
+
+    Returns:
+        tuple: ``(spec1d, coadd, sens_info)``; ``sens_info`` from :func:`scaled_sens`.
+    """
     from pypeit.specobjs import SpecObjs
     cfg = cfg or config()
     work = out / 'work'
     work.mkdir(parents=True, exist_ok=True)
+    sci = night if not cfg.get('sci_dir') else night.parent / cfg['sci_dir']
     stem = cfg['target'].replace(' ', '').split('+')[0].split('-')[0] if cfg['slug'] != 'j0841' else 'J0841'
     coadd = out / f"{stem}_coadd_{cfg['date']}.fits"
     spec1d = []
     for fr in cfg['frames']:
-        src = sorted((night / 'redux' / 'Science').glob(f'spec1d_{fr}-*.fits'))[0]
+        src = sorted((sci / 'redux' / 'Science').glob(f'spec1d_{fr}-*.fits'))[0]
         dst = work / src.name
         if redo or not dst.exists():
             shutil.copy2(src, dst)
         spec1d.append(dst)
     if redo or not coadd.exists() or SpecObjs.from_fitsfile(str(spec1d[0]), chk_version=False)[0]['OPT_FLAM'] is None:
-        sens = night / 'sens' / cfg['sens']
+        sens, sens_info = scaled_sens(night, work, cfg)
         (work / f'{stem}.flux').write_text('[rdx]\n  spectrograph = keck_mosfire\n\nflux read\n    filename | sensfile\n'
                                            + ''.join(f'    {p.name} | {sens if i == 0 else ""}\n'
                                                      for i, p in enumerate(spec1d)) + 'flux end\n')
@@ -141,7 +194,9 @@ def flux_and_coadd(night, out, redo=False, cfg=None):
             'coadd1d read\n    filename | obj_id\n'
             + ''.join(f'    {p.name} | {n}\n' for p, n in zip(spec1d, names)) + 'coadd1d end\n')
         run(['pypeit_coadd_1dspec', f'{stem}.coadd1d'], work)
-    return spec1d, coadd
+    else:
+        _, sens_info = scaled_sens(night, work, cfg)
+    return spec1d, coadd, sens_info
 
 
 def measured_spectra(spec1d, coadd, grid, dlam, crit=CRIT_RANGE):
@@ -261,7 +316,9 @@ def main(redo=False, figure=True, cfg=None):
                                          'job_name', 's3_prefix')}
     prov['sens_file'] = cfg['sens']
     prov['sens_sha256'] = sha(night / 'sens' / cfg['sens'])
-    spec1d, coadd = flux_and_coadd(night, out, redo, cfg)
+    spec1d, coadd, sens_info = flux_and_coadd(night, out, redo, cfg)
+    prov['sens_scale'] = sens_info
+    prov['science_dir'] = cfg.get('sci_dir')
     prov['spec1d'] = [p.name for p in spec1d]
     std = Table.read(DATA_DIR / 'mosfire' / 'throughput' / 'standards.ecsv', format='ascii.ecsv')
     srow = std[(std['date'] == date_iso) & (std['filter'] == band)] if band != 'J2' else std[std['date'] == date_iso]
@@ -450,6 +507,10 @@ if __name__ == '__main__':
     p.add_argument('--target', help='science target as named in the run manifest (default J0841+3814)')
     p.add_argument('--standard', help='the night\'s standard, for the sensfunc name (default LDS749B)')
     p.add_argument('--frames', nargs='+', help='raw frame stems (default: the science frames of the target)')
+    p.add_argument('--science-dir', help='sibling products directory with locally re-extracted science spec1d '
+                                         '(e.g. H_local_sci; default: the band directory)')
+    p.add_argument('--sens-scale', choices=['era'], help="'era': raise a narrow-slit standard's sensfunc to the "
+                                                          'era curve (scaled_sens)')
     a = p.parse_args()
-    s = main(a.redo, not a.no_figure, config(a.band, a.date, a.target, a.standard, a.frames))
+    s = main(a.redo, not a.no_figure, config(a.band, a.date, a.target, a.standard, a.frames, a.science_dir, a.sens_scale))
     sys.exit(0 if all(s['criterion'].values()) else 1)
