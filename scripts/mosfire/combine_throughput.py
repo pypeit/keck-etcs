@@ -19,8 +19,11 @@ each era of ``keck_etcs.instruments.mosfire`` that has standards with
 (``wave, thru_median, thru_mad, n_std``; ``Instrument.throughput_file``),
 registered in ``keck_etcs/data/index.yaml`` under ``calib_version =
 CALIB_VERSION`` with the ``bands`` the file covers. Nights excluded by the
-3-MAD rule get ``excluded_3mad`` in their ``flag`` in ``standards.ecsv``.
-Eras without standards get no file; ``compute`` then uses the nearest era of
+3-MAD rule get ``excluded_3mad`` in their ``flag`` in ``standards.ecsv``;
+the flag is recomputed on every run for the groups built (one fresh pass
+over all wide-slit rows, Q&A H-5), so a row that passes the test now loses
+it, while the rows of groups not built keep theirs (S24b: J left as
+released). Eras without standards get no file; ``compute`` then uses the nearest era of
 the group that has one, with a warning, or the group's provisional
 placeholder when no era has one (S23a).
 
@@ -118,17 +121,24 @@ def main(argv=None):
             for lam in sorted(set(nodes) | {window[0], window[1]}):
                 if t['wave'][0] <= lam <= t['wave'][-1]:
                     print(f'    {lam:.0f} A: thru {np.interp(lam, t["wave"], t["thru_median"]):.4f}')
-    # a narrow-slit row takes no part in combine_era (S24b); an excluded_3mad flag an earlier combine gave it
-    # is stale and dropped
-    stale = [r for r in rows if 'narrow' in str(r['flag']) and 'excluded_3mad' in str(r['flag'])]
-    for r in stale:
-        r['flag'] = ','.join(f for f in str(r['flag']).split(',') if f != 'excluded_3mad') or 'ok'
-    if stale:
-        print(f"dropped a stale excluded_3mad from narrow-slit row(s): {[(str(r['standard']), str(r['date'])) for r in stale]}")
-    if excluded or stale:
-        for r in rows:
-            if (str(r['standard']), str(r['date'])) in excluded and 'excluded_3mad' not in str(r['flag']):
-                r['flag'] = 'excluded_3mad' if str(r['flag']) in ('ok', '') else f"{r['flag']},excluded_3mad"
+    # excluded_3mad is this run's verdict for the groups built (one fresh pass, Q&A H-5): cleared on every row
+    # of those groups' bands, then set on the rows combine_era excluded now
+    built_bands = {b for g in groups for b in MOSFIRE.group_bands(g)}
+    cleared, flagged = [], []
+    for r in rows:
+        if str(r['filter']) not in built_bands:
+            continue
+        key = (str(r['standard']), str(r['date']))
+        flags = [f for f in str(r['flag']).split(',') if f and f != 'excluded_3mad']
+        if key in excluded:
+            flags.append('excluded_3mad')
+        new = ','.join(f for f in flags if f != 'ok') or 'ok'
+        if new != str(r['flag']):
+            r['flag'] = new
+            (flagged if key in excluded else cleared).append(key)
+    if cleared:
+        print(f'cleared excluded_3mad (the row passes the test now): {cleared}')
+    if cleared or flagged:
         rows.write(THRU / 'standards.ecsv', format='ascii.ecsv', overwrite=True)
         idx = yaml.safe_load(INDEX.read_text())['files']['mosfire/throughput/standards.ecsv']
         idx['sha256'] = hashlib.sha256((THRU / 'standards.ecsv').read_bytes()).hexdigest()

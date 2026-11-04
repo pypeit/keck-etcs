@@ -154,8 +154,24 @@ fed it.
     --findobj-snr` and the night Job passes `--findobj-snr 10` for a
     `spec2d = 1` row; `harvest_sens.py --merge` of 2016-01-08 (sweep 2,
     HD111744 4" bar) and 2022-01-11 (GD153, flagged `pwv_weak,narrow`).
-    The 3-MAD rule (D22) now excludes 8 of the 25 wide-slit H rows (MAD
-    1.6-1.9 percent, so 3 MAD is 5-6 percent): worth a look.
+  - The 3-MAD rule (D22) is one fresh pass per combine (Q&A H-5,
+    2026-11-04): `combine_era` lets a row flagged `excluded_3mad` by an
+    earlier run take part again (`takes_part`) and `combine_throughput.py`
+    recomputes the flag for the groups it builds (cleared where the row
+    passes now; the other groups' rows keep theirs). The sticky flag of
+    S23b ratcheted: an excluded row left the next run's statistics, the
+    survivors' MAD shrank and each rerun clipped more, 8 of the 25
+    wide-slit H rows after two reruns (MAD 1.6-1.9 percent) against 3 in
+    one pass (HD 111744 2016-01-07 at 0.245, V* V836 Cyg 2016-05-01 at
+    0.248, HD 74721 2017-11-05 at 0.289, all 12-25 percent low; MAD 3.1-3.8
+    percent). `scripts/mosfire/scan_clip_rule.py` compares the variants (3
+    MAD once or iterated, 5 MAD, a percent floor, low side only) from
+    `thru_median_common` alone. H era files rebuilt: 9 and 13 standards
+    (were 7 and 10), band medians 0.334 and 0.329 unchanged, 2017-2025
+    curve +0.14 percent; `reference_H.json` regenerated; `meta` gains
+    `band_median_clip_ref` (the pre-clip median) beside `band_median_era`
+    (now the median of the standards used). The J files, built under the
+    sticky rule, are left as released until the next J release.
   - `nautilus/night_failures.py --manifest --retry-data`, rows keyed by
     (night, band); `nautilus/status_table.py` `band` column;
     `check_standards_table.py` keyed by (night, band), bands not yet
@@ -572,6 +588,7 @@ All images are under `gitlab-registry.nrp-nautilus.io/profx/`. Checks:
 
 ## Regression fixtures
 
+- 2026-11-04: regression fixtures regenerated (keck_etcs 0.2.10, throughput mosfire-2026.10, mosfire-2026.10-dev): H era curves rebuilt under the fresh-pass 3-MAD rule (Q&A H-5): 9 and 13 standards instead of 7 and 10, throughput +0.14 percent in 2017-2025
 - 2026-11-03: regression fixtures regenerated (keck_etcs 0.2.10, throughput mosfire-2026.10, mosfire-2026.10-dev): S24b: H era curves rebuilt with the merged 2016-01-08 row (7 and 10 standards) and the H sky continuum excess (D61, 1.0 Gemini units from the 2022-01-11 long frames) now in compute; J, J2 and line fixtures unchanged
 - 2026-11-03: regression fixtures regenerated (keck_etcs 0.2.10, throughput mosfire-2026.10, mosfire-2026.10-dev): S24b: saturation.frac_pix_nonlinear_1pct added to every output (D62; the J, J2 and line numbers are unchanged, only the new key) and the H fixture reference_H.json frozen from examples/H_point.json on the H era curves (no sky-excess curve yet)
 - 2026-10-27: regression fixtures regenerated (keck_etcs 0.2.5, throughput mosfire-2026.10): S23b release mosfire-2026.10 (J-only, D49): same numbers; calib_version tag and the throughput file name in one warning changed (mosfire_thru_2025-on.ecsv -> mosfire_thru_J_2025-on.ecsv); compare_release_outputs.py against mosfire-J-2026.10: largest relative difference 0

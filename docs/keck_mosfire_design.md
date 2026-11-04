@@ -169,7 +169,7 @@ P1).
 | D19 | PypeIt fix: `ronoise` from `NUMREADS`/`SAMPMODE`, drafted as a PypeIt branch. *As built (S17, 2026-10-09):* committed on `etc-fixes` as `38bb1b7` (patch in `nautilus/patches/pypeit_mosfire_ronoise.patch`, test `pypeit/tests/test_keck_mosfire.py`). It is not yet in the image pin. A CDS flat pair measures 21.4 e-. | PypeIt hard-codes 5.8 e-. |
 | D20 | Package layout of section 5.1. | Instrument-agnostic core for the other Keck ETCs. |
 | D21 | ECSV for 1-D tables under ~1 MB; FITS for grids; every file carries provenance metadata; `keck_etcs/data/index.yaml` indexes products. | Diff-able in git; provenance for WMKO. |
-| D22 | "Current" throughput = pixel-wise median of the latest era's standards, with MAD; `date` selects an era; `throughput_scale` is a free factor; nights beyond 3 MAD in band median are excluded whole. | Robust to a bad night; era-aware. |
+| D22 | "Current" throughput = pixel-wise median of the latest era's standards, with MAD; `date` selects an era; `throughput_scale` is a free factor; nights beyond 3 MAD in band median are excluded whole. Each combine is one fresh pass over every wide-slit row of the era: the `excluded_3mad` flag is recomputed, not carried over (Q&A H-5, 2026-11-04). | Robust to a bad night; era-aware. The sticky flag of S23b-S24b ratcheted: each rerun clipped more (8 of 25 H rows against 3 in one pass). |
 | D23 | Gemini grid rebinned (flux-conserving) to 0.05 nm over 0.95-2.45 um, one FITS file of ~3 MB committed to git. No git-lfs, no download on first use. | MOSFIRE's narrowest LSF is ~0.36 nm; the native 45 MB is too large for git. |
 | D24 | Data root `KECK_ETCS_DATA` (default `~/Projects/PypeIt/keck-etcs-data`) with `mosfire/<YYYYMMDD>/{raw,redux,sens}`; only harvested tables and combined products are committed. | Raw KOA data and PypeIt outputs are large. |
 | D25 | Gaussian LSF, FWHM = max(slit / 0.277"/pix, 2.2 pix) x dispersion; floor and slope measured from OH lines. *Revised 2026-10-04 (S13, user):* the slope was 0.24"/pix (XTcalc); OH lines of the 2022-04-09 1" slit give FWHM 3.61 px, R 2677 at 1.25 um, i.e. 0.277"/px. Interim until other slit widths (part 5) separate slope and floor. *As built (S16, 2026-10-08):* `FWHM = sqrt((w / 0.292)^2 + 1.08^2)` pix x dispersion, fitted on the 1" (3.56-3.61 px, 4 nights) and 0.7" (2.63 px) OH widths (`lsf_form = 'quadrature'`); a measured width for the slit still takes precedence. | Anamorphic factor 1.48 makes the dispersion-direction pixel 0.24", but the measured slit-limited LSF is 15% narrower than slit / 0.24". |
@@ -469,7 +469,15 @@ applies a global factor.
   peak (`EDGE_TRIM_FRAC`), and A0V rows only redward of 11900 A
   (`A0V_MIN_WAVE`); the report (section 3) gives the reasons.
 - The 3-MAD test compares nights over `COMMON_WINDOW` = 11900-12450 A,
-  inside both filters. It needs at least 3 nights.
+  inside both filters. It needs at least 3 nights. Since H-5 (2026-11-04)
+  it is one fresh pass per combine over every wide-slit row of the era: a
+  row flagged `excluded_3mad` by an earlier run takes part again and is
+  excluded only if it fails now, so the product depends on the rows alone.
+  (From S23b to S24b the flag was sticky, the survivors' MAD shrank with
+  each rerun and the H table reached 8 exclusions of 25 against 3 in one
+  pass; `scripts/mosfire/scan_clip_rule.py` compares the variants. The
+  released J files were built under the sticky rule and are rebuilt at
+  the next J release.)
 - An era curve covers only what its standards measured (2025-04.. has one
   J2 standard, 11171-12462 A). `Instrument.throughput_for_window`
   completes a band window from the nearest era that measured the rest,
@@ -2001,15 +2009,16 @@ quasar escaped the standards' `snr_thresh = 80`). The K validation nights
    warning in place.
 6. This document updated to "as built" for the bands delivered.
 
-*H as built (S24b, 2026-11-03):* item 1: 35 H rows, 17 standards in the
-era curves (7 in 2012-2016, 10 in 2017-2025; `excluded_3mad`: HD 111744
-2016-01-07, V* V836 Cyg 2016-05-01, *55 Dra 2014-10-05, HD 159008
-2015-09-17, HD 74721 2017-11-05, HD 160512 2017-05-04, HD 47944 2018-01-09,
-HD 98884 2023-02-05, i.e. 8 of 25 wide-slit rows with MAD 1.6-1.9 percent;
-`narrow`, no part in the curves: HIP 17971 2012-11-28 on the 0.7" slit,
-GD153 2022-01-11 on the 1" slit; 8 `excluded_nonlinear`), band medians
-0.334 and 0.329 over 14900-17800 A, trend MAD 1.6 and 1.9 percent and no
-slope beyond 0.2 sigma; no H standard after 2025-04 yet, so
+*H as built (S24b, 2026-11-03; curves rebuilt 2026-11-04 under H-5):*
+item 1: 35 H rows, 22 standards in the era curves (9 in 2012-2016, 13 in
+2017-2025; `excluded_3mad`, one fresh pass: HD 111744 2016-01-07 (0.245,
+weather), V* V836 Cyg 2016-05-01 (0.248, variable), HD 74721 2017-11-05
+(0.289), i.e. 3 of 25 wide-slit rows, 12-25 percent low; the sticky rule
+had reached 8; `narrow`, no part in the curves: HIP 17971 2012-11-28 on
+the 0.7" slit, GD153 2022-01-11 on the 1" slit; 8 `excluded_nonlinear`),
+band medians 0.334 and 0.329 over 14900-17800 A, trend MAD 2.1 and 2.5
+percent and no slope beyond 1.0 sigma (2012-2016 -2.4 +- 2.3 percent per
+year over its 2.5 years); no H standard after 2025-04 yet, so
 `compute` uses the 2017-2025 curve there with a warning; the files carry
 `mosfire-2026.10-dev` until the Y/H/K tag. Item 2: `reference_H.json`,
 `compare_xtcalc.py --band H` (ours/XTcalc 0.70 through 0.7", 0.81-0.86

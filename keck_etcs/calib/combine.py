@@ -20,10 +20,16 @@ For one instrument era, on the common 1 A grid of the harvest
   when :func:`combine_era` is called without ``bands``;
 - each night's band median is compared with the era median of band
   medians; nights more than 3 MAD away are excluded whole (D22). This needs
-  at least 3 nights, since the MAD of fewer is not meaningful. A row that an
-  earlier combine already flagged ``excluded_3mad`` in the table takes no
-  part in the statistics and is reported as excluded again (so a rerun
-  gives the same product and the same ``meta``). The band
+  at least 3 nights, since the MAD of fewer is not meaningful. Each combine
+  is one fresh pass over every wide-slit row of the era (Q&A H-5,
+  2026-11-04): a row an earlier combine flagged ``excluded_3mad`` takes
+  part in the statistics again and is excluded only if it fails the test
+  now, so the result depends on the rows alone and not on the order of
+  past runs. (From S23b to S24b the flag was sticky: an excluded row stayed
+  out of the next run's statistics, the survivors' MAD shrank and each
+  rerun clipped more, 8 of the 25 wide-slit H rows after two reruns against
+  3 in one pass.) Rows flagged ``excluded_nonlinear`` or ``narrow`` take no
+  part at all. The band
   median is taken over the group's common window (``Band.common_window_A``;
   for J, :data:`COMMON_WINDOW` = 11900-12450 A, inside both the J and the
   J2 half-power bands), so that nights through different filters are
@@ -109,6 +115,19 @@ def filter_free(curve, filter_wave, filter_trans, half_power, edge_frac=None, mi
     return wave, np.where(inside, thru, np.nan), how
 
 
+def takes_part(flag):
+    """Whether a row with this ``flag`` enters the era statistics.
+
+    Rows flagged ``excluded_nonlinear`` (or any other ``excluded_*`` set at
+    harvest) or ``narrow`` (a narrow-slit standard measures slit loss, not
+    throughput; S24b, GD153 2022-01-11 through the 1" slit at 0.17) take no
+    part. ``excluded_3mad`` is this module's own verdict from an earlier
+    run and is recomputed, so such a row does take part (Q&A H-5).
+    """
+    flags = {f.strip() for f in str(flag).split(',')}
+    return 'narrow' not in flags and not any(f.startswith('excluded') and f != 'excluded_3mad' for f in flags)
+
+
 def combine_era(rows, curves, era, filters, bands=None, group=None):
     """Combine the standards of one era.
 
@@ -130,14 +149,9 @@ def combine_era(rows, curves, era, filters, bands=None, group=None):
     """
     in_group = (lambda r: True) if group is None else (
         lambda r: bool(bands) and str(r['filter']) in bands and bands[str(r['filter'])].group_name == group)
-    # rows flagged excluded_* (nonlinear, 3mad) or narrow (a narrow-slit standard measures slit loss, not
-    # throughput: harvest; S24b, GD153 2022-01-11 through the 1" slit at 0.17) take no part
-    sel = [r for r in rows if in_era(r['date'], era) and 'excluded' not in str(r['flag'])
-           and 'narrow' not in str(r['flag']) and in_group(r)]
-    prior = [r for r in rows if in_era(r['date'], era) and 'excluded_3mad' in str(r['flag'])
-             and 'narrow' not in str(r['flag']) and in_group(r)]
+    sel = [r for r in rows if in_era(r['date'], era) and takes_part(r['flag']) and in_group(r)]
     per_row = []
-    for r in sel + prior:
+    for r in sel:
         fw, ft, hp = filters[str(r['filter'])]
         window, edge_frac, a0v_min = rules_for(r['filter'], bands)
         w, t, how = filter_free(curves[str(r['thru_curve_file'])], fw, ft, hp,
@@ -149,8 +163,7 @@ def combine_era(rows, curves, era, filters, bands=None, group=None):
         per_row.append({'row': r, 'wave': w, 'thru': t, 'how': how,
                         'band_median': float(np.median(t[use])) if use.any() else np.nan})
     per_row = [p for p in per_row if np.isfinite(p['band_median'])]
-    info = {'excluded': [p for p in per_row if any(p['row'] is r for r in prior)], 'used': []}
-    per_row = [p for p in per_row if not any(p['row'] is r for r in prior)]
+    info = {'excluded': [], 'used': []}
     if not per_row:
         return None, info
     bm = np.array([p['band_median'] for p in per_row])
@@ -188,7 +201,10 @@ def combine_era(rows, curves, era, filters, bands=None, group=None):
                       'band_median': round(p['band_median'], 5)} for p in info['excluded']],
         'filter_handling': sorted({p['how'] for p in keep}),
         'valid_range_A': [float(grid[good][0]), float(grid[good][-1])],
-        'band_median_era': round(med, 5),
+        # the median of the standards that made the curve; the clip reference is the median of every row that
+        # took part (the same thing before the exclusion), kept for the record
+        'band_median_era': round(float(np.median([p['band_median'] for p in keep])), 5),
+        'band_median_clip_ref': round(med, 5),
     }
     for col in PROVENANCE:
         t.meta[col + 's'] = sorted({str(r[col]) for r in used_rows if col in r.colnames})

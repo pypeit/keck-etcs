@@ -13,7 +13,7 @@ files:
   mosfire/throughput/standards.ecsv:
     calib_version: mosfire-2026.10-dev
     created: '2026-11-04T00:16:26Z'
-    sha256: 18d1546f1d3a23e619b67df927759631260c9cab4c89107eb2cfe71e5c286970
+    sha256: 96ffd1f42c23dfddf606620c10bd1085ae5f181ffe15dc97a37f64a6b66c1948
     script: scripts/mosfire/harvest_sens.py --merge
     provenance: 55 per-standard rows harvested from PypeIt IR sensfuncs (keck_etcs.calib.harvest); curves
       in mosfire/throughput/standards/
@@ -185,28 +185,29 @@ files:
     calib_version: mosfire-2026.10-dev
     bands:
     - H
-    created: '2026-11-04T00:22:01Z'
-    sha256: 7bd18d163a64b4a256c0d92ddff09e5de00be3b011290ed4a024bf5fee3298e2
+    created: '2026-11-04T18:05:46Z'
+    sha256: 7d64f95ca9a5bee2aaede23f0f9c4d38da892d726193152d2ebffc18ec2a3a02
     script: scripts/mosfire/combine_throughput.py
     pypeit_version: 2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc,2.0.2.dev1226+g54e68d776
-    provenance: 'H group, era 2012-04..2016-09: median of 7 standard(s) (Feige110 2014-06-01, HD95126
-      2014-11-23, HD18571 2015-09-04, HD54601 2015-10-22, HD111744 2016-01-08, HD149595 2016-04-15, HD74721
-      2016-04-17); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8,
-      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9; PypeIt 54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38,
-      5e92ff9416105763b1aae2ee39bde1fa8321c919, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
+    provenance: 'H group, era 2012-04..2016-09: median of 9 standard(s) (Feige110 2014-06-01, *55Dra 2014-10-05,
+      HD95126 2014-11-23, HD18571 2015-09-04, HD159008 2015-09-17, HD54601 2015-10-22, HD111744 2016-01-08,
+      HD149595 2016-04-15, HD74721 2016-04-17); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.10,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9;
+      PypeIt 54e68d7767acee2f9ca4ee8d0f36c4f890bb8b38, 5e92ff9416105763b1aae2ee39bde1fa8321c919, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
   mosfire/throughput/mosfire_thru_H_2017-2025.ecsv:
     calib_version: mosfire-2026.10-dev
     bands:
     - H
-    created: '2026-11-04T00:22:01Z'
-    sha256: 10e2d49bd80ce50123a3ce4e60f137d2d82cc6a277f937af341d4f69f8dda4f3
+    created: '2026-11-04T18:05:46Z'
+    sha256: b1aa1db496b609ecbc9e82152cc11bd909bc3f2b52aa31f3d276bb9d10b63e52
     script: scripts/mosfire/combine_throughput.py
     pypeit_version: 2.0.2.dev1223+gb0447b74e,2.0.2.dev1224+g5e92ff941,2.0.2.dev1225+gb8a6a19cc
-    provenance: 'H group, era 2017-02..2025-02: median of 10 standard(s) (HD99966 2017-04-18, HD133772
-      2017-06-15, HD18571 2017-09-08, HD74721 2017-11-06, BD+252478 2018-06-02, HD65158 2020-11-26, HD21379
-      2021-09-30, HD79108 2024-12-24, HD44128 2024-12-26, HD21875 2024-12-30); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.7,
-      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9;
-      PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919, b0447b74ea01ac0ba8496817afaa336e573791c0, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
+    provenance: 'H group, era 2017-02..2025-02: median of 13 standard(s) (HD99966 2017-04-18, HD160512
+      2017-05-04, HD133772 2017-06-15, HD18571 2017-09-08, HD74721 2017-11-06, HD47944 2018-01-09, BD+252478
+      2018-06-02, HD65158 2020-11-26, HD21379 2021-09-30, HD98884 2023-02-05, HD79108 2024-12-24, HD44128
+      2024-12-26, HD21875 2024-12-30); images gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.7, gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.8,
+      gitlab-registry.nrp-nautilus.io/profx/keck-etcs:0.2.9; PypeIt 5e92ff9416105763b1aae2ee39bde1fa8321c919,
+      b0447b74ea01ac0ba8496817afaa336e573791c0, b8a6a19cc5e8a54899ea318065a41333c8ef7163'
   sky/mosfire_sky_excess_H.ecsv:
     calib_version: mosfire-2026.10-dev
     bands:

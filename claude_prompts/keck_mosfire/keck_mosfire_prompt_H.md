@@ -263,7 +263,8 @@ the final release step S27.
 Please answer with ">A." lines before prompt 1 is run (a default is
 proposed for each). *Answered 2026-10-26; folded into the prompts above
 (H-1 in prompt 3, H-2 and H-3 in prompt 5, H-4 in prompt 6) and into
-design 9.3 and 9.10.*
+design 9.3 and 9.10. H-5 and H-6 were added 2026-11-04 after prompt 6; please
+answer them before the K work (prompt K) starts.*
 
 - **H-1. Where the per-band candidate rows live.** (a) one table
   `koa_standards_candidates.ecsv` with a `filter` column (recommended:
@@ -281,6 +282,45 @@ design 9.3 and 9.10.*
   S25 (K); this doc builds it in S24b because H is the band that needs it.
   (a) agree (recommended); (b) keep it for K.
 >A. (a)
+- **H-5. The 3-MAD exclusion (D22) ratchets across reruns.** A row that
+  one combine flags `excluded_3mad` takes no part in the next, so the
+  survivors' MAD shrinks and the next run clips more. The committed H
+  table carries 8 `excluded_3mad` rows out of 25 wide-slit standards (4
+  per era) after the reruns of prompts 5 and 6, and the MAD of the
+  survivors is only 1.6-1.9 percent. `scripts/mosfire/scan_clip_rule.py`
+  recomputes the rule from the rows alone (`thru_median_common`): one
+  fresh pass of 3 MAD excludes 3 rows (HD 111744 2016-01-07 at 0.245,
+  V836 Cyg 2016-05-01 at 0.248, HD 74721 2017-11-05 at 0.289, the cloudy
+  nights; MAD 3.1-3.8 percent), iterating it to convergence excludes 11,
+  and 5 MAD excludes 2. The era medians are 0.334 and 0.330 under every
+  variant, so the shipped curves hardly move; what changes is `n_std` and
+  which nights the trend plot shows as used. (a) one fresh pass per
+  combine: a committed `excluded_3mad` flag is cleared and recomputed
+  from the full set of wide-slit rows each run, so the result depends on
+  the rows alone and not on the order of past runs (recommended; 3 of 25
+  H rows excluded); (b) keep the sticky flag but raise the clip to 5 MAD
+  (2 of 25); (c) keep the rule as it is (8 of 25 now, more on each rerun).
+  Note that J was combined with the sticky rule too, so (a) or (b) would
+  change the J era files at their next rebuild; say whether to apply the
+  change to J now or leave J until its next release.
+>A. Let's go with (a) and leave J until the next release.
+- **H-6. Whether to launch the K validation nights now.** The K
+  validation points are J0313-1806 (2020-12-09, GD153 on a 1" slit) and
+  J1342+0928 (2021-04-18, P330E on a 1" slit); both take the narrow-slit
+  path built for H (the `narrow` flag, the advisory `thru_median` gate,
+  `--findobj-snr 10` for the `spec2d = 1` row, `--sens-scale era`). Prompt
+  K schedules them in S25c after the K batches, and `--sens-scale era`
+  needs a K era curve, which does not exist until S25c. Running the night
+  Jobs before then needs an image build (0.2.11) carrying the prompt-6
+  driver and gate changes, which S25a needs anyway. (a) wait for S25c as
+  planned, so the nights run on the image S25a builds and the validation
+  follows the K era curves directly (recommended); (b) launch the two K
+  night Jobs now on 0.2.11 as a test of the narrow-slit path through the
+  pod (the reduction, the advisory gate, the quasar extraction), with the
+  validation itself deferred to S25c; (c) as (b), and rerun the H
+  validation night 2022-01-11 through the pod so its quasar extraction
+  replaces the local one (`H_local_sci`) in the validation record.
+>A.  (a) Let's wait for S25c as planned.
 
 ## Logging
 
@@ -1821,3 +1861,58 @@ weigh: the 3-MAD exclusion rate in H, and whether a K validation night
 should be launched now that the narrow-slit path is in place (the next
 image build carries `--findobj-snr`, the advisory gate and the combine
 fix). Prompt 6 is complete.
+
+### 2026-11-04 (Prompt #6 / S24b, follow-up: the two open items turned into Q&A H-5 and H-6)
+
+Session on Claude Fable 5.1. After the commit and backup of prompt 6, the
+two items left for the user to weigh were written as Q&A questions H-5
+(the 3-MAD exclusion) and H-6 (launching the K validation nights), each
+with a recommended default.
+
+- `scripts/mosfire/scan_clip_rule.py` (new) recomputes the D22 rule from
+  `thru_median_common` in `standards.ecsv` alone, without the sticky
+  `excluded_3mad` flags, and reports what one pass, an iterated pass and
+  the variants (5 MAD, a 3 or 5 percent floor, low-side only) would
+  exclude per band and era. For H: one fresh pass of 3 MAD excludes 3 of
+  25 wide-slit rows (the cloudy nights at 0.245, 0.248 and 0.289; MAD
+  3.1-3.8 percent of the median), iterating to convergence excludes 11,
+  and the committed table carries 8 because each combine rerun since
+  prompt 5 started from the previous run's exclusions. The era medians are
+  0.334 and 0.330 under every variant, so the shipped H curves are not at
+  stake; the exclusion count and the trend plot's used/excluded marking
+  are.
+- Learned: the ratchet is the stickiness, not the threshold. A 3-MAD clip
+  applied once to all wide-slit rows is well behaved (the three nights it
+  removes are 12-25 percent low); it is the carry-over of flags into the
+  next run's statistics that drives the MAD down to under 2 percent.
+
+*Answers applied (same day):* H-5 (a), J left until its next release; H-6
+(a), nothing launched.
+
+- `keck_etcs/calib/combine.py`: `takes_part(flag)` admits rows flagged
+  `excluded_3mad` (recomputed) and rejects `excluded_nonlinear` and
+  `narrow`; the `prior` list and its carry-over are gone; `meta` reports
+  `band_median_era` as the median of the standards used and adds
+  `band_median_clip_ref` (the pre-clip median). `combine_throughput.py`
+  clears `excluded_3mad` on every row of the groups it builds and sets it
+  on this run's exclusions, so `--group H` leaves the J rows and files
+  untouched. `test_committed_excluded_3mad_flag_is_recomputed` replaces
+  the sticky-rule test; `test_backup_products.py` expects 2014-10-05 in
+  the frozen set again and 2016-01-07 out.
+- H rebuilt with `combine_throughput.py --group H --dev`: 2012-2016 9 used,
+  2 excluded (0.334); 2017-2025 13 used, 1 excluded (0.329); the five rows
+  the ratchet had flagged (55 Dra 2014-10-05, HD 159008 2015-09-17, HD
+  160512 2017-05-04, HD 47944 2018-01-09, HD 98884 2023-02-05) are cleared.
+  The curves match the scan to the third digit. Trend plot redrawn (MAD 2.1
+  and 2.5 percent, slopes -2.4 +- 2.3 and +0.2 +- 0.5 percent per year);
+  `reference_H.json` regenerated (2017-2025 throughput +0.14 percent; J, J2
+  and line fixtures unchanged); design D22, 4.5 and the 9.8 H paragraph,
+  CHANGES and the scan script's docstring updated. The H validation of
+  2026-11-03 scaled the night's sensfunc to the previous 2017-2025 curve;
+  the new curve differs from it by 0.14 percent, within the 4 percent rms
+  of the scale factor, so the validation record stands.
+- Checks: pytest 145 passed, 1 skipped, 3 deselected; `check_docs.py` ALL
+  CHECKS PASS; `git diff --stat` shows no J data file touched.
+- Nothing is left to finish in part H before the K prompt. Open for later:
+  the J files' rebuild under the fresh-pass rule at the next J release
+  (H-5), and the K validation nights in S25c (H-6).

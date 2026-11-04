@@ -37,6 +37,7 @@ def test_release_prefixes_keep_the_band(monkeypatch):
     pre = bp.release_prefixes()
     assert 'mosfire/20140601/H' in pre and 'mosfire/20220409' in pre
     assert 'mosfire/20140606/H' not in pre      # excluded_nonlinear
-    assert 'mosfire/20141005/H' not in pre      # excluded_3mad (S24b combine with the merged H rows)
+    assert 'mosfire/20141005/H' in pre          # was excluded_3mad under the sticky rule; one fresh pass keeps it (H-5)
+    assert 'mosfire/20160107/H' not in pre      # excluded_3mad (0.245, weather)
     assert 'mosfire/20220111/H' in pre          # narrow-slit validation night: not in the curve, still frozen
     assert all(p.startswith('mosfire/') for p in pre)

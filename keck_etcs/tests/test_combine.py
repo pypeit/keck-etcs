@@ -75,7 +75,7 @@ def test_shipped_era_file_provenance_matches_its_rows():
     assert t.colnames == ['wave', 'thru_median', 'thru_mad', 'n_std']
     assert t.meta['calib_version'] == 'mosfire-2026.10' and t.meta['era'] == era.name
     assert t.meta['band_group'] == 'J' and t.meta['bands'] == ['J', 'J2']            # per group since S23b (D49)
-    # the two nights an earlier combine flagged excluded_3mad are reported again on a rerun
+    # the J file as released (sticky-rule era; J is rebuilt under the fresh-pass rule at its next release, H-5)
     assert [(e['standard'], e['date']) for e in t.meta['excluded']] == [('GD153', '2025-01-25')]
 
 
@@ -111,20 +111,24 @@ def test_rules_per_band_from_the_instrument_module():
     assert combine.combine_era(rows, curves, ERA, FILTERS, bands=MOSFIRE.bands, group='J')[0] is not None
 
 
-def test_prior_excluded_3mad_rows_are_reported_not_used():
-    # a row an earlier combine flagged excluded_3mad (S23b): no part in the statistics, listed as excluded
-    rows, curves = make(4, 0.25, outlier=0.10)
+def test_committed_excluded_3mad_flag_is_recomputed():
+    # one fresh pass per combine (Q&A H-5, 2026-11-04): a row an earlier combine flagged excluded_3mad takes
+    # part again and is excluded only if it fails the test now (the sticky rule of S23b ratcheted)
+    rows, curves = make(5, 0.25, outlier=0.10)
     rows['flag'] = rows['flag'].astype('U32')
-    rows['flag'][-1] = 'excluded_3mad'
+    rows['flag'][0] = 'excluded_3mad'                    # an ordinary night carrying a stale flag
+    rows['flag'][-1] = 'excluded_3mad'                   # the real outlier, flagged before
     t, info = combine.combine_era(rows, curves, ERA, FILTERS)
-    assert [p['row']['standard'] for p in info['used']] == ['S0', 'S1', 'S2']
-    assert [(p['row']['standard'], round(p['band_median'], 3)) for p in info['excluded']] == [('S3', 0.1)]
-    assert t.meta['excluded'] == [{'standard': 'S3', 'date': '2022-04-04', 'band_median': 0.1}]
-    assert np.all(t['n_std'] == 3)
-    # other 'excluded_*' flags (nonlinear) are skipped silently, as before
+    assert [p['row']['standard'] for p in info['used']] == ['S0', 'S1', 'S2', 'S3']
+    assert [(p['row']['standard'], round(p['band_median'], 3)) for p in info['excluded']] == [('S4', 0.1)]
+    assert t.meta['excluded'] == [{'standard': 'S4', 'date': '2022-04-05', 'band_median': 0.1}]
+    assert np.all(t['n_std'] == 4)
+    assert combine.takes_part('pwv_weak,excluded_3mad') and combine.takes_part('ok')
+    # other 'excluded_*' flags (nonlinear) and narrow are skipped silently
+    assert not combine.takes_part('excluded_nonlinear') and not combine.takes_part('pwv_weak,narrow,excluded_3mad')
     rows['flag'][-1] = 'excluded_nonlinear'
     t2, info2 = combine.combine_era(rows, curves, ERA, FILTERS)
-    assert info2['excluded'] == [] and len(info2['used']) == 3 and t2.meta['excluded'] == []
+    assert info2['excluded'] == [] and len(info2['used']) == 4 and t2.meta['excluded'] == []
 
 
 def test_narrow_slit_rows_take_no_part():
